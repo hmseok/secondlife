@@ -1,10 +1,9 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { supabase } from '../../utils/supabase'
 import ContractPaper from '../../components/ContractPaper'
 import { useDaumPostcodePopup } from 'react-daum-postcode'
-import SignatureCanvas from 'react-signature-canvas' // 👈 서명 라이브러리 (npm install react-signature-canvas 필요)
 
 const KOREAN_BANKS = [
   'KB국민은행', '신한은행', '우리은행', '하나은행', 'NH농협은행',
@@ -37,15 +36,11 @@ export default function JiipDetailPage() {
     payout_day: 10,
     mortgage_setup: false,
     memo: '',
-    signed_file_url: '' // 서명 파일 경로
+    signed_file_url: ''
   })
 
-  // UI 상태
   const [showPreview, setShowPreview] = useState(false)
-  const [showSignPad, setShowSignPad] = useState(false) // ✍️ 서명 패드 모달 상태
   const [uploading, setUploading] = useState(false)
-
-  const sigCanvas = useRef<any>({}) // 서명 캔버스 참조
   const open = useDaumPostcodePopup()
 
   const handleAddressComplete = (data: any) => {
@@ -66,13 +61,19 @@ export default function JiipDetailPage() {
     if (!isNew && jiipId) fetchDetail()
   }, [])
 
-  // 🗓️ 3년 자동 설정
+  // 🗓️ [핵심] 계약 시작일 입력 시 -> 종료일 3년(36개월) 뒤 자동 세팅
   useEffect(() => {
     if (item.contract_start_date) {
       const start = new Date(item.contract_start_date)
+      // 3년 더하기
       start.setFullYear(start.getFullYear() + 3)
+      // 하루 빼기 (예: 2026.01.01 ~ 2028.12.31)
       start.setDate(start.getDate() - 1)
+
       const endDateStr = start.toISOString().split('T')[0]
+
+      // 종료일이 비어있거나, 사용자가 수동으로 바꾼게 아니라면 자동 업데이트
+      // (여기서는 시작일이 바뀔 때마다 무조건 3년 뒤로 맞춥니다)
       setItem((prev: any) => ({ ...prev, contract_end_date: endDateStr }))
     }
   }, [item.contract_start_date])
@@ -86,6 +87,7 @@ export default function JiipDetailPage() {
     const { data, error } = await supabase.from('jiip_contracts').select('*').eq('id', jiipId).single()
     if (error) { alert('데이터 로드 실패'); router.push('/jiip'); }
     else {
+      // 주소 분리 (단순화: 전체 주소를 메인에 넣음)
       setItem({
         ...data,
         investor_address_main: data.investor_address || '',
@@ -106,8 +108,10 @@ export default function JiipDetailPage() {
   const handleSave = async () => {
     if (!item.car_id || !item.investor_name) return alert('차량과 투자자 정보는 필수입니다.')
 
+    // 주소 합치기
     const fullAddress = `${item.investor_address_main} ${item.investor_address_detail}`.trim()
 
+    // 🚨 DB에 저장할 데이터 객체 생성 (화면용 임시 변수는 제외)
     const payload = {
       car_id: item.car_id,
       investor_name: item.investor_name,
@@ -149,52 +153,16 @@ export default function JiipDetailPage() {
     router.push('/jiip')
   }
 
-  // 📋 [기능 2] 문자 전송용 링크 복사
-  const copySignLink = () => {
-    // 현재 접속 주소 기반으로 서명 페이지 URL 생성
-    const url = `${window.location.origin}/jiip/${jiipId}/sign`
-    navigator.clipboard.writeText(url)
-    alert('✅ 서명 페이지 주소가 복사되었습니다!\n\n문자 메시지나 카톡에 붙여넣기(Ctrl+V)해서 전송하세요.\n\n' + url)
-  }
-
-  // ✍️ [기능 1] 화면 직접 서명 저장
-  const saveSignature = async () => {
-    if (sigCanvas.current.isEmpty()) {
-        alert("서명을 해주세요!"); return;
-    }
-    setUploading(true);
-
-    // 1. 이미지 데이터 추출
-    const dataURL = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png');
-    const res = await fetch(dataURL);
-    const blob = await res.blob();
-    const fileName = `signature_${jiipId}_direct_${Date.now()}.png`;
-
-    // 2. 업로드
-    const { error: uploadError } = await supabase.storage.from('contracts').upload(fileName, blob);
-    if (uploadError) {
-        alert('업로드 실패: ' + uploadError.message); setUploading(false); return;
-    }
-
-    // 3. DB 업데이트
-    const { data: { publicUrl } } = supabase.storage.from('contracts').getPublicUrl(fileName);
-    await supabase.from('jiip_contracts').update({ signed_file_url: publicUrl }).eq('id', jiipId);
-
-    alert("서명이 저장되었습니다!");
-    setItem((prev: any) => ({ ...prev, signed_file_url: publicUrl }));
-    setShowSignPad(false);
-    setUploading(false);
-  }
-
-  // 포맷팅 함수들
-  const formatPhone = (v: string) => {
-    const n = v.replace(/[^0-9]/g, "")
+  // ... (포맷팅 함수들은 그대로 유지) ...
+  const formatPhone = (value: string) => {
+    const n = value.replace(/[^0-9]/g, "")
     if (n.length <= 3) return n
     if (n.length <= 7) return `${n.slice(0, 3)}-${n.slice(3)}`
     return `${n.slice(0, 3)}-${n.slice(3, 7)}-${n.slice(7, 11)}`
   }
-  const formatRegNum = (v: string) => {
-    const n = v.replace(/[^0-9]/g, "")
+
+  const formatRegNum = (value: string) => {
+    const n = value.replace(/[^0-9]/g, "")
     if (item.tax_type === '세금계산서') {
         if (n.length > 5) return `${n.slice(0, 3)}-${n.slice(3, 5)}-${n.slice(5, 10)}`
         if (n.length > 3) return `${n.slice(0, 3)}-${n.slice(3)}`
@@ -204,19 +172,39 @@ export default function JiipDetailPage() {
         return n
     }
   }
-  const formatBankAccount = (b: string, v: string) => {
-    const n = v.replace(/[^0-9]/g, "")
+
+  const formatBankAccount = (bank: string, value: string) => {
+    const n = value.replace(/[^0-9]/g, "")
     if (!n) return ""
-    if (b === 'KB국민은행') {
+    if (bank === 'KB국민은행') {
         if (n.length > 8) return `${n.slice(0, 6)}-${n.slice(6, 8)}-${n.slice(8, 14)}`
         if (n.length > 6) return `${n.slice(0, 6)}-${n.slice(6)}`
         return n
     }
+    // ... 나머지 은행 로직 ...
     return n
   }
-  const handleMoneyChange = (f: string, v: string) => {
-    const n = Number(v.replace(/,/g, ''))
-    if (!isNaN(n)) setItem((p: any) => ({ ...p, [f]: n }))
+
+  const handleMoneyChange = (field: string, value: string) => {
+    const rawValue = value.replace(/,/g, '')
+    const numValue = Number(rawValue)
+    if (isNaN(numValue)) return
+    setItem((prev: any) => ({ ...prev, [field]: numValue }))
+  }
+
+  const handleFileUpload = async (e: any) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploading(true)
+    const fileExt = file.name.split('.').pop()
+    const fileName = `contract_${jiipId}_${Date.now()}.${fileExt}`
+    const { error: uploadError } = await supabase.storage.from('contracts').upload(fileName, file)
+    if (uploadError) { alert('업로드 실패'); setUploading(false); return }
+    const { data: { publicUrl } } = supabase.storage.from('contracts').getPublicUrl(fileName)
+    await supabase.from('jiip_contracts').update({ signed_file_url: publicUrl }).eq('id', jiipId)
+    alert('계약서 업로드 완료!')
+    setItem((prev: any) => ({ ...prev, signed_file_url: publicUrl }))
+    setUploading(false)
   }
 
   if (loading) return <div className="p-20 text-center font-bold text-gray-500">데이터 불러오는 중... ⏳</div>
@@ -232,36 +220,25 @@ export default function JiipDetailPage() {
           <p className="text-gray-500 mt-1">지급 유형을 먼저 선택하고 정보를 입력해주세요.</p>
         </div>
         {!isNew && (
-            <div className="flex gap-2">
-                {/* 🔗 [기능 2] 링크 복사 버튼 */}
-                <button onClick={copySignLink} className="bg-yellow-400 text-black border border-yellow-500 px-4 py-2 rounded-xl font-bold hover:bg-yellow-500 shadow-sm flex items-center gap-2">
-                    🔗 서명 링크 복사
-                </button>
-                <button onClick={handleDelete} className="bg-white border border-red-200 text-red-500 px-4 py-2 rounded-xl font-bold hover:bg-red-50">🗑️ 삭제</button>
-            </div>
+           <button onClick={handleDelete} className="bg-white border border-red-200 text-red-500 px-4 py-2 rounded-xl font-bold hover:bg-red-50">🗑️ 삭제</button>
         )}
       </div>
 
       {!isNew && (
          <div className="mb-8 bg-indigo-900 text-white p-6 rounded-2xl shadow-lg flex justify-between items-center animate-fade-in-down">
             <div>
-                <h3 className="font-bold text-lg">📄 계약서 및 서명 관리</h3>
-                <p className="text-indigo-200 text-sm">계약서를 출력하거나, 화면에서 바로 서명을 받을 수 있습니다.</p>
+                <h3 className="font-bold text-lg">📄 계약서 자동 생성</h3>
+                <p className="text-indigo-200 text-sm">입력된 정보로 계약서를 출력하고, 서명된 파일을 보관하세요.</p>
             </div>
-            <div className="flex gap-2">
-                {/* ✍️ [기능 1] 직접 서명 버튼 */}
-                <button onClick={() => setShowSignPad(true)} className="bg-green-500 text-white px-4 py-3 rounded-xl font-bold hover:bg-green-600 shadow-md flex items-center gap-2">
-                    ✍️ 화면에 서명하기
-                </button>
-                <button onClick={() => setShowPreview(true)} className="bg-white text-indigo-900 px-4 py-3 rounded-xl font-bold hover:bg-indigo-50 shadow-md">
-                    🖨️ 미리보기/출력
-                </button>
-            </div>
+            <button onClick={() => setShowPreview(true)} className="bg-white text-indigo-900 px-6 py-3 rounded-xl font-bold hover:bg-indigo-50 shadow-md">
+                🖨️ 계약서 미리보기/출력
+            </button>
          </div>
        )}
 
       <div className="space-y-8 bg-white p-8 rounded-3xl shadow-sm border border-gray-200">
-          {/* 입력 폼 영역 (기존 코드 유지) */}
+
+          {/* 1. 지급 구분 */}
           <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
              <h3 className="font-bold text-lg text-blue-900 mb-4">1. 지급 및 세금 유형 선택</h3>
              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -274,8 +251,10 @@ export default function JiipDetailPage() {
              </div>
           </div>
 
+          {/* 2. 투자자 정보 */}
           <div className="space-y-4">
               <h3 className="font-bold text-lg text-gray-900">2. 투자자(을) 상세 정보</h3>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">대상 차량</label>
@@ -306,6 +285,7 @@ export default function JiipDetailPage() {
                     <input className="w-full border p-2 rounded-lg bg-white" maxLength={14}
                         value={item.investor_reg_number} onChange={e => setItem({...item, investor_reg_number: formatRegNum(e.target.value)})} />
                  </div>
+
                  {item.tax_type === '세금계산서' && (
                      <div className="md:col-span-2">
                         <label className="block text-xs font-bold text-blue-600 mb-1">전자세금계산서 수신 이메일</label>
@@ -313,6 +293,7 @@ export default function JiipDetailPage() {
                             value={item.investor_email} onChange={e => setItem({...item, investor_email: e.target.value})} />
                      </div>
                  )}
+
                  <div className="md:col-span-2">
                      <label className="block text-xs font-bold text-gray-500 mb-1">주소</label>
                      <div className="flex gap-2 mb-2">
@@ -344,6 +325,7 @@ export default function JiipDetailPage() {
           </div>
 
           <hr className="border-gray-100" />
+
           {/* 3. 계약 및 비용 */}
           <div className="space-y-4">
               <h3 className="font-bold text-lg text-gray-900">3. 계약 및 수익 배분</h3>
@@ -383,7 +365,10 @@ export default function JiipDetailPage() {
                  </div>
               </div>
           </div>
+
           <hr className="border-gray-100" />
+
+          {/* 4. 기타 */}
           <div className="space-y-4">
               <h3 className="font-bold text-lg text-gray-900">4. 기타 사항</h3>
               <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100 mb-4">
@@ -394,42 +379,18 @@ export default function JiipDetailPage() {
           </div>
       </div>
 
-      {/* 🌟 서명/파일 보관 영역 */}
-      {!isNew && (
-        <div className="mt-8 bg-white p-8 rounded-3xl shadow-sm border border-gray-200">
-            <h3 className="font-bold text-lg text-gray-900 mb-4">📂 서명 및 계약서 파일</h3>
-            {item.signed_file_url ? (
-                <div className="flex flex-col items-center justify-center bg-gray-50 p-6 rounded-xl border border-gray-200">
-                    {/* 이미지 파일이면 미리 보여줌 */}
-                    {item.signed_file_url.includes('.png') || item.signed_file_url.includes('.jpg') ? (
-                        <img src={item.signed_file_url} alt="서명" className="max-h-40 mb-4 border rounded bg-white" />
-                    ) : (
-                        <div className="text-4xl mb-2">📄</div>
-                    )}
-                    <div className="flex gap-4">
-                        <a href={item.signed_file_url} target="_blank" className="text-blue-600 font-bold underline">파일 보기/다운로드</a>
-                        <button onClick={() => setItem({...item, signed_file_url: ''})} className="text-red-500 text-sm underline">삭제</button>
-                    </div>
-                </div>
-            ) : (
-                <div className="text-center text-gray-500 p-8 border-2 border-dashed rounded-xl">
-                    아직 등록된 서명이나 계약서 파일이 없습니다.<br/>
-                    '화면에 서명하기'를 누르거나 링크를 보내서 서명을 요청하세요.
-                </div>
-            )}
-        </div>
-      )}
-
       <div className="mt-8 flex gap-4">
          <button onClick={handleSave} className="flex-1 bg-green-600 text-white py-4 rounded-2xl font-black text-xl hover:bg-green-700 transition-all shadow-xl transform hover:-translate-y-1">
             {isNew ? '✨ 투자 계약 등록 완료' : '💾 수정 내용 저장'}
          </button>
       </div>
 
-     {/* 🖥️ 계약서 미리보기 모달 */}
+     {/* 🖥️ 계약서 미리보기 모달 (스크롤 개선됨) */}
            {showPreview && (
               <div className="fixed inset-0 bg-black/80 z-[9999] flex flex-col items-center justify-center p-4">
                  <div className="bg-gray-100 w-full max-w-5xl rounded-xl overflow-hidden flex flex-col h-[90vh] shadow-2xl">
+
+                     {/* 헤더 */}
                      <div className="p-4 bg-white border-b flex justify-between items-center flex-none">
                          <h3 className="font-bold text-lg">계약서 미리보기</h3>
                          <div className="flex gap-2">
@@ -437,6 +398,8 @@ export default function JiipDetailPage() {
                              <button onClick={() => setShowPreview(false)} className="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-bold hover:bg-gray-300">닫기</button>
                          </div>
                      </div>
+
+                     {/* 👇 내용 영역 (pb-20 추가: 아래쪽 여백을 넉넉하게 줘서 잘림 방지) */}
                      <div className="flex-1 overflow-y-auto p-8 pb-32 bg-gray-500 flex justify-center">
                          <ContractPaper data={item} car={cars.find((c:any) => c.id === item.car_id)} />
                      </div>
@@ -444,39 +407,27 @@ export default function JiipDetailPage() {
               </div>
             )}
 
-      {/* ✍️ [신규] 전자 서명 패드 모달 */}
-       {showSignPad && (
-        <div className="fixed inset-0 bg-black/90 z-[9999] flex flex-col items-center justify-center p-4">
-            <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl">
-                <h3 className="text-xl font-bold mb-2 text-center">여기에 서명해 주세요</h3>
-                <p className="text-gray-500 text-sm text-center mb-4">터치스크린이나 마우스로 서명하세요.</p>
-
-                <div className="border-2 border-gray-300 rounded-xl bg-gray-50 mb-4 overflow-hidden">
-                    <SignatureCanvas
-                        ref={sigCanvas}
-                        penColor="black"
-                        canvasProps={{width: 500, height: 300, className: 'sigCanvas w-full h-64'}}
-                    />
-                </div>
-
-                <div className="flex gap-3">
-                    <button onClick={() => sigCanvas.current.clear()} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">지우기</button>
-                    <button onClick={() => setShowSignPad(false)} className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-xl font-bold">취소</button>
-                    <button onClick={saveSignature} className="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700">
-                        {uploading ? '저장 중...' : '서명 완료'}
-                    </button>
-                </div>
-            </div>
-        </div>
-       )}
-
+            {/* 🖨️ 인쇄 스타일 (A4 강제 고정) */}
             <style jsx global>{`
               @media print {
-                @page { size: A4; margin: 0; }
+                @page {
+                  size: A4;
+                  margin: 0;
+                }
                 body * { visibility: hidden; }
                 #printable-area, #printable-area * { visibility: visible; }
-                #printable-area { position: absolute; left: 0; top: 0; width: 210mm; min-height: 297mm; margin: 0; padding: 15mm; background: white; }
-                .fixed { display: none; }
+
+                #printable-area {
+                  position: absolute;
+                  left: 0;
+                  top: 0;
+                  width: 210mm;
+                  min-height: 297mm;
+                  margin: 0;
+                  padding: 15mm; /* 인쇄 시 적당한 여백 */
+                  background: white;
+                }
+                .fixed { position: static; height: auto; overflow: visible; }
               }
             `}</style>
     </div>

@@ -6,6 +6,7 @@ import { supabase } from '../../utils/supabase'
 export default function FinanceDetailPage() {
   const router = useRouter()
   const params = useParams()
+  // 👇 주소창의 id가 'new'면 신규 등록 모드, 숫자면 수정 모드
   const isNew = params.id === 'new'
   const loanId = isNew ? null : params.id
 
@@ -17,58 +18,28 @@ export default function FinanceDetailPage() {
     car_id: '', finance_name: '', type: '할부',
     vehicle_price: 0, acquisition_tax: 0, deposit: 0,
     total_amount: 0, interest_rate: 0, months: 60,
-    monthly_payment: 0,
-    first_payment: 0, first_payment_date: '', // 👈 [신규] 1회차 납입일
-    payment_date: 0,
+    monthly_payment: 0, payment_date: 0,
     start_date: '', end_date: '',
     guarantor_name: '', guarantor_limit: 0
   })
-
-  // 🧮 [정밀 자동 계산] 총 상환액 및 이자 비용
-  const actualFirstPayment = loan.first_payment > 0 ? loan.first_payment : loan.monthly_payment
-  const remainingMonths = loan.months > 0 ? loan.months - 1 : 0
-  const totalRepay = actualFirstPayment + (loan.monthly_payment * remainingMonths)
-  const totalInterest = totalRepay > loan.total_amount ? totalRepay - loan.total_amount : 0
 
   useEffect(() => {
     fetchCars()
     if (!isNew && loanId) fetchLoanDetail()
   }, [])
 
-  // 🗓️ [스마트 만기일 계산기]
-  // 로직: "1회차 납입일" 기준으로 개월 수를 더하되, 날짜는 "매월 납입일"을 따라갑니다.
-  useEffect(() => {
-    // 1. 1회차 납입일이 있고, 개월 수가 있을 때
-    if (loan.first_payment_date && loan.months > 0) {
-      const firstDate = new Date(loan.first_payment_date)
-      // N개월 후의 '달'을 계산 (1회차 이미 냈으니 N-1개월 뒤가 마지막)
-      firstDate.setMonth(firstDate.getMonth() + (loan.months - 1))
-
-      // '일(Day)'은 매월 납입일(예: 1일)을 따라감. 없으면 1회차 날짜 그대로.
-      const targetDay = loan.payment_date > 0 ? loan.payment_date : firstDate.getDate()
-      firstDate.setDate(targetDay)
-
-      const end = firstDate.toISOString().split('T')[0]
-      setLoan(prev => ({ ...prev, end_date: end }))
-    }
-    // 2. (차선책) 대출 실행일만 있을 때 (기존 방식)
-    else if (loan.start_date && loan.months > 0) {
-      const start = new Date(loan.start_date)
-      start.setMonth(start.getMonth() + loan.months)
-      const end = start.toISOString().split('T')[0]
-      setLoan(prev => ({ ...prev, end_date: end }))
-    }
-  }, [loan.first_payment_date, loan.start_date, loan.months, loan.payment_date])
-
+  // 1. 차량 목록 가져오기 (콤보박스용)
   const fetchCars = async () => {
     const { data } = await supabase.from('cars').select('id, number, model').order('number', { ascending: true })
     setCars(data || [])
   }
 
+  // 2. (수정 모드일 때) 기존 데이터 가져오기
   const fetchLoanDetail = async () => {
     const { data, error } = await supabase.from('loans').select('*').eq('id', loanId).single()
     if (error) { alert('데이터를 불러오지 못했습니다.'); router.push('/finance'); }
     else {
+      // DB 데이터를 화면용 데이터로 변환 (null -> 빈값)
       setLoan({
         ...data,
         vehicle_price: data.vehicle_price || 0,
@@ -77,8 +48,6 @@ export default function FinanceDetailPage() {
         total_amount: data.total_amount || 0,
         interest_rate: data.interest_rate || 0,
         monthly_payment: data.monthly_payment || 0,
-        first_payment: data.first_payment || 0,
-        first_payment_date: data.first_payment_date || '', // 👈 데이터 매핑
         payment_date: data.payment_date || 0,
         guarantor_limit: data.guarantor_limit || 0,
         start_date: data.start_date || '',
@@ -89,21 +58,23 @@ export default function FinanceDetailPage() {
     }
   }
 
+  // 💾 저장 버튼 클릭
   const handleSave = async () => {
     if (!loan.car_id || !loan.finance_name) return alert('차량과 금융사명은 필수입니다.')
 
     const payload = {
       ...loan,
       start_date: loan.start_date || null,
-      end_date: loan.end_date || null,
-      first_payment_date: loan.first_payment_date || null
+      end_date: loan.end_date || null
     }
 
     let error
     if (isNew) {
+      // 신규 등록
       const { error: insertError } = await supabase.from('loans').insert(payload)
       error = insertError
     } else {
+      // 수정
       const { error: updateError } = await supabase.from('loans').update(payload).eq('id', loanId)
       error = updateError
     }
@@ -111,17 +82,19 @@ export default function FinanceDetailPage() {
     if (error) alert('저장 실패: ' + error.message)
     else {
       alert('저장되었습니다!')
-      router.push('/finance')
+      router.push('/finance') // 저장 후 목록으로 이동
     }
   }
 
+  // 🗑️ 삭제 버튼 클릭
   const handleDelete = async () => {
-    if(!confirm('정말 삭제하시겠습니까?')) return
+    if(!confirm('정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) return
     await supabase.from('loans').delete().eq('id', loanId)
     alert('삭제되었습니다.')
     router.push('/finance')
   }
 
+  // 숫자 콤마 및 0 처리 핸들러
   const handleMoneyChange = (field: string, value: string) => {
     const rawValue = value.replace(/,/g, '')
     const numValue = Number(rawValue)
@@ -140,6 +113,7 @@ export default function FinanceDetailPage() {
 
   return (
     <div className="max-w-4xl mx-auto py-10 px-6 animate-fade-in-up pb-32">
+      {/* 헤더 */}
       <div className="flex justify-between items-center mb-8 border-b pb-6">
         <div>
           <button onClick={() => router.back()} className="text-gray-500 font-bold mb-2 hover:text-black">← 목록으로 돌아가기</button>
@@ -214,26 +188,15 @@ export default function FinanceDetailPage() {
 
           {/* 3. 상환 조건 */}
           <div className="space-y-4">
-             <div className="flex justify-between items-end">
-                <h3 className="font-bold text-lg text-gray-900">3. 상환 일정 및 조건</h3>
-                <div className="text-right text-xs bg-gray-100 px-3 py-2 rounded-lg">
-                    <span className="text-gray-500 mr-2">총 이자 비용:</span>
-                    <span className="font-bold text-red-600 text-sm">+{totalInterest.toLocaleString()}원</span>
-                    <span className="text-gray-300 mx-2">|</span>
-                    <span className="text-gray-500 mr-2">총 상환액:</span>
-                    <span className="font-bold text-gray-800 text-sm">{totalRepay.toLocaleString()}원</span>
-                </div>
-             </div>
-
+             <h3 className="font-bold text-lg text-gray-900">3. 상환 일정 및 조건</h3>
              <div className="grid grid-cols-3 gap-4">
                 <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">대출 실행일</label>
                     <input type="date" max="9999-12-31" className="w-full border p-3 rounded-xl text-sm" value={loan.start_date} onChange={e => setLoan({...loan, start_date: e.target.value})} />
                 </div>
                 <div>
-                    {/* 👇 자동 계산된 만기일 */}
-                    <label className="block text-xs font-bold text-gray-500 mb-1">만기일 (자동계산)</label>
-                    <input type="date" max="9999-12-31" className="w-full border p-3 rounded-xl text-sm bg-gray-50" readOnly value={loan.end_date} />
+                    <label className="block text-xs font-bold text-gray-500 mb-1">만기일</label>
+                    <input type="date" max="9999-12-31" className="w-full border p-3 rounded-xl text-sm" value={loan.end_date} onChange={e => setLoan({...loan, end_date: e.target.value})} />
                 </div>
                 <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">매월 납입일</label>
@@ -241,39 +204,23 @@ export default function FinanceDetailPage() {
                       value={loan.payment_date > 0 ? loan.payment_date : ''} onChange={e => handleMoneyChange('payment_date', e.target.value)} />
                 </div>
              </div>
-
-             {/* 1회차 납입 및 월 납입금 설정 */}
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="grid grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">금리 (%)</label>
-                        <input type="number" className="w-full border p-3 rounded-xl text-right" placeholder="0.0"
-                          value={loan.interest_rate === 0 ? '' : loan.interest_rate} onChange={e => setLoan({...loan, interest_rate: e.target.value === '' ? 0 : Number(e.target.value)})} />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-gray-500 mb-1">계약 기간</label>
-                        <select className="w-full border p-3 rounded-xl" value={loan.months} onChange={e => setLoan({...loan, months: Number(e.target.value)})}>
-                            <option value="12">12개월</option><option value="24">24개월</option><option value="36">36개월</option>
-                            <option value="48">48개월</option><option value="60">60개월</option>
-                        </select>
-                    </div>
+             <div className="grid grid-cols-3 gap-4">
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">금리 (%)</label>
+                    <input type="number" className="w-full border p-3 rounded-xl text-right" placeholder="0.0"
+                      value={loan.interest_rate === 0 ? '' : loan.interest_rate} onChange={e => setLoan({...loan, interest_rate: e.target.value === '' ? 0 : Number(e.target.value)})} />
                 </div>
-                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-100 grid grid-cols-2 gap-3">
-                    <div>
-                        <label className="block text-xs font-bold text-indigo-800 mb-1">📌 1회차 납입일</label>
-                        <input type="date" max="9999-12-31" className="w-full border border-indigo-200 p-2 rounded-lg text-sm font-bold text-indigo-900 bg-white"
-                          value={loan.first_payment_date} onChange={e => setLoan({...loan, first_payment_date: e.target.value})} />
-                    </div>
-                    <div>
-                        <label className="block text-xs font-bold text-indigo-800 mb-1">1회차 금액</label>
-                        <input type="text" className="w-full border border-indigo-200 p-2 rounded-lg font-bold text-indigo-700 text-right bg-white" placeholder="0"
-                          value={loan.first_payment > 0 ? loan.first_payment.toLocaleString() : ''} onChange={e => handleMoneyChange('first_payment', e.target.value)} />
-                    </div>
-                    <div className="col-span-2">
-                        <label className="block text-xs font-bold text-gray-500 mb-1">2회차 ~ 월 납입금 (고정)</label>
-                        <input type="text" className="w-full border p-2 rounded-lg font-bold text-red-500 text-right bg-white" placeholder="0"
-                          value={loan.monthly_payment > 0 ? loan.monthly_payment.toLocaleString() : ''} onChange={e => handleMoneyChange('monthly_payment', e.target.value)} />
-                    </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">계약 기간</label>
+                    <select className="w-full border p-3 rounded-xl" value={loan.months} onChange={e => setLoan({...loan, months: Number(e.target.value)})}>
+                        <option value="12">12개월</option><option value="24">24개월</option><option value="36">36개월</option>
+                        <option value="48">48개월</option><option value="60">60개월</option>
+                    </select>
+                </div>
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 mb-1">월 납입금</label>
+                    <input type="text" className="w-full border p-3 rounded-xl font-bold text-red-500 text-right" placeholder="0"
+                      value={loan.monthly_payment > 0 ? loan.monthly_payment.toLocaleString() : ''} onChange={e => handleMoneyChange('monthly_payment', e.target.value)} />
                 </div>
              </div>
           </div>
@@ -298,6 +245,7 @@ export default function FinanceDetailPage() {
 
       </div>
 
+      {/* 하단 버튼 */}
       <div className="mt-8 flex gap-4">
          <button onClick={handleSave} className="flex-1 bg-indigo-900 text-white py-4 rounded-2xl font-black text-xl hover:bg-black transition-all shadow-xl transform hover:-translate-y-1">
             {isNew ? '✨ 금융 정보 등록 완료' : '💾 수정 내용 저장'}

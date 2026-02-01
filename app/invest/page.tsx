@@ -1,86 +1,132 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '../utils/supabase'
-import { useRouter } from 'next/navigation'
 
-export default function InvestListPage() {
-  const router = useRouter()
-  const [list, setList] = useState<any[]>([])
+export default function InvestPage() {
+  const [items, setItems] = useState<any[]>([])
+  const [cars, setCars] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
 
-  // 모달 상태
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [allCars, setAllCars] = useState<any[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
+  // 신규 등록 데이터
+  const [newItem, setNewItem] = useState({
+    car_id: '', investor_name: '', invest_amount: 0,
+    share_ratio: 0, payout_cycle: '매월', expected_roi: 0
+  })
 
-  useEffect(() => { fetchList() }, [])
+  useEffect(() => { fetchData() }, [])
 
-  const fetchList = async () => {
-    const { data } = await supabase.from('cars').select(`id, number, model, brand, purchase_price, investments (invest_amount)`).order('created_at', { ascending: false })
-    const formatted = data?.map((car: any) => {
-        const totalInvested = car.investments?.reduce((sum:number, inv:any) => sum + (inv.invest_amount || 0), 0) || 0
-        const investorCount = car.investments?.length || 0
-        return { ...car, totalInvested, investorCount }
-    })
-    setList(formatted || [])
+  const fetchData = async () => {
+    setLoading(true)
+    const { data: mainData } = await supabase.from('investments').select('*, cars(number, model)').order('created_at', { ascending: false })
+    const { data: carData } = await supabase.from('cars').select('id, number, model').order('number', { ascending: true })
+    setItems(mainData || [])
+    setCars(carData || [])
+    setLoading(false)
   }
 
-  const openCarSelector = async () => {
-    const { data } = await supabase.from('cars').select('id, number, model, brand').order('created_at', { ascending: false })
-    setAllCars(data || [])
-    setIsModalOpen(true)
+  const handleSave = async () => {
+    if (!newItem.car_id || !newItem.investor_name) return alert('차량과 투자자명은 필수입니다.')
+    const { error } = await supabase.from('investments').insert(newItem)
+    if (error) alert('등록 실패: ' + error.message)
+    else { alert('투자 정보가 등록되었습니다.'); setShowModal(false); fetchData(); setNewItem({ car_id: '', investor_name: '', invest_amount: 0, share_ratio: 0, payout_cycle: '매월', expected_roi: 0 }) }
   }
 
-  const filteredCars = allCars.filter(car => car.number.includes(searchTerm))
-  const f = (n: number) => n?.toLocaleString() || '0'
+  const handleDelete = async (id: number) => {
+    if(!confirm('삭제하시겠습니까?')) return
+    await supabase.from('investments').delete().eq('id', id)
+    fetchData()
+  }
+
+  // 합계
+  const totalInvest = items.reduce((acc, cur) => acc + (cur.invest_amount || 0), 0)
 
   return (
-    <div className="max-w-7xl mx-auto py-10 px-6 animate-fade-in">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-black">📈 투자/펀딩 관리</h1>
-        <button onClick={openCarSelector} className="bg-purple-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-purple-700 shadow-lg">
-            + 신규 펀딩 모집
-        </button>
+    <div className="max-w-7xl mx-auto py-10 px-6 animate-fade-in-up">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-black text-gray-900">📈 투자/펀딩 관리</h1>
+          <p className="text-gray-500 mt-2">차량별 투자 유치 내역과 지분율을 관리합니다.</p>
+        </div>
+        <button onClick={() => setShowModal(true)} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">+ 투자자 등록</button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 text-gray-500 font-bold border-b">
-            <tr><th className="p-4">차량번호</th><th className="p-4">모델</th><th className="p-4 text-right">차량가액</th><th className="p-4 text-right">총 투자유치금</th><th className="p-4 text-center">투자자 수</th><th className="p-4 text-center">펀딩률</th></tr>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <p className="text-gray-500 text-xs font-bold mb-1">총 투자 유치금</p>
+          <p className="text-3xl font-black text-blue-900">{totalInvest.toLocaleString()}원</p>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <p className="text-gray-500 text-xs font-bold mb-1">총 투자자 수</p>
+          <p className="text-3xl font-black text-gray-700">{items.length}명</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <table className="w-full text-left">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              <th className="p-4 text-xs font-bold text-gray-500">투자 대상 차량</th>
+              <th className="p-4 text-xs font-bold text-gray-500">투자자</th>
+              <th className="p-4 text-xs font-bold text-gray-500">투자 금액</th>
+              <th className="p-4 text-xs font-bold text-gray-500">지분율</th>
+              <th className="p-4 text-xs font-bold text-gray-500">정산 주기</th>
+              <th className="p-4 text-xs font-bold text-gray-500 text-right">관리</th>
+            </tr>
           </thead>
-          <tbody className="divide-y">
-            {list.map((item) => {
-                const percent = item.purchase_price > 0 ? Math.round((item.totalInvested / item.purchase_price) * 100) : 0
-                return (
-                  <tr key={item.id} onClick={() => router.push(`/invest/${item.id}`)} className="hover:bg-purple-50 cursor-pointer transition-colors">
-                    <td className="p-4 font-bold">{item.number}</td>
-                    <td className="p-4 text-gray-500">{item.brand} {item.model}</td>
-                    <td className="p-4 text-right text-gray-400">{f(item.purchase_price)}원</td>
-                    <td className="p-4 text-right font-bold text-purple-700">{f(item.totalInvested)}원</td>
-                    <td className="p-4 text-center">{item.investorCount}명</td>
-                    <td className="p-4 text-center"><span className={`px-2 py-1 rounded text-xs font-bold ${percent >= 100 ? 'bg-green-100 text-green-700' : 'bg-purple-100 text-purple-700'}`}>{percent}%</span></td>
-                  </tr>
-                )
-            })}
+          <tbody>
+            {loading ? <tr><td colSpan={6} className="p-10 text-center">로딩 중...</td></tr> :
+             items.map((item) => (
+              <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                <td className="p-4">
+                  <div className="font-bold text-gray-900">{item.cars?.number}</div>
+                  <div className="text-xs text-gray-500">{item.cars?.model}</div>
+                </td>
+                <td className="p-4 font-bold">{item.investor_name}</td>
+                <td className="p-4">{item.invest_amount?.toLocaleString()}원</td>
+                <td className="p-4 font-bold text-blue-600">{item.share_ratio}%</td>
+                <td className="p-4 text-sm bg-gray-50 rounded"><span className="bg-gray-200 px-2 py-1 rounded text-xs">{item.payout_cycle}</span></td>
+                <td className="p-4 text-right">
+                  <button onClick={() => handleDelete(item.id)} className="text-gray-400 hover:text-red-500 text-sm underline">삭제</button>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
 
-      {/* 🚙 차량 선택 모달 */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setIsModalOpen(false)}>
-          <div className="bg-white p-6 rounded-2xl w-full max-w-lg h-[600px] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-purple-900">펀딩 진행 차량 선택</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-2xl font-bold text-gray-400 hover:text-black">×</button>
-            </div>
-            <input autoFocus className="w-full p-4 border rounded-xl bg-gray-50 font-bold mb-4 focus:border-purple-500 outline-none" placeholder="차량번호 검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-            <div className="flex-1 overflow-y-auto space-y-2 border-t pt-2">
-              {filteredCars.map(car => (
-                <div key={car.id} onClick={() => router.push(`/invest/${car.id}`)} className="p-4 border rounded-xl hover:bg-purple-50 cursor-pointer flex justify-between items-center group">
-                  <div><div className="font-bold text-lg group-hover:text-purple-700">{car.number}</div><div className="text-sm text-gray-500">{car.brand} {car.model}</div></div>
-                  <div className="text-purple-600 font-bold text-sm">선택 →</div>
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-lg p-8 rounded-3xl shadow-2xl animate-fade-in-up">
+            <h3 className="text-xl font-bold text-gray-900 mb-6">📈 투자자 등록</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 mb-1">투자 대상 차량</label>
+                <select className="w-full border p-3 rounded-xl font-bold" value={newItem.car_id} onChange={e => setNewItem({...newItem, car_id: e.target.value})}>
+                  <option value="">차량을 선택하세요</option>
+                  {cars.map(c => <option key={c.id} value={c.id}>{c.number} ({c.model})</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <input className="w-full border p-3 rounded-xl" placeholder="투자자 이름" value={newItem.investor_name} onChange={e => setNewItem({...newItem, investor_name: e.target.value})} />
+                <input className="w-full border p-3 rounded-xl" type="number" placeholder="투자 금액" value={newItem.invest_amount} onChange={e => setNewItem({...newItem, invest_amount: Number(e.target.value)})} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                   <label className="block text-xs font-bold text-gray-500 mb-1">지분율 (%)</label>
+                   <input type="number" className="w-full border p-3 rounded-xl" value={newItem.share_ratio} onChange={e => setNewItem({...newItem, share_ratio: Number(e.target.value)})} />
                 </div>
-              ))}
+                <div>
+                   <label className="block text-xs font-bold text-gray-500 mb-1">정산 주기</label>
+                   <select className="w-full border p-3 rounded-xl" value={newItem.payout_cycle} onChange={e => setNewItem({...newItem, payout_cycle: e.target.value})}>
+                      <option>매월</option><option>분기</option><option>년말</option>
+                   </select>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-8">
+              <button onClick={handleSave} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700">투자 등록</button>
+              <button onClick={() => setShowModal(false)} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold hover:bg-gray-200">취소</button>
             </div>
           </div>
         </div>

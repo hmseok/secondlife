@@ -1,82 +1,107 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase } from '../utils/supabase'
 import { useRouter } from 'next/navigation'
+import { supabase } from '../utils/supabase'
 
 export default function JiipListPage() {
   const router = useRouter()
-  const [list, setList] = useState<any[]>([])
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // 모달 상태
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [allCars, setAllCars] = useState<any[]>([])
-  const [searchTerm, setSearchTerm] = useState('')
+  useEffect(() => { fetchData() }, [])
 
-  useEffect(() => { fetchList() }, [])
+  const fetchData = async () => {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('jiip_contracts')
+      .select('*, cars(number, brand, model)')
+      .order('created_at', { ascending: false })
 
-  const fetchList = async () => {
-    const { data } = await supabase.from('cars').select(`id, number, model, brand, jiip_contracts (owner_name, monthly_management_fee)`).order('created_at', { ascending: false })
-    const formatted = data?.map((car: any) => ({ ...car, jiip: car.jiip_contracts?.[0] || null }))
-    setList(formatted || [])
+    if (!error) setItems(data || [])
+    setLoading(false)
   }
 
-  const openCarSelector = async () => {
-    const { data } = await supabase.from('cars').select('id, number, model, brand').order('created_at', { ascending: false })
-    setAllCars(data || [])
-    setIsModalOpen(true)
-  }
-
-  const filteredCars = allCars.filter(car => car.number.includes(searchTerm))
-  const f = (n: number) => n?.toLocaleString() || '0'
+  // 합계 계산
+  const totalInvest = items.reduce((acc, cur) => acc + (cur.invest_amount || 0), 0)
 
   return (
-    <div className="max-w-7xl mx-auto py-10 px-6 animate-fade-in">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-black">🤝 지입(위수탁) 관리</h1>
-        <button onClick={openCarSelector} className="bg-orange-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-orange-700 shadow-lg">
-            + 신규 지입 계약
+    <div className="max-w-7xl mx-auto py-10 px-6 animate-fade-in-up">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-black text-gray-900">🤝 지입/투자 계약 관리</h1>
+          <p className="text-gray-500 mt-2">차량 투자 계약 및 수익 배분율을 리스트로 관리합니다.</p>
+        </div>
+        {/* 👇 [핵심 변경] 버튼 누르면 팝업 대신 '/new' 페이지로 이동 */}
+        <button
+          onClick={() => router.push('/jiip/new')}
+          className="bg-green-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-green-700 transition-all shadow-lg"
+        >
+          + 투자 계약 등록
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-gray-50 text-gray-500 font-bold border-b">
-             <tr><th className="p-4">차량번호</th><th className="p-4">모델</th><th className="p-4">지입 차주</th><th className="p-4 text-right">수익(관리비)</th><th className="p-4 text-center">상태</th></tr>
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <p className="text-gray-500 text-xs font-bold mb-1">총 투자 유치금</p>
+          <p className="text-3xl font-black text-green-700">{totalInvest.toLocaleString()}원</p>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <p className="text-gray-500 text-xs font-bold mb-1">평균 배분율 (투자자)</p>
+          <p className="text-3xl font-black text-blue-600">
+            {items.length > 0 ? (items.reduce((acc, cur) => acc + (cur.share_ratio || 0), 0) / items.length).toFixed(0) : 0}%
+          </p>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+          <p className="text-gray-500 text-xs font-bold mb-1">운영 중인 계약</p>
+          <p className="text-3xl font-black text-gray-800">{items.length}건</p>
+        </div>
+      </div>
+
+      {/* 리스트 테이블 */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+        <table className="w-full text-left">
+          <thead className="bg-gray-50 border-b border-gray-100">
+            <tr>
+              <th className="p-4 text-xs font-bold text-gray-500">대상 차량</th>
+              <th className="p-4 text-xs font-bold text-gray-500">투자자 (을)</th>
+              <th className="p-4 text-xs font-bold text-gray-500">투자금 / 기간</th>
+              <th className="p-4 text-xs font-bold text-gray-500">수익 배분 조건</th>
+              <th className="p-4 text-xs font-bold text-gray-500 text-right">상태</th>
+            </tr>
           </thead>
-          <tbody className="divide-y">
-            {list.map((item) => (
-              <tr key={item.id} onClick={() => router.push(`/jiip/${item.id}`)} className="hover:bg-orange-50 cursor-pointer transition-colors">
-                <td className="p-4 font-bold">{item.number}</td>
-                <td className="p-4 text-gray-500">{item.brand} {item.model}</td>
-                <td className="p-4">{item.jiip ? item.jiip.owner_name : '-'}</td>
-                <td className="p-4 text-right font-bold text-blue-600">{item.jiip ? `+${f(item.jiip.monthly_management_fee)}원` : '-'}</td>
-                <td className="p-4 text-center">{item.jiip ? '계약중' : <span className="text-gray-400">미등록</span>}</td>
+          <tbody>
+            {loading ? <tr><td colSpan={5} className="p-10 text-center">로딩 중...</td></tr> :
+             items.map((item) => (
+              // 👇 [핵심 변경] 클릭하면 상세 페이지([id])로 이동
+              <tr key={item.id} onClick={() => router.push(`/jiip/${item.id}`)} className="border-b border-gray-50 hover:bg-green-50 transition-colors cursor-pointer group">
+                <td className="p-4">
+                  <div className="font-bold text-gray-900 group-hover:text-green-700">{item.cars?.number}</div>
+                  <div className="text-xs text-gray-500">{item.cars?.brand} {item.cars?.model}</div>
+                </td>
+                <td className="p-4">
+                  <div className="font-bold">{item.investor_name}</div>
+                  <div className="text-xs text-gray-400">{item.investor_phone}</div>
+                </td>
+                <td className="p-4">
+                   <div className="font-bold">{item.invest_amount?.toLocaleString()}원</div>
+                   <div className="text-xs text-gray-400">{item.contract_start_date} ~</div>
+                </td>
+                <td className="p-4">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">배분 {item.share_ratio}%</span>
+                    <span className="text-xs text-gray-500">관리비 -{(item.admin_fee / 10000)}만</span>
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">매월 {item.payout_day}일 지급</div>
+                </td>
+                <td className="p-4 text-right">
+                  <span className="text-gray-400 text-xs font-bold group-hover:text-green-600">상세보기 &gt;</span>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-
-      {/* 🚙 차량 선택 모달 */}
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setIsModalOpen(false)}>
-          <div className="bg-white p-6 rounded-2xl w-full max-w-lg h-[600px] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold text-orange-900">지입 계약 차량 선택</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-2xl font-bold text-gray-400 hover:text-black">×</button>
-            </div>
-            <input autoFocus className="w-full p-4 border rounded-xl bg-gray-50 font-bold mb-4 focus:border-orange-500 outline-none" placeholder="차량번호 검색..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-            <div className="flex-1 overflow-y-auto space-y-2 border-t pt-2">
-              {filteredCars.map(car => (
-                <div key={car.id} onClick={() => router.push(`/jiip/${car.id}`)} className="p-4 border rounded-xl hover:bg-orange-50 cursor-pointer flex justify-between items-center group">
-                  <div><div className="font-bold text-lg group-hover:text-orange-700">{car.number}</div><div className="text-sm text-gray-500">{car.brand} {car.model}</div></div>
-                  <div className="text-orange-600 font-bold text-sm">선택 →</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
