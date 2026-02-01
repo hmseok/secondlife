@@ -3,9 +3,6 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../utils/supabase'
 import SignatureCanvas from 'react-signature-canvas'
-import ContractPaper from '../../../components/ContractPaper' // A4 양식 불러오기
-import html2canvas from 'html2canvas' // 📸 화면 캡처 도구
-import jsPDF from 'jspdf' // 📄 PDF 생성 도구
 
 const nf = (num: number) => num ? num.toLocaleString() : '0'
 
@@ -18,29 +15,45 @@ export default function GuestSignPage() {
   const [completed, setCompleted] = useState(false)
 
   const sigCanvas = useRef<any>({})
-  const hiddenContractRef = useRef<HTMLDivElement>(null) // 📸 캡처할 대상(숨겨진 A4)
-
   const [canvasWidth, setCanvasWidth] = useState(300)
   const [isSigning, setIsSigning] = useState(false)
 
-  // PDF 생성용 임시 서명 이미지 상태
-  const [tempSignature, setTempSignature] = useState<string>('')
-
   useEffect(() => {
-    // 사이드바/헤더 숨김 (기존 로직 유지)
-    const sidebar = document.querySelector('aside'); if (sidebar) sidebar.style.display = 'none'
-    const nav = document.querySelector('nav'); if (nav) nav.style.display = 'none'
+    // 👇 [핵심] 사이드바 강제 숨김 처리 (DOM 조작)
+    const sidebar = document.querySelector('aside') // 만약 사이드바가 aside 태그라면
+    const nav = document.querySelector('nav')       // 만약 nav 태그라면
+    if (sidebar) sidebar.style.display = 'none'
+    if (nav) nav.style.display = 'none'
+
+    // 메인 컨텐츠 영역의 패딩 제거 (전체화면 사용을 위해)
     const main = document.querySelector('main')
-    if (main) { main.style.padding = '0'; main.style.margin = '0'; main.style.width = '100vw'; main.style.maxWidth = '100vw' }
+    if (main) {
+        main.style.padding = '0'
+        main.style.margin = '0'
+        main.style.width = '100vw'
+        main.style.maxWidth = '100vw'
+    }
+
+    // 언마운트 시(페이지 나갈 때) 다시 복구
     return () => {
-        if (sidebar) sidebar.style.display = ''; if (nav) nav.style.display = ''
-        if (main) { main.style.padding = ''; main.style.margin = ''; main.style.width = ''; main.style.maxWidth = '' }
+        if (sidebar) sidebar.style.display = ''
+        if (nav) nav.style.display = ''
+        if (main) {
+             main.style.padding = ''
+             main.style.margin = ''
+             main.style.width = ''
+             main.style.maxWidth = ''
+        }
     }
   }, [])
 
   useEffect(() => {
-    const updateWidth = () => { setCanvasWidth(window.innerWidth > 500 ? 500 : window.innerWidth - 48) }
-    updateWidth(); window.addEventListener('resize', updateWidth)
+    const updateWidth = () => {
+        const w = window.innerWidth > 500 ? 500 : window.innerWidth - 48
+        setCanvasWidth(w)
+    }
+    updateWidth()
+    window.addEventListener('resize', updateWidth)
 
     const fetchData = async () => {
       const { data: contract } = await supabase.from('jiip_contracts').select('*').eq('id', id).single()
@@ -57,87 +70,56 @@ export default function GuestSignPage() {
 
   const handleSaveSignature = async () => {
     if (sigCanvas.current.isEmpty()) return alert("서명을 해주세요!")
-
     const btn = document.getElementById('saveBtn') as HTMLButtonElement
-    if(btn) { btn.disabled = true; btn.innerText = '계약서 생성 중...'; }
+    if(btn) { btn.disabled = true; btn.innerText = '전송 중...'; }
 
     try {
-        // 1. 서명 이미지를 먼저 추출 (DataURL)
-        const signatureDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png')
-        setTempSignature(signatureDataUrl) // 숨겨진 계약서에 서명 반영
+        const dataURL = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png')
+        const res = await fetch(dataURL)
+        const blob = await res.blob()
+        const fileName = `signature_${id}_guest_${Date.now()}.png`
 
-        // 2. React가 상태를 업데이트하고 렌더링할 시간을 아주 조금 줌
-        await new Promise(resolve => setTimeout(resolve, 500))
-
-        if (!hiddenContractRef.current) throw new Error("계약서 양식을 찾을 수 없습니다.")
-
-        // 3. A4 계약서 영역(hiddenContractRef)을 캡처해서 이미지로 변환
-        const canvas = await html2canvas(hiddenContractRef.current, { scale: 2, useCORS: true })
-        const imgData = canvas.toDataURL('image/png')
-
-        // 4. PDF 생성 (A4 사이즈)
-        const pdf = new jsPDF('p', 'mm', 'a4')
-        const pdfWidth = 210
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width
-        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
-
-        // 5. PDF를 Blob(파일) 형태로 변환
-        const pdfBlob = pdf.output('blob')
-        const fileName = `contract_${item.investor_name}_${id}_${Date.now()}.pdf`
-
-        // 6. Supabase에 PDF 업로드
-        const { error: uploadError } = await supabase.storage.from('contracts').upload(fileName, pdfBlob, {
-            contentType: 'application/pdf'
-        })
+        const { error: uploadError } = await supabase.storage.from('contracts').upload(fileName, blob)
         if (uploadError) throw uploadError
 
-        // 7. DB에 PDF 파일 주소 저장
         const { data: { publicUrl } } = supabase.storage.from('contracts').getPublicUrl(fileName)
         await supabase.from('jiip_contracts').update({ signed_file_url: publicUrl }).eq('id', id)
 
         setCompleted(true)
-
     } catch (e: any) {
-        console.error(e)
-        alert('처리 실패: ' + e.message)
+        alert('오류 발생: ' + e.message)
         if(btn) { btn.disabled = false; btn.innerText = '서명 제출하기'; }
     }
   }
 
-  if (loading) return <div className="fixed inset-0 z-[99999] bg-white flex items-center justify-center text-gray-500">로딩 중...</div>
+  if (loading) return <div className="fixed inset-0 z-[99999] bg-white flex items-center justify-center text-gray-500">계약서 로딩 중...</div>
 
   if (completed) return (
     <div className="fixed inset-0 z-[99999] bg-green-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="text-6xl mb-4">✅</div>
-        <h1 className="text-2xl font-bold text-green-800 mb-2">계약 완료!</h1>
-        <p className="text-gray-600">서명이 포함된 계약서(PDF)가<br/>안전하게 저장되었습니다.</p>
+        <h1 className="text-2xl font-bold text-green-800 mb-2">서명 완료!</h1>
+        <p className="text-gray-600">안전하게 전송되었습니다.<br/>창을 닫으셔도 됩니다.</p>
     </div>
   )
 
   return (
+    // 👇 [핵심] 화면 최상단 고정 (z-index 99999) + 배경색 흰색으로 뒤쪽 가리기
     <div className="fixed inset-0 z-[99999] bg-gray-100 overflow-y-auto overflow-x-hidden w-screen h-[100dvh]">
 
-      {/* 👇 [핵심 비밀 공간] 사용자 눈에는 안 보이지만, 캡처를 위해 존재하는 A4 계약서 */}
-      <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
-          <div ref={hiddenContractRef}>
-              {/* 여기에 서명 이미지를 주입해서 렌더링 */}
-              {item && car && <ContractPaper data={item} car={car} signatureUrl={tempSignature} />}
-          </div>
-      </div>
-
-      {/* === 모바일 UI (기존과 동일) === */}
+      {/* 모바일 헤더 */}
       <div className="bg-white px-5 py-4 sticky top-0 z-30 border-b border-gray-200 flex justify-between items-center shadow-sm w-full">
           <h1 className="font-bold text-lg text-gray-900">지입 투자 계약서</h1>
           <span className="text-xs font-bold bg-indigo-50 text-indigo-700 px-2 py-1 rounded">전자서명</span>
       </div>
 
       <div className="pb-32 w-full max-w-2xl mx-auto">
-          {/* ... (모바일 카드 뷰 내용들 - 기존 코드 유지) ... */}
+          {/* 👋 인사말 */}
           <div className="bg-indigo-900 text-white p-6 m-5 rounded-2xl shadow-lg">
               <p className="text-indigo-200 text-sm mb-1">{item?.investor_name}님 안녕하세요</p>
               <h2 className="text-xl font-bold leading-tight">차량 운영 투자 및<br/>수익 배분 계약서입니다.</h2>
           </div>
 
+          {/* 🚗 차량 정보 */}
           <section className="bg-white p-5 m-5 rounded-2xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-gray-900 text-lg mb-4">🚗 대상 차량 정보</h3>
               <div className="space-y-3 text-sm">
@@ -156,6 +138,7 @@ export default function GuestSignPage() {
               </div>
           </section>
 
+          {/* 💰 수익 정산 */}
           <section className="bg-white p-5 m-5 rounded-2xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-gray-900 text-lg mb-4">💰 수익 정산 및 지급</h3>
               <div className="bg-gray-50 p-4 rounded-xl mb-4">
@@ -168,6 +151,21 @@ export default function GuestSignPage() {
                        <span className="font-bold text-red-500 text-sm">-{nf(item?.admin_fee)}원</span>
                    </div>
               </div>
+              <ul className="text-sm text-gray-600 space-y-1 list-disc list-inside">
+                  <li>지급일: 매월 말일 정산 후 <b>익월 {item?.payout_day}일</b></li>
+                  <li>계좌: {item?.bank_name} ({item?.account_holder})</li>
+                  <li>세금: {item?.tax_type} 처리</li>
+              </ul>
+          </section>
+
+          {/* 📜 주요 조항 */}
+          <section className="bg-white p-5 m-5 rounded-2xl shadow-sm border border-gray-100">
+              <h3 className="font-bold text-gray-900 text-lg mb-4">주요 계약 내용</h3>
+              <div className="space-y-4 text-sm text-gray-600">
+                  <p><b>제3조 (소유권)</b><br/>차량 명의는 운용사(갑)에게 있으며, 운영 책임 또한 운용사가 집니다.</p>
+                  <p><b>제6조 (계약 종료)</b><br/>{item?.contract_end_date} 종료 시 차량을 매각하여 대금을 반환합니다. (투자자 인수 가능)</p>
+                  <p><b>제7조 (중도 해지)</b><br/>중도 해지 시 귀책 사유자가 관리비 3개월분을 위약금으로 배상합니다.</p>
+              </div>
           </section>
 
           <p className="text-center text-xs text-gray-400 mt-8 mb-4">
@@ -176,15 +174,17 @@ export default function GuestSignPage() {
           </p>
       </div>
 
+      {/* 하단 고정 버튼 */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 z-[99999]">
           <button
             onClick={() => setIsSigning(true)}
             className="w-full bg-indigo-600 text-white font-bold text-lg py-4 rounded-xl shadow-lg active:scale-[0.98]"
           >
-             서명하고 계약 완료하기
+             서명하고 완료하기
           </button>
       </div>
 
+      {/* 서명 모달 */}
       {isSigning && (
         <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
             <div className="bg-white w-full max-w-lg rounded-t-3xl p-6 shadow-2xl animate-slide-up pb-10">

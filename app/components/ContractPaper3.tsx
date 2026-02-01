@@ -5,12 +5,11 @@ const numberToKorean = (number: number) => {
   return number.toLocaleString()
 }
 
-// 👇 [수정 1] signatureUrl을 받을 수 있도록 추가
-export default function ContractPaper({ data, car, signatureUrl }: { data: any, car: any, signatureUrl?: string }) {
+export default function ContractPaper({ data, car }: { data: any, car: any }) {
   const today = new Date()
-
+  
   return (
-    <div className="bg-white text-black py-[10mm] px-[15mm] w-[210mm] min-h-[297mm] mx-auto shadow-xl print:shadow-none print:w-full text-sm leading-relaxed relative" id="printable-area">
+    <div className="bg-white text-black py-[10mm] px-[15mm] w-[210mm] min-h-[297mm] mx-auto shadow-xl print:shadow-none print:w-full text-sm leading-relaxed" id="printable-area">
       <h1 className="text-2xl font-black text-center mb-6 border-b-2 border-black pb-2">차량 운영 투자 및 수익 배분 계약서</h1>
 
       {/* 갑/을 정보 */}
@@ -33,7 +32,7 @@ export default function ContractPaper({ data, car, signatureUrl }: { data: any, 
         '갑'과 '을'은 차량 운영 사업을 위한 투자 및 수익 배분에 관하여 다음과 같이 계약을 체결한다.
       </p>
 
-      {/* 본문 내용 (기존과 동일) */}
+      {/* 본문 */}
       <div className="space-y-3">
           <div>
               <h2 className="font-bold text-sm mb-1">제1조 (목적)</h2>
@@ -106,28 +105,16 @@ export default function ContractPaper({ data, car, signatureUrl }: { data: any, 
       <div className="mt-8 text-center">
         <p className="mb-4 text-xs">위 계약을 증명하기 위하여 계약서 2통을 작성하여 기명날인 후 각각 1통씩 보관한다.</p>
         <p className="text-lg font-bold mb-8">{today.getFullYear()}년 {today.getMonth() + 1}월 {today.getDate()}일</p>
-
+        
         <div className="flex justify-between px-8 mt-4 items-end">
             <div className="text-left">
                 <p className="font-bold text-base mb-2">(갑) 운용사</p>
                 <p className="text-xs mb-1">상호: (주)에프엠아이</p>
                 <p className="text-xs">대표이사: 박진숙 (인)</p>
             </div>
-
-            {/* 👇 [수정 2] 서명 이미지를 표시하는 부분 */}
-            <div className="text-left relative">
+            <div className="text-left">
                 <p className="font-bold text-base mb-2">(을) 투자자</p>
-                <div className="relative">
-                    <p className="text-xs mb-1">성명/상호: {data.investor_name} (인)</p>
-                    {/* 서명 이미지가 넘어왔을 때만 보여줍니다 */}
-                    {signatureUrl && (
-                        <img
-                            src={signatureUrl}
-                            alt="서명"
-                            className="absolute -top-4 left-10 w-16 h-10 object-contain mix-blend-multiply"
-                        />
-                    )}
-                </div>
+                <p className="text-xs mb-1">성명/상호: {data.investor_name} (인)</p>
                 <p className="text-xs">연락처: {data.investor_phone}</p>
             </div>
         </div>
