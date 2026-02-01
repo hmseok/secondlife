@@ -3,8 +3,8 @@ import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '../../../utils/supabase'
 import SignatureCanvas from 'react-signature-canvas'
-import ContractPaper from '../../../components/ContractPaper' // 📄 진짜 계약서 양식 불러오기
-import { toPng } from 'html-to-image' // 📸 최신 캡처 도구 (에러 없음)
+import ContractPaper from '../../../components/ContractPaper'
+import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
 
 const nf = (num: number) => num ? num.toLocaleString() : '0'
@@ -19,10 +19,11 @@ export default function GuestSignPage() {
 
   // 서명 및 PDF 생성 도구
   const sigCanvas = useRef<any>({})
-  const hiddenContractRef = useRef<HTMLDivElement>(null) // 📸 캡처할 진짜 A4 용지
+  const hiddenContractRef = useRef<HTMLDivElement>(null)
   const [tempSignature, setTempSignature] = useState<string>('')
 
   const [isSigning, setIsSigning] = useState(false)
+  const [showZoomModal, setShowZoomModal] = useState(false) // 🔍 확대 모달 상태
 
   // 1. 화면 강제 설정 (메뉴 숨김)
   useEffect(() => {
@@ -56,34 +57,34 @@ export default function GuestSignPage() {
     fetchData()
   }, [id])
 
-  // 3. 서명 저장 및 PDF 생성 로직 (관리자 페이지와 동일한 최신 기술 적용)
+  // 3. 서명 저장 및 PDF 생성 로직
   const handleSaveSignature = async () => {
     if (sigCanvas.current.isEmpty()) return alert("서명을 해주세요!")
 
     const btn = document.getElementById('saveBtn') as HTMLButtonElement
-    if(btn) { btn.disabled = true; btn.innerText = '계약서 생성 중...'; }
+    if(btn) { btn.disabled = true; btn.innerText = '처리 중...'; }
 
     try {
         // (1) 서명 이미지 추출
         const signatureDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png')
-        setTempSignature(signatureDataUrl) // 숨겨진 계약서에 서명 반영
+        setTempSignature(signatureDataUrl)
 
-        // (2) 리액트가 렌더링할 시간을 줌 (0.5초)
+        // (2) 렌더링 대기
         await new Promise(resolve => setTimeout(resolve, 500))
 
         if (!hiddenContractRef.current) throw new Error("계약서 양식을 찾을 수 없습니다.")
 
-        // (3) A4 계약서 캡처 (배경 흰색 강제)
+        // (3) A4 계약서 캡처
         const imgData = await toPng(hiddenContractRef.current, { cacheBust: true, backgroundColor: '#ffffff' })
 
-        // (4) PDF 변환 (비율 자동 맞춤)
+        // (4) PDF 변환 (비율 유지)
         const pdf = new jsPDF('p', 'mm', 'a4')
         const pdfWidth = 210
         const imgProps = pdf.getImageProperties(imgData)
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
 
-        // (5) 업로드 (한글 이름 제외한 안전한 파일명)
+        // (5) 업로드
         const pdfBlob = pdf.output('blob')
         const fileName = `contract_${id}_signed_${Date.now()}.pdf`
 
@@ -99,13 +100,12 @@ export default function GuestSignPage() {
         setCompleted(true)
 
     } catch (e: any) {
-        console.error(e)
         alert('오류 발생: ' + e.message)
         if(btn) { btn.disabled = false; btn.innerText = '서명 제출하기'; }
     }
   }
 
-  if (loading) return <div className="fixed inset-0 z-[99999] bg-white flex items-center justify-center text-gray-500 font-bold">계약서 로딩 중...</div>
+  if (loading) return <div className="fixed inset-0 z-[99999] bg-white flex items-center justify-center text-gray-500 font-bold">로딩 중...</div>
 
   if (completed) return (
     <div className="fixed inset-0 z-[99999] bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
@@ -125,15 +125,14 @@ export default function GuestSignPage() {
   return (
     <div className="fixed inset-0 z-[99999] bg-gray-100 overflow-y-auto overflow-x-hidden w-screen h-[100dvh]">
 
-      {/* 👇 [핵심 비밀 공간] PDF 생성용 숨겨진 A4 계약서 (사용자 눈엔 안 보임) */}
+      {/* 👇 PDF 생성용 숨겨진 원본 (화면 밖) */}
       <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
           <div ref={hiddenContractRef}>
-              {/* 여기에 서명이 들어간 완성본이 그려짐 */}
               {item && car && <ContractPaper data={item} car={car} signatureUrl={tempSignature} />}
           </div>
       </div>
 
-      {/* 모바일 헤더 */}
+      {/* 상단 헤더 */}
       <div className="bg-white px-5 py-4 sticky top-0 z-30 border-b border-gray-200 flex justify-between items-center shadow-sm w-full">
           <h1 className="font-bold text-lg text-gray-900">전자 계약 체결</h1>
           <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded">본인확인</span>
@@ -141,40 +140,41 @@ export default function GuestSignPage() {
 
       <div className="pb-32 w-full max-w-2xl mx-auto">
 
-          {/* 1. 인사말 카드 */}
+          {/* 1. 인사말 */}
           <div className="bg-gray-800 text-white p-6 m-4 rounded-2xl shadow-lg">
               <p className="text-gray-300 text-sm mb-1">{item?.investor_name}님 안녕하세요</p>
               <h2 className="text-xl font-bold leading-tight">
-                아래 계약 내용을<br/>꼼꼼히 확인해 주세요.
+                계약 내용을 꼼꼼히 확인 후<br/>서명해 주세요.
               </h2>
           </div>
 
-          {/* 2. [핵심] 실제 계약서 내용 보여주기 */}
+          {/* 2. 계약서 뷰어 (전체 보기 & 확대 기능) */}
           <div className="m-4">
-              <p className="text-xs font-bold text-gray-500 mb-2 ml-1">📄 계약서 전체 내용</p>
-              {/* 작은 화면에 맞게 축소해서 보여줌 (가로 스크롤 방지) */}
-              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200">
-                  <div className="origin-top-left transform scale-[0.43] sm:scale-50 md:scale-75 h-[130mm] sm:h-[150mm] w-[210mm] overflow-hidden relative">
-                      {/* 여기에 실제 계약서 컴포넌트를 보여줌 (읽기 전용) */}
-                      {item && car && <ContractPaper data={item} car={car} />}
+              <div className="flex justify-between items-end mb-2 ml-1">
+                  <p className="text-xs font-bold text-gray-500">📄 계약서 내용</p>
+                  <button onClick={() => setShowZoomModal(true)} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100">
+                      🔍 크게 보기
+                  </button>
+              </div>
 
-                      {/* 더보기 그라데이션 효과 */}
-                      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent pointer-events-none"></div>
-                  </div>
-
-                  {/* 확대보기 버튼 (옵션) */}
-                  <div className="p-4 border-t border-gray-100 text-center bg-gray-50">
-                      <p className="text-xs text-gray-500">위 내용은 실제 계약서의 미리보기입니다.</p>
+              {/* 👇 [수정] 잘림 없이 전체 높이 표시 */}
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 relative">
+                  {/* 모바일 폭에 맞춰 축소(0.45배)하되, 높이는 넉넉하게 잡아서 전체 표시 */}
+                  <div className="w-full overflow-x-auto bg-gray-50" style={{ height: '140mm' }}>
+                      <div className="origin-top-left transform scale-[0.45] sm:scale-50 w-[210mm] min-h-[297mm] bg-white shadow-lg mx-auto">
+                          {item && car && <ContractPaper data={item} car={car} />}
+                      </div>
                   </div>
               </div>
+              <p className="text-center text-xs text-gray-400 mt-2">위 화면을 터치하거나 '크게 보기'를 눌러 내용을 확인하세요.</p>
           </div>
 
-          {/* 3. 주요 정보 요약 (한 번 더 강조) */}
+          {/* 3. 주요 정보 요약 */}
           <section className="bg-white p-5 m-4 rounded-2xl shadow-sm border border-gray-100">
-              <h3 className="font-bold text-gray-900 text-lg mb-4">✨ 주요 계약 조건 확인</h3>
+              <h3 className="font-bold text-gray-900 text-lg mb-4">✨ 주요 요약 정보</h3>
               <div className="space-y-3 text-sm">
                   <div className="flex justify-between py-2 border-b border-gray-50">
-                      <span className="text-gray-500">차량정보</span>
+                      <span className="text-gray-500">차량</span>
                       <span className="font-bold text-gray-900">{car?.number} ({car?.model})</span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-gray-50">
@@ -182,12 +182,12 @@ export default function GuestSignPage() {
                       <span className="font-bold text-blue-600">{nf(item?.invest_amount)}원</span>
                   </div>
                   <div className="flex justify-between py-2 border-b border-gray-50">
-                      <span className="text-gray-500">수익배분</span>
+                      <span className="text-gray-500">배분율</span>
                       <span className="font-bold text-gray-900">투자자 {item?.share_ratio}%</span>
                   </div>
               </div>
               <div className="mt-4 bg-yellow-50 p-3 rounded-lg text-xs text-yellow-800 leading-relaxed">
-                  📢 위 내용을 모두 확인하였으며, 본인은 (주)에프엠아이와의 차량 운영 투자 계약 체결에 동의합니다.
+                  📢 위 내용을 모두 확인하였으며, 본인은 (주)에프엠아이와의 계약 체결에 동의합니다.
               </div>
           </section>
       </div>
@@ -202,7 +202,23 @@ export default function GuestSignPage() {
           </button>
       </div>
 
-      {/* 서명 모달 (닥큐사인 스타일) */}
+      {/* 🔍 확대 보기 모달 (팝업) */}
+      {showZoomModal && (
+        <div className="fixed inset-0 z-[100000] bg-black/90 flex flex-col animate-fade-in">
+            <div className="flex justify-between items-center p-4 bg-black text-white">
+                <h3 className="font-bold text-lg">계약서 원본 확인</h3>
+                <button onClick={() => setShowZoomModal(false)} className="bg-gray-800 px-4 py-2 rounded-lg text-sm font-bold">닫기 ✕</button>
+            </div>
+            <div className="flex-1 overflow-auto p-4 bg-gray-900 flex justify-center">
+                {/* 원본 크기(scale-100)로 보여줌 */}
+                <div className="bg-white shadow-2xl min-w-[210mm] min-h-[297mm]">
+                    {item && car && <ContractPaper data={item} car={car} />}
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* 서명 모달 */}
       {isSigning && (
         <div className="fixed inset-0 z-[99999] flex items-end justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
             <div className="bg-white w-full max-w-lg rounded-t-3xl p-6 shadow-2xl animate-slide-up pb-10">
@@ -224,7 +240,7 @@ export default function GuestSignPage() {
                 <div className="flex gap-3">
                     <button onClick={() => sigCanvas.current.clear()} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold">지우기</button>
                     <button id="saveBtn" onClick={handleSaveSignature} className="flex-[2] bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-md">
-                        서명 제출하기
+                        서명 완료
                     </button>
                 </div>
             </div>
