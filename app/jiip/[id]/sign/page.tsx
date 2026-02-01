@@ -17,15 +17,14 @@ export default function GuestSignPage() {
   const [car, setCar] = useState<any>(null)
   const [completed, setCompleted] = useState(false)
 
-  // 서명 및 PDF 생성 도구
   const sigCanvas = useRef<any>({})
   const hiddenContractRef = useRef<HTMLDivElement>(null)
   const [tempSignature, setTempSignature] = useState<string>('')
 
   const [isSigning, setIsSigning] = useState(false)
-  const [showZoomModal, setShowZoomModal] = useState(false) // 🔍 확대 모달 상태
+  const [showZoomModal, setShowZoomModal] = useState(false)
 
-  // 1. 화면 강제 설정 (메뉴 숨김 - 전체화면 모드)
+  // 1. 화면 강제 설정 (전체화면)
   useEffect(() => {
     const sidebar = document.querySelector('aside'); if (sidebar) sidebar.style.display = 'none'
     const nav = document.querySelector('nav'); if (nav) nav.style.display = 'none'
@@ -43,7 +42,6 @@ export default function GuestSignPage() {
     }
   }, [])
 
-  // 2. 데이터 로딩
   useEffect(() => {
     const fetchData = async () => {
       const { data: contract } = await supabase.from('jiip_contracts').select('*').eq('id', id).single()
@@ -57,7 +55,21 @@ export default function GuestSignPage() {
     fetchData()
   }, [id])
 
-  // 3. 서명 저장 및 PDF 생성 로직
+  // 창 닫기 핸들러 (강제 종료 시도)
+  const handleCloseWindow = () => {
+    window.close()
+    // 🔽 모바일 브라우저 호환성 코드
+    try {
+        window.open('','_self').close()
+    } catch (e) {}
+    // 🔽 카카오톡 인앱 브라우저 대응
+    try {
+        if(document.referrer && document.referrer.indexOf('kakao') !== -1) {
+            location.href = 'kakaotalk://inappbrowser/close'
+        }
+    } catch(e) {}
+  }
+
   const handleSaveSignature = async () => {
     if (sigCanvas.current.isEmpty()) return alert("서명을 해주세요!")
 
@@ -65,35 +77,29 @@ export default function GuestSignPage() {
     if(btn) { btn.disabled = true; btn.innerText = '처리 중...'; }
 
     try {
-        // (1) 서명 이미지 추출
         const signatureDataUrl = sigCanvas.current.getTrimmedCanvas().toDataURL('image/png')
         setTempSignature(signatureDataUrl)
 
-        // (2) 렌더링 대기
         await new Promise(resolve => setTimeout(resolve, 500))
 
         if (!hiddenContractRef.current) throw new Error("계약서 양식을 찾을 수 없습니다.")
 
-        // (3) A4 계약서 캡처 (숨겨진 mode="print" 영역 캡처)
+        // A4 캡처 (PDF용)
         const imgData = await toPng(hiddenContractRef.current, { cacheBust: true, backgroundColor: '#ffffff' })
-
-        // (4) PDF 변환
         const pdf = new jsPDF('p', 'mm', 'a4')
         const pdfWidth = 210
         const imgProps = pdf.getImageProperties(imgData)
         const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width
         pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight)
 
-        // (5) 업로드
+        // 업로드
         const pdfBlob = pdf.output('blob')
         const fileName = `contract_${id}_signed_${Date.now()}.pdf`
 
-        const { error: uploadError } = await supabase.storage.from('contracts').upload(fileName, pdfBlob, {
-            contentType: 'application/pdf'
-        })
+        const { error: uploadError } = await supabase.storage.from('contracts').upload(fileName, pdfBlob, { contentType: 'application/pdf' })
         if (uploadError) throw uploadError
 
-        // (6) DB 업데이트
+        // DB 업데이트
         const { data: { publicUrl } } = supabase.storage.from('contracts').getPublicUrl(fileName)
         await supabase.from('jiip_contracts').update({ signed_file_url: publicUrl }).eq('id', id)
 
@@ -107,17 +113,25 @@ export default function GuestSignPage() {
 
   if (loading) return <div className="fixed inset-0 z-[99999] bg-white flex items-center justify-center text-gray-500 font-bold">로딩 중...</div>
 
+  // 👇 [수정됨] 완료 화면 (안내 문구 추가)
   if (completed) return (
     <div className="fixed inset-0 z-[99999] bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm">
             <div className="text-6xl mb-6">✅</div>
             <h1 className="text-2xl font-black text-gray-900 mb-2">계약 체결 완료!</h1>
-            <p className="text-gray-500 mb-6">
+            <p className="text-gray-500 mb-6 leading-relaxed">
                 서명이 포함된 계약서가<br/>안전하게 전송되었습니다.
             </p>
-            <button onClick={() => window.close()} className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold">
+
+            <button onClick={handleCloseWindow} className="w-full bg-gray-900 text-white py-3 rounded-xl font-bold mb-4 shadow-lg hover:bg-black transition-colors">
                 창 닫기
             </button>
+
+            {/* 👇 모바일 보안 정책 대응 안내 문구 */}
+            <p className="text-xs text-gray-400 bg-gray-50 p-3 rounded-lg">
+                ⚠️ 보안 정책상 자동으로 닫히지 않을 수 있습니다.<br/>
+                그럴 경우 브라우저 탭을 직접 닫아주세요.
+            </p>
         </div>
     </div>
   )
@@ -125,14 +139,14 @@ export default function GuestSignPage() {
   return (
     <div className="fixed inset-0 z-[99999] bg-gray-100 overflow-y-auto overflow-x-hidden w-screen h-[100dvh]">
 
-      {/* 🔐 [PDF 생성용] 숨겨진 원본 (화면 밖) - mode="print" 필수! */}
+      {/* 🔐 [PDF 생성용] A4 원본 (숨김) */}
       <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
           <div ref={hiddenContractRef}>
               {item && car && <ContractPaper data={item} car={car} signatureUrl={tempSignature} mode="print" />}
           </div>
       </div>
 
-      {/* 상단 헤더 */}
+      {/* 헤더 */}
       <div className="bg-white px-5 py-4 sticky top-0 z-30 border-b border-gray-200 flex justify-between items-center shadow-sm w-full">
           <h1 className="font-bold text-lg text-gray-900">전자 계약 체결</h1>
           <span className="text-xs font-bold bg-blue-100 text-blue-700 px-2 py-1 rounded">본인확인</span>
@@ -140,7 +154,7 @@ export default function GuestSignPage() {
 
       <div className="pb-32 w-full max-w-2xl mx-auto">
 
-          {/* 1. 인사말 */}
+          {/* 인사말 */}
           <div className="bg-gray-800 text-white p-6 m-4 rounded-2xl shadow-lg">
               <p className="text-gray-300 text-sm mb-1">{item?.investor_name}님 안녕하세요</p>
               <h2 className="text-xl font-bold leading-tight">
@@ -148,7 +162,7 @@ export default function GuestSignPage() {
               </h2>
           </div>
 
-          {/* 2. [수정됨] 계약서 뷰어 (모바일 최적화 모드) */}
+          {/* 계약서 뷰어 (모바일 모드) */}
           <div className="m-4">
               <div className="flex justify-between items-end mb-2 ml-1">
                   <p className="text-xs font-bold text-gray-500">📄 계약서 전체 내용</p>
@@ -158,13 +172,12 @@ export default function GuestSignPage() {
               </div>
 
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  {/* 👇 mode="mobile" 적용: 핸드폰 폭에 맞춰 글자가 커지고 줄바꿈됨 */}
                   {item && car && <ContractPaper data={item} car={car} mode="mobile" />}
               </div>
               <p className="text-center text-xs text-gray-400 mt-2">위 내용은 실제 계약서와 동일한 효력을 가집니다.</p>
           </div>
 
-          {/* 3. 주요 정보 요약 (백업 파일 내용 유지) */}
+          {/* 주요 정보 요약 */}
           <section className="bg-white p-5 m-4 rounded-2xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-gray-900 text-lg mb-4">✨ 주요 요약 정보</h3>
               <div className="space-y-3 text-sm">
@@ -197,7 +210,7 @@ export default function GuestSignPage() {
           </button>
       </div>
 
-      {/* 🔍 확대 보기 모달 (A4 원본 확인용) */}
+      {/* 확대 보기 모달 */}
       {showZoomModal && (
         <div className="fixed inset-0 z-[100000] bg-black/90 flex flex-col animate-fade-in">
             <div className="flex justify-between items-center p-4 bg-black text-white">
@@ -205,7 +218,6 @@ export default function GuestSignPage() {
                 <button onClick={() => setShowZoomModal(false)} className="bg-gray-800 px-4 py-2 rounded-lg text-sm font-bold">닫기 ✕</button>
             </div>
             <div className="flex-1 overflow-auto p-4 bg-gray-900 flex justify-center">
-                {/* 확대 시에는 mode="print"로 A4 원본 비율을 보여줌 */}
                 <div className="bg-white shadow-2xl min-w-[210mm] min-h-[297mm]">
                     {item && car && <ContractPaper data={item} car={car} mode="print" />}
                 </div>
