@@ -5,115 +5,90 @@ const numberToKorean = (number: number) => {
   return number.toLocaleString()
 }
 
-// mode: 'print' (A4 고정, PDF용) | 'mobile' (반응형, 모바일 보기용)
-export default function ContractPaper({ data, car, signatureUrl, mode = 'print' }: { data: any, car: any, signatureUrl?: string, mode?: 'print' | 'mobile' }) {
+export default function ContractPaper({ data, car, signatureUrl }: { data: any, car: any, signatureUrl?: string }) {
   const today = new Date()
-  const isMobile = mode === 'mobile'
 
-  // 🎨 스타일 정의 (모바일 vs 인쇄용 분기 처리)
+  // 🎨 스타일 정의
   const styles = {
+    // ... (위쪽 container, title 등은 기존과 동일) ...
     container: {
       backgroundColor: '#ffffff',
       color: '#222222',
       fontFamily: '"Pretendard", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
-      // 모바일이면 100% 폭에 글자 15px, 인쇄용이면 210mm 폭에 글자 12px
-      width: isMobile ? '100%' : '210mm',
-      minHeight: isMobile ? 'auto' : '297mm',
-      padding: isMobile ? '20px' : '12mm 18mm',
-      fontSize: isMobile ? '15px' : '12px',
-      lineHeight: isMobile ? '1.7' : '1.5',
+      fontSize: '12px',
+      letterSpacing: '-0.5px',
+      lineHeight: '1.5',
+      width: '210mm',
+      minHeight: '297mm',
+      padding: '12mm 18mm',
       margin: '0 auto',
       boxSizing: 'border-box' as const,
       position: 'relative' as const,
     },
     title: {
-      fontSize: isMobile ? '22px' : '26px',
+      fontSize: '26px',
       fontWeight: '900',
       textAlign: 'center' as const,
       borderBottom: '3px solid #000000',
       paddingBottom: '12px',
       marginBottom: '25px',
-      marginTop: isMobile ? '0px' : '10px',
-      wordBreak: 'keep-all' as const
+      marginTop: '10px'
     },
-    // 갑/을 박스: 모바일에서는 세로로 배치, 인쇄용은 가로 배치
     partyBox: {
       display: 'flex',
-      flexDirection: isMobile ? 'column' : 'row' as const,
       justifyContent: 'space-between',
-      gap: isMobile ? '30px' : '20px',
+      gap: '20px',
       marginBottom: '25px',
       borderBottom: '1px solid #e5e7eb',
       paddingBottom: '20px'
     },
-    partyCol: {
-      flex: 1,
-      width: isMobile ? '100%' : 'auto'
-    },
+    partyCol: { flex: 1 },
     partyHeader: {
-      fontSize: isMobile ? '16px' : '15px',
+      fontSize: '15px',
       fontWeight: 'bold',
-      marginBottom: '10px',
+      marginBottom: '8px',
       backgroundColor: '#f3f4f6',
-      padding: '8px 12px',
-      borderRadius: '6px',
+      padding: '6px 10px',
+      borderRadius: '4px',
       borderBottom: '2px solid #d1d5db'
     },
-    row: {
-      display: 'flex',
-      marginBottom: '6px',
-      alignItems: 'baseline'
-    },
-    label: {
-      fontWeight: 'bold',
-      width: '70px',
-      color: '#4b5563',
-      flexShrink: 0
-    },
-    value: {
-      flex: 1,
-      fontWeight: '600',
-      wordBreak: 'break-all' as const
-    },
+    row: { display: 'flex', marginBottom: '4px', alignItems: 'center' },
+    label: { fontWeight: 'bold', width: '60px', color: '#4b5563', flexShrink: 0 },
+    value: { flex: 1, fontWeight: '600', wordBreak: 'keep-all' as const },
     articleTitle: {
-      fontSize: isMobile ? '17px' : '14px',
+      fontSize: '14px',
       fontWeight: 'bold',
-      marginTop: '24px',
-      marginBottom: '8px',
+      marginTop: '16px',
+      marginBottom: '6px',
       color: '#111827'
     },
-    contentIndent: {
-      paddingLeft: isMobile ? '0px' : '10px', // 모바일은 들여쓰기 제거하여 공간 확보
-      color: '#374151'
-    },
+    contentIndent: { paddingLeft: '10px', color: '#374151' },
     specialBox: {
-      padding: '15px',
+      padding: '10px',
       backgroundColor: '#f9fafb',
       border: '1px solid #e5e7eb',
-      borderRadius: '8px',
+      borderRadius: '6px',
       whiteSpace: 'pre-wrap' as const,
-      fontSize: isMobile ? '14px' : '12px',
-      marginTop: '10px',
+      fontSize: '12px',
+      marginTop: '5px',
       minHeight: '40px'
     },
-    footer: {
-      marginTop: '40px',
-      textAlign: 'center' as const
-    },
-    // 도장/서명 겹치기용 스타일
+    footer: { marginTop: '35px', textAlign: 'center' as const },
+
+    // 👇 [핵심 수정] 도장 위치 및 크기 조정 (현실 고증)
     sealWrapper: {
         position: 'relative' as const,
         display: 'inline-block',
-        width: isMobile ? '50px' : '40px',
-        textAlign: 'center' as const,
-        marginLeft: '5px'
+        width: '40px', // 글자 공간을 조금 더 확보
+        textAlign: 'center' as const
     },
     sealImage: {
         position: 'absolute' as const,
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        height: isMobile ? '80px' : '75px',
+        // 📏 실제 도장 크기(약 2cm) 반영
+        height: '75px',
         width: 'auto',
         objectFit: 'contain' as const,
         opacity: 0.85,
@@ -125,7 +100,8 @@ export default function ContractPaper({ data, car, signatureUrl, mode = 'print' 
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        height: isMobile ? '70px' : '60px',
+        // ✍️ 서명도 시원하게 키움
+        height: '60px',
         width: 'auto',
         objectFit: 'contain' as const,
         mixBlendMode: 'multiply' as const
@@ -136,9 +112,8 @@ export default function ContractPaper({ data, car, signatureUrl, mode = 'print' 
     <div id="printable-area" style={styles.container}>
       <h1 style={styles.title}>차량 운영 투자 및 수익 배분 계약서</h1>
 
-      {/* 1. 상단 정보 */}
+      {/* 1. 상단 정보 (갑 -> 을 순서 통일) */}
       <div style={styles.partyBox}>
-        {/* 갑 (운용사) */}
         <div style={styles.partyCol}>
            <div style={styles.partyHeader}>운용사 (이하 '갑')</div>
            <div style={styles.row}><span style={styles.label}>상호</span> <span style={styles.value}>(주)에프엠아이</span></div>
@@ -146,7 +121,6 @@ export default function ContractPaper({ data, car, signatureUrl, mode = 'print' 
            <div style={styles.row}><span style={styles.label}>주소</span> <span style={styles.value}>경기도 연천군 백동로236번길 190</span></div>
         </div>
 
-        {/* 을 (투자자) */}
         <div style={styles.partyCol}>
            <div style={styles.partyHeader}>투자자 (이하 '을')</div>
            <div style={styles.row}><span style={styles.label}>성명</span> <span style={styles.value}>{data.investor_name}</span></div>
@@ -155,7 +129,7 @@ export default function ContractPaper({ data, car, signatureUrl, mode = 'print' 
         </div>
       </div>
 
-      <p style={{textAlign: 'center', marginBottom: '20px', fontWeight: 'bold', fontSize: isMobile ? '16px' : '12px'}}>
+      <p style={{textAlign: 'center', marginBottom: '20px', fontWeight: 'bold'}}>
         '갑'과 '을'은 차량 운영 사업을 위한 투자 및 수익 배분에 관하여 다음과 같이 계약을 체결한다.
       </p>
 
@@ -190,7 +164,7 @@ export default function ContractPaper({ data, car, signatureUrl, mode = 'print' 
                 <p>1. <b>[관리비]</b> 매월 <b>금 {data.admin_fee?.toLocaleString()}원</b>을 매출에서 선공제한다.</p>
                 <p>2. <b>[배분]</b> 공제 후 잔액을 <b>갑 {100 - data.share_ratio}% : 을 {data.share_ratio}%</b> 비율로 나눈다.</p>
                 <p>3. <b>[지급]</b> 매월 말일 정산하여, <b>익월 {data.payout_day}일</b>까지 지급한다.</p>
-                <p style={{color: '#6b7280', fontSize: isMobile ? '13px' : '11px', marginTop: '4px'}}>└ 계좌: {data.bank_name} {data.account_number} ({data.account_holder})</p>
+                <p style={{color: '#6b7280', fontSize: '11px', marginTop: '4px'}}>└ 계좌: {data.bank_name} {data.account_number} ({data.account_holder})</p>
               </div>
           </div>
 
@@ -214,21 +188,13 @@ export default function ContractPaper({ data, car, signatureUrl, mode = 'print' 
 
       {/* 3. 하단 서명란 */}
       <div style={styles.footer}>
-        <p style={{marginBottom: '20px', color: '#666'}}>위 계약을 증명하기 위하여 계약서 2통(전자파일 포함)을 작성하여 보관한다.</p>
-        <p style={{fontSize: isMobile ? '22px' : '20px', fontWeight: 'bold', marginBottom: '30px'}}>{today.getFullYear()}년 {today.getMonth() + 1}월 {today.getDate()}일</p>
+        <p style={{marginBottom: '15px', color: '#666'}}>위 계약을 증명하기 위하여 계약서 2통(전자파일 포함)을 작성하여 보관한다.</p>
+        <p style={{fontSize: '20px', fontWeight: 'bold', marginBottom: '30px'}}>{today.getFullYear()}년 {today.getMonth() + 1}월 {today.getDate()}일</p>
 
-        {/* 모바일에서는 세로로, PC/PDF에서는 가로로 */}
-        <div style={{
-            display: 'flex',
-            flexDirection: isMobile ? 'column' : 'row' as const,
-            justifyContent: 'space-between',
-            alignItems: isMobile ? 'stretch' : 'flex-start',
-            gap: isMobile ? '40px' : '0px',
-            padding: isMobile ? '0' : '0 10px'
-        }}>
+        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '0 10px'}}>
 
-            {/* 갑 (운용사) */}
-            <div style={{textAlign: 'left', position: 'relative', width: isMobile ? '100%' : '48%'}}>
+            {/* 왼쪽: 갑 (운용사) */}
+            <div style={{textAlign: 'left', position: 'relative', width: '48%'}}>
                 <p style={{fontSize: '15px', fontWeight: 'bold', marginBottom: '8px', borderBottom:'2px solid #000', paddingBottom:'4px'}}>(갑) 운용사</p>
                 <div style={{display:'flex', justifyContent:'space-between', marginBottom:'6px'}}><span>상호</span> <span style={{fontWeight:'bold'}}>(주)에프엠아이</span></div>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
@@ -243,8 +209,8 @@ export default function ContractPaper({ data, car, signatureUrl, mode = 'print' 
                 </div>
             </div>
 
-            {/* 을 (투자자) */}
-            <div style={{textAlign: 'left', position: 'relative', width: isMobile ? '100%' : '48%'}}>
+            {/* 오른쪽: 을 (투자자) */}
+            <div style={{textAlign: 'left', position: 'relative', width: '48%'}}>
                 <p style={{fontSize: '15px', fontWeight: 'bold', marginBottom: '8px', borderBottom:'2px solid #000', paddingBottom:'4px'}}>(을) 투자자</p>
                 <div style={{display:'flex', justifyContent:'space-between', marginBottom:'6px', alignItems:'center'}}>
                     <span>성명</span>

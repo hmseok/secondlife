@@ -25,7 +25,7 @@ export default function GuestSignPage() {
   const [isSigning, setIsSigning] = useState(false)
   const [showZoomModal, setShowZoomModal] = useState(false) // 🔍 확대 모달 상태
 
-  // 1. 화면 강제 설정 (메뉴 숨김 - 전체화면 모드)
+  // 1. 화면 강제 설정 (메뉴 숨김)
   useEffect(() => {
     const sidebar = document.querySelector('aside'); if (sidebar) sidebar.style.display = 'none'
     const nav = document.querySelector('nav'); if (nav) nav.style.display = 'none'
@@ -74,10 +74,10 @@ export default function GuestSignPage() {
 
         if (!hiddenContractRef.current) throw new Error("계약서 양식을 찾을 수 없습니다.")
 
-        // (3) A4 계약서 캡처 (숨겨진 mode="print" 영역 캡처)
+        // (3) A4 계약서 캡처
         const imgData = await toPng(hiddenContractRef.current, { cacheBust: true, backgroundColor: '#ffffff' })
 
-        // (4) PDF 변환
+        // (4) PDF 변환 (비율 유지)
         const pdf = new jsPDF('p', 'mm', 'a4')
         const pdfWidth = 210
         const imgProps = pdf.getImageProperties(imgData)
@@ -125,10 +125,10 @@ export default function GuestSignPage() {
   return (
     <div className="fixed inset-0 z-[99999] bg-gray-100 overflow-y-auto overflow-x-hidden w-screen h-[100dvh]">
 
-      {/* 🔐 [PDF 생성용] 숨겨진 원본 (화면 밖) - mode="print" 필수! */}
+      {/* 👇 PDF 생성용 숨겨진 원본 (화면 밖) */}
       <div style={{ position: 'absolute', top: '-10000px', left: '-10000px' }}>
           <div ref={hiddenContractRef}>
-              {item && car && <ContractPaper data={item} car={car} signatureUrl={tempSignature} mode="print" />}
+              {item && car && <ContractPaper data={item} car={car} signatureUrl={tempSignature} />}
           </div>
       </div>
 
@@ -148,23 +148,28 @@ export default function GuestSignPage() {
               </h2>
           </div>
 
-          {/* 2. [수정됨] 계약서 뷰어 (모바일 최적화 모드) */}
+          {/* 2. 계약서 뷰어 (전체 보기 & 확대 기능) */}
           <div className="m-4">
               <div className="flex justify-between items-end mb-2 ml-1">
-                  <p className="text-xs font-bold text-gray-500">📄 계약서 전체 내용</p>
+                  <p className="text-xs font-bold text-gray-500">📄 계약서 내용</p>
                   <button onClick={() => setShowZoomModal(true)} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded hover:bg-indigo-100">
-                      🔍 크게 보기 (A4 원본)
+                      🔍 크게 보기
                   </button>
               </div>
 
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  {/* 👇 mode="mobile" 적용: 핸드폰 폭에 맞춰 글자가 커지고 줄바꿈됨 */}
-                  {item && car && <ContractPaper data={item} car={car} mode="mobile" />}
+              {/* 👇 [수정] 잘림 없이 전체 높이 표시 */}
+              <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-200 relative">
+                  {/* 모바일 폭에 맞춰 축소(0.45배)하되, 높이는 넉넉하게 잡아서 전체 표시 */}
+                  <div className="w-full overflow-x-auto bg-gray-50" style={{ height: '140mm' }}>
+                      <div className="origin-top-left transform scale-[0.45] sm:scale-50 w-[210mm] min-h-[297mm] bg-white shadow-lg mx-auto">
+                          {item && car && <ContractPaper data={item} car={car} />}
+                      </div>
+                  </div>
               </div>
-              <p className="text-center text-xs text-gray-400 mt-2">위 내용은 실제 계약서와 동일한 효력을 가집니다.</p>
+              <p className="text-center text-xs text-gray-400 mt-2">위 화면을 터치하거나 '크게 보기'를 눌러 내용을 확인하세요.</p>
           </div>
 
-          {/* 3. 주요 정보 요약 (백업 파일 내용 유지) */}
+          {/* 3. 주요 정보 요약 */}
           <section className="bg-white p-5 m-4 rounded-2xl shadow-sm border border-gray-100">
               <h3 className="font-bold text-gray-900 text-lg mb-4">✨ 주요 요약 정보</h3>
               <div className="space-y-3 text-sm">
@@ -197,7 +202,7 @@ export default function GuestSignPage() {
           </button>
       </div>
 
-      {/* 🔍 확대 보기 모달 (A4 원본 확인용) */}
+      {/* 🔍 확대 보기 모달 (팝업) */}
       {showZoomModal && (
         <div className="fixed inset-0 z-[100000] bg-black/90 flex flex-col animate-fade-in">
             <div className="flex justify-between items-center p-4 bg-black text-white">
@@ -205,9 +210,9 @@ export default function GuestSignPage() {
                 <button onClick={() => setShowZoomModal(false)} className="bg-gray-800 px-4 py-2 rounded-lg text-sm font-bold">닫기 ✕</button>
             </div>
             <div className="flex-1 overflow-auto p-4 bg-gray-900 flex justify-center">
-                {/* 확대 시에는 mode="print"로 A4 원본 비율을 보여줌 */}
+                {/* 원본 크기(scale-100)로 보여줌 */}
                 <div className="bg-white shadow-2xl min-w-[210mm] min-h-[297mm]">
-                    {item && car && <ContractPaper data={item} car={car} mode="print" />}
+                    {item && car && <ContractPaper data={item} car={car} />}
                 </div>
             </div>
         </div>
@@ -235,7 +240,7 @@ export default function GuestSignPage() {
                 <div className="flex gap-3">
                     <button onClick={() => sigCanvas.current.clear()} className="flex-1 bg-gray-100 text-gray-600 py-3 rounded-xl font-bold">지우기</button>
                     <button id="saveBtn" onClick={handleSaveSignature} className="flex-[2] bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-md">
-                        서명 제출하기
+                        서명 완료
                     </button>
                 </div>
             </div>

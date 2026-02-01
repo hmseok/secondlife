@@ -78,13 +78,13 @@ export default function CarListPage() {
         ))}
       </div>
 
-      {/* 📋 리스트형 테이블 (썸네일 제거됨) */}
+      {/* 📋 리스트형 테이블 (여기가 핵심!) */}
       <div className="bg-white shadow-sm border border-t-0 rounded-b-xl overflow-hidden">
         {loading ? <div className="p-20 text-center text-gray-400">로딩 중...</div> : (
           <table className="w-full text-left border-collapse">
             <thead className="bg-gray-50 text-gray-500 font-bold text-xs uppercase tracking-wider border-b">
                 <tr>
-                    {/* 썸네일 헤더 제거됨 */}
+                    <th className="p-4 w-16 text-center">사진</th>
                     <th className="p-4">차량번호</th>
                     <th className="p-4">차종 (브랜드/모델)</th>
                     <th className="p-4">연식 / 연료</th>
@@ -100,7 +100,11 @@ export default function CarListPage() {
                         onClick={() => router.push(`/cars/${car.id}`)} // 행 클릭 시 이동
                         className="hover:bg-blue-50 cursor-pointer transition-colors group"
                     >
-                        {/* 썸네일 셀 제거됨 */}
+                        <td className="p-3 text-center">
+                            <div className="w-12 h-12 bg-gray-100 rounded-lg overflow-hidden border mx-auto">
+                                {car.image_url ? <img src={car.image_url} className="w-full h-full object-cover"/> : <span className="text-[10px] text-gray-400 flex h-full items-center justify-center">No Img</span>}
+                            </div>
+                        </td>
                         <td className="p-4 font-black text-gray-900 text-lg group-hover:text-blue-600">
                             {car.number}
                         </td>
@@ -131,7 +135,7 @@ export default function CarListPage() {
 
                 {filteredCars.length === 0 && (
                     <tr>
-                        <td colSpan={6} className="p-20 text-center text-gray-400">
+                        <td colSpan={7} className="p-20 text-center text-gray-400">
                             검색 결과가 없습니다.
                         </td>
                     </tr>
