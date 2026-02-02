@@ -1,9 +1,10 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
-// 👇 [중요] 점(..) 대신 @를 사용하여 경로 에러를 원천 차단했습니다.
+// 👇 [수정] 점(..) 대신 @ 사용으로 경로 에러 및 오타 방지
 import { supabase } from '@/utils/supabase'
 import SignatureCanvas from 'react-signature-canvas'
+// 👇 [수정] 여기가 문제였습니다! 'ㄴ' 오타 제거 및 @ 경로 적용
 import GeneralContract from '@/components/GeneralContract'
 import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
