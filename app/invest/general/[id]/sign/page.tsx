@@ -2,10 +2,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 // 👇 경로가 깊으니 점 개수 확인 필수 (5단계 상위)
-import { supabase } from '../../../../../utils/supabase'
+import { supabase } from '../../../../utils/supabase'
 import SignatureCanvas from 'react-signature-canvas'
 // 👇 컴포넌트 경로도 확인 (5단계 상위)
-import GeneralContract from '../../../../../components/GeneralContract'
+import GeneralContract from '../../../../ㄴcomponents/GeneralContract'
 import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
 
