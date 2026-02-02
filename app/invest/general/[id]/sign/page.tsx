@@ -1,11 +1,11 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
-// 👇 [수정] 점(..) 대신 @ 사용으로 경로 에러 및 오타 방지
-import { supabase } from '@/utils/supabase'
+// 👇 [수정] 대표님 말씀대로 점 4개가 정답입니다! (invest 폴더와 utils가 같은 레벨)
+import { supabase } from '../../../../utils/supabase'
 import SignatureCanvas from 'react-signature-canvas'
-// 👇 [수정] 여기가 문제였습니다! 'ㄴ' 오타 제거 및 @ 경로 적용
-import GeneralContract from '@/components/GeneralContract'
+// 👇 [수정] 점 4개로 수정
+import GeneralContract from '../../../../components/GeneralContract'
 import { toPng } from 'html-to-image'
 import jsPDF from 'jspdf'
 
@@ -27,12 +27,10 @@ export default function GeneralGuestSignPage() {
 
   // 1. 화면 강제 설정 (사이드바 숨김 & 전체화면)
   useEffect(() => {
-    // 사이드바, 네비게이션, 헤더 등 공통 레이아웃 숨기기
     const sidebar = document.querySelector('aside'); if (sidebar) sidebar.style.display = 'none'
     const nav = document.querySelector('nav'); if (nav) nav.style.display = 'none'
     const header = document.querySelector('header'); if (header) header.style.display = 'none'
 
-    // 메인 컨텐츠 영역 여백 제거 (전체화면)
     const main = document.querySelector('main')
     if (main) {
         main.style.padding = '0'
@@ -41,7 +39,6 @@ export default function GeneralGuestSignPage() {
         main.style.maxWidth = '100vw'
     }
 
-    // 페이지 나갈 때 복구
     return () => {
         if (sidebar) sidebar.style.display = ''
         if (nav) nav.style.display = ''
@@ -109,7 +106,6 @@ export default function GeneralGuestSignPage() {
 
   if (loading) return <div className="fixed inset-0 z-[99999] bg-white flex items-center justify-center text-gray-500 font-bold">로딩 중...</div>
 
-  // 완료 화면
   if (completed) return (
     <div className="fixed inset-0 z-[99999] bg-gray-50 flex flex-col items-center justify-center p-6 text-center">
         <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm">
@@ -149,7 +145,7 @@ export default function GeneralGuestSignPage() {
               </h2>
           </div>
 
-          {/* 계약서 뷰어 (모바일 모드) */}
+          {/* 계약서 뷰어 */}
           <div className="m-4">
               <div className="flex justify-between items-end mb-2 ml-1">
                   <p className="text-xs font-bold text-gray-500">📄 계약서 전체 내용</p>
