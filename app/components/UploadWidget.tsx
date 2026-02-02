@@ -8,46 +8,46 @@ export default function UploadWidget() {
   const router = useRouter()
   const [isExpanded, setIsExpanded] = useState(true)
 
-  // 상태 변경 시 자동으로 펼치기
   useEffect(() => {
     if (status === 'processing') setIsExpanded(true);
   }, [status]);
 
-  // 대기 중이면 숨김
   if (status === 'idle' && totalFiles === 0) return null;
 
   return (
-    <div className="fixed bottom-8 right-8 z-[9999] flex flex-col items-end gap-3 font-sans">
+    // 📱 모바일: 하단 중앙 정렬 / 💻 PC: 우측 하단 고정
+    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-8 z-[9999] flex flex-col items-end gap-3 font-sans">
 
-      {/* 🌟 메인 카드 위젯 */}
       <div
         className={`
-          transition-all duration-500 ease-spring
-          ${isExpanded ? 'w-[360px] opacity-100 translate-y-0' : 'w-14 h-14 rounded-full overflow-hidden translate-y-4 opacity-90'}
-          bg-white/90 backdrop-blur-xl border border-white/20 shadow-2xl rounded-[28px] overflow-hidden
+          transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)]
+          ${isExpanded ? 'w-full md:w-[380px] opacity-100 translate-y-0' : 'w-14 h-14 rounded-full translate-y-0 opacity-90 shadow-lg hover:scale-110 cursor-pointer ml-auto'}
+          bg-white/95 backdrop-blur-2xl border border-white/40 shadow-2xl rounded-[32px] overflow-hidden
           ring-1 ring-black/5
         `}
       >
-        {/* 🟢 축소 모드 (아이콘만) */}
         {!isExpanded && (
-          <button onClick={() => setIsExpanded(true)} className="w-full h-full flex items-center justify-center bg-gray-900 text-white hover:scale-110 transition-transform">
+          <button onClick={() => setIsExpanded(true)} className="w-full h-full flex items-center justify-center bg-gray-900 text-white transition-transform">
             {status === 'processing' ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="relative w-full h-full flex items-center justify-center">
+                    <svg className="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span className="absolute text-[9px] font-bold">{Math.round(progress)}%</span>
+                </div>
             ) : (
                 <span className="text-xl">📑</span>
             )}
           </button>
         )}
 
-        {/* 🔵 확장 모드 (상세 내용) */}
         {isExpanded && (
-          <div className="p-6 relative">
-
-            {/* 상단 헤더 */}
-            <div className="flex justify-between items-start mb-5">
+          <div className="p-5 md:p-6 relative">
+            <div className="flex justify-between items-start mb-4">
               <div className="flex items-center gap-3">
                 <div className={`
-                  w-10 h-10 rounded-2xl flex items-center justify-center text-xl shadow-inner
+                  w-10 h-10 md:w-12 md:h-12 rounded-2xl flex items-center justify-center text-xl md:text-2xl shadow-sm border border-black/5
                   ${status === 'completed' ? 'bg-green-100 text-green-600' : 'bg-indigo-50 text-indigo-600'}
                 `}>
                   {status === 'processing' && <span className="animate-spin">⚡️</span>}
@@ -56,73 +56,50 @@ export default function UploadWidget() {
                   {status === 'error' && '🚨'}
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900 text-base leading-tight">
-                    {status === 'completed' ? '분석 완료' : 'AI 분석 엔진 가동'}
+                  <h3 className="font-bold text-gray-900 text-base md:text-lg leading-tight">
+                    {status === 'completed' ? '분석 완료!' : 'AI 분석 중...'}
                   </h3>
-                  <p className="text-xs text-gray-500 font-medium mt-0.5">
-                    {status === 'processing' ? '실시간 데이터 추출 중...' : status === 'completed' ? '결과를 확인하세요' : '대기 중'}
+                  <p className="text-xs text-gray-500 font-medium">
+                    {status === 'processing' ? '데이터 추출 중...' : status === 'completed' ? '결과 확인 가능' : '대기 중'}
                   </p>
                 </div>
               </div>
-              <button onClick={() => setIsExpanded(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              <button onClick={() => setIsExpanded(false)} className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 hover:bg-gray-200">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </button>
             </div>
 
-            {/* 파일 정보 & 로그 */}
-            <div className="mb-5 bg-gray-50/80 rounded-2xl p-4 border border-gray-100">
-               <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-gray-700 bg-white px-2 py-1 rounded-md shadow-sm border border-gray-100">
-                    FILE {currentFileIndex + 1} / {totalFiles || 1}
+            <div className="mb-4 bg-gray-50/80 rounded-2xl p-3 border border-gray-100 shadow-inner">
+               <div className="flex justify-between items-center mb-1">
+                  <span className="text-[10px] font-black tracking-wider text-gray-500 bg-white px-2 py-0.5 rounded shadow-sm border border-gray-100">
+                    FILE {currentFileIndex + 1}/{totalFiles || 1}
                   </span>
-                  <span className="text-xs font-bold text-indigo-600">{Math.round(progress)}%</span>
+                  <span className="text-sm font-black text-indigo-600">{Math.round(progress)}%</span>
                </div>
-
-               <p className="text-sm font-semibold text-gray-800 truncate mb-1">{currentFileName || '준비 중...'}</p>
-               <p className="text-xs text-gray-500 animate-pulse">{logs || '대기 중...'}</p>
+               <p className="text-sm font-bold text-gray-800 truncate">{currentFileName || '준비 중...'}</p>
             </div>
 
-            {/* 프로그레스 바 (그라데이션) */}
-            <div className="relative w-full bg-gray-100 rounded-full h-2 mb-6 overflow-hidden">
-              <div
-                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(99,102,241,0.5)]"
-                style={{ width: `${progress}%` }}
-              ></div>
+            <div className="relative w-full bg-gray-100 rounded-full h-2 mb-4 overflow-hidden border border-gray-100">
+              <div className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 transition-all duration-300 ease-out" style={{ width: `${progress}%` }}></div>
             </div>
 
-            {/* 하단 버튼 그룹 */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 md:gap-3">
               {status === 'processing' && (
                 <>
-                  <button onClick={pauseProcessing} className="py-2.5 rounded-xl text-sm font-bold bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors shadow-sm">
-                    일시정지
-                  </button>
-                  <button onClick={cancelProcessing} className="py-2.5 rounded-xl text-sm font-bold bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
-                    취소하기
-                  </button>
+                  <button onClick={pauseProcessing} className="py-2.5 rounded-xl text-xs md:text-sm font-bold bg-white border border-gray-200 text-gray-600">⏸️ 일시정지</button>
+                  <button onClick={cancelProcessing} className="py-2.5 rounded-xl text-xs md:text-sm font-bold bg-red-50 text-red-600">⏹️ 취소</button>
                 </>
               )}
-
               {status === 'paused' && (
-                <>
-                  <button onClick={resumeProcessing} className="col-span-2 py-2.5 rounded-xl text-sm font-bold bg-gray-900 text-white hover:bg-black transition-all shadow-lg hover:shadow-xl">
-                    다시 시작 ▶
-                  </button>
-                </>
+                  <button onClick={resumeProcessing} className="col-span-2 py-2.5 rounded-xl text-sm font-bold bg-gray-900 text-white">▶️ 다시 시작</button>
               )}
-
               {status === 'completed' && (
                 <>
-                  <button onClick={closeWidget} className="py-2.5 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-100">
-                    닫기
-                  </button>
-                  <button onClick={() => router.push('/finance/upload')} className="py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 shadow-lg hover:shadow-indigo-200 transition-all">
-                    결과 보기 ➔
-                  </button>
+                  <button onClick={closeWidget} className="py-2.5 rounded-xl text-sm font-bold text-gray-500 bg-gray-100">닫기</button>
+                  <button onClick={() => router.push('/finance/upload')} className="py-2.5 rounded-xl text-sm font-bold bg-indigo-600 text-white shadow-lg">결과 보기 ➔</button>
                 </>
               )}
             </div>
-
           </div>
         )}
       </div>
