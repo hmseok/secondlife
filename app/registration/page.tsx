@@ -254,7 +254,7 @@ export default function RegistrationListPage() {
          <div className="flex gap-3">
             <label className={`cursor-pointer group flex items-center gap-2 bg-blue-600 text-white px-5 py-3 rounded-xl font-bold hover:bg-blue-700 hover:shadow-lg transition-all transform hover:-translate-y-0.5 ${bulkProcessing ? 'opacity-50 pointer-events-none' : ''}`}>
                 <Icons.Upload />
-                <span>{bulkProcessing ? '분석 중...' : '서류 AI 등록 (PDF가능)'}</span>
+                <span>{bulkProcessing ? '분석 중...' : '등록증 업로드'}</span>
                 {/* 🔥 .pdf 추가 */}
                 <input type="file" multiple accept="image/*, .pdf" className="hidden" onChange={handleBulkUpload} disabled={bulkProcessing} />
             </label>
