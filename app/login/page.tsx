@@ -1,11 +1,9 @@
 'use client'
 
-// 👇 1. Suspense를 여기서 불러와야 합니다.
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
-// 👇 2. 기존 컴포넌트 이름을 'LoginForm'으로 살짝 바꿉니다. (내용은 건드리지 않았습니다!)
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -21,16 +19,12 @@ function LoginForm() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ text: string, type: 'success' | 'error' | 'info' } | null>(null)
 
-  // 🔄 [NEW] 'reset-password' 뷰 추가
   const [view, setView] = useState<'login' | 'signup-select' | 'signup-email' | 'reset-password'>('login')
 
   const [isMailSent, setIsMailSent] = useState(false)
   const [isVerified, setIsVerified] = useState(false)
   const [isValidPwd, setIsValidPwd] = useState(false)
-
   const [showWelcome, setShowWelcome] = useState(false)
-
-  // 👁️ 비밀번호 보이기/숨기기 상태
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
@@ -83,21 +77,17 @@ function LoginForm() {
     }
   }
 
-  // 🔑 [NEW] 비밀번호 재설정 메일 발송
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return setMessage({ text: '가입하신 이메일을 입력해주세요.', type: 'error' })
-
     setLoading(true)
     try {
-      // 이메일로 매직링크(로그인 링크)를 보냅니다.
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/`, // 클릭하면 바로 로그인되어 메인으로 이동
+        redirectTo: `${window.location.origin}/auth/callback?next=/`,
       })
       if (error) throw error
-
       setMessage({ text: '✅ 재설정 메일을 보냈습니다! 메일함을 확인해주세요.', type: 'success' })
-      setIsMailSent(true) // 버튼 비활성화용
+      setIsMailSent(true)
     } catch (error: any) {
       setMessage({ text: '메일 전송 실패: ' + error.message, type: 'error' })
     } finally {
@@ -191,26 +181,48 @@ function LoginForm() {
     </button>
   )
 
-  const EyeIcon = () => (
-    <svg className="w-5 h-5 text-gray-400 hover:text-indigo-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-  )
-  const EyeOffIcon = () => (
-    <svg className="w-5 h-5 text-gray-400 hover:text-indigo-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
-  )
+  const EyeIcon = () => (<svg className="w-5 h-5 text-gray-400 hover:text-indigo-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>)
+  const EyeOffIcon = () => (<svg className="w-5 h-5 text-gray-400 hover:text-indigo-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>)
 
+  // 🔴 여기서부터 렌더링(화면 그리기) 시작
   return (
     <div className="min-h-screen w-full flex bg-white font-sans text-gray-900">
-      {/* 여기에 작성하신 UI 코드 전부 그대로 들어있습니다 */}
-      <div className="hidden lg:flex w-1/2 bg-indigo-900 relative items-center justify-center overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-indigo-600 to-slate-900 opacity-90 z-10"></div>
-        <div className="relative z-20 text-white p-12 max-w-lg">
-          <h1 className="text-5xl font-black tracking-tight mb-6 leading-tight">
-            Start Your <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-300 to-purple-300">Journey</span>
+
+      {/* 👇 왼쪽 디자인 영역 (수정된 도시 야경 디자인) */}
+      <div className="hidden lg:flex w-1/2 relative items-center justify-center overflow-hidden bg-gray-900">
+        <div
+          className="absolute top-0 left-0 w-full h-full z-0 bg-cover bg-center transition-transform duration-[10s] hover:scale-110"
+          style={{ backgroundImage: "url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2070&auto=format&fit=crop')" }}
+        ></div>
+        <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-slate-900 via-indigo-950/80 to-slate-900/90 z-10"></div>
+        <div className="relative z-20 p-12 max-w-lg text-left">
+          <div className="inline-block px-3 py-1 mb-6 rounded-full border border-indigo-400/30 bg-indigo-500/10 backdrop-blur-sm">
+            <span className="text-xs font-bold text-indigo-300 tracking-wider uppercase">Enterprise Edition</span>
+          </div>
+          <h1 className="text-5xl font-black tracking-tight mb-6 leading-tight text-white">
+            The Standard of <br/>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-indigo-300">
+              Smart Mobility
+            </span>
           </h1>
-          <p className="text-lg text-indigo-100 leading-relaxed opacity-90">가입부터 관리까지, 모든 과정이 심플합니다.</p>
+          <p className="text-lg text-gray-300 leading-relaxed font-medium opacity-90">
+            복잡한 차량 관리와 정산 업무를<br/>
+            하나의 시스템으로 완벽하게 통제하세요.
+          </p>
+          <div className="mt-12 flex gap-8 border-t border-white/10 pt-8">
+            <div>
+              <p className="text-3xl font-bold text-white">99.9%</p>
+              <p className="text-xs text-gray-400 mt-1 uppercase tracking-wide">System Uptime</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-white">24/7</p>
+              <p className="text-xs text-gray-400 mt-1 uppercase tracking-wide">Monitoring</p>
+            </div>
+          </div>
         </div>
       </div>
 
+      {/* 👇 오른쪽 로그인 폼 영역 (기존 로직 유지) */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-8 md:p-16 relative">
         <div className="w-full max-w-md space-y-8">
           {showWelcome ? (
@@ -252,7 +264,6 @@ function LoginForm() {
                     <div className="group"><label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">이름 (실명)</label><input type="text" value={name} onChange={e=>setName(e.target.value)} disabled={isMailSent} className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-indigo-500 font-bold disabled:bg-gray-100" placeholder="홍길동" /></div>
                     <div className="group"><label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">연락처</label><input type="tel" value={phone} onChange={handlePhoneChange} disabled={isMailSent} maxLength={13} className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-indigo-500 font-bold disabled:bg-gray-100" placeholder="010-0000-0000" /></div>
                     <div className="group"><label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">이메일</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} disabled={isMailSent} className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-indigo-500 font-bold disabled:bg-gray-100" placeholder="name@example.com" />{!isMailSent && <p className="text-[11px] text-gray-400 mt-2 ml-1">※ 인증 메일이 발송됩니다.</p>}</div>
-
                     <div className="group relative">
                         <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">비밀번호</label>
                         <div className="relative">
@@ -261,7 +272,6 @@ function LoginForm() {
                         </div>
                         {password && !isValidPwd && <p className="mt-2 ml-1 text-xs font-bold text-red-500">⚠️ 영문, 숫자, 특수문자 포함 8자리 이상</p>}
                     </div>
-
                     <div className="group relative">
                         <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">비밀번호 확인</label>
                         <div className="relative">
@@ -269,59 +279,42 @@ function LoginForm() {
                             <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} className="absolute right-4 top-1/2 transform -translate-y-1/2 focus:outline-none">{showConfirmPassword ? <EyeOffIcon /> : <EyeIcon />}</button>
                         </div>
                     </div>
-
                     {message && <div className={`p-4 rounded-xl text-sm font-bold flex items-start gap-3 shadow-sm border ${message.type==='error'?'bg-red-50 border-red-100 text-red-600':message.type==='success'?'bg-green-50 border-green-100 text-green-700':'bg-blue-50 border-blue-100 text-blue-700'}`}><span>{message.type==='error'?'🚨':message.type==='success'?'✅':'ℹ️'}</span><span>{message.text}</span></div>}
-
                     <button type="submit" disabled={loading || (isMailSent && !isVerified)} className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all duration-300 text-lg flex items-center justify-center gap-2 relative ${!isMailSent ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 cursor-pointer' : isVerified ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200 animate-pulse !cursor-pointer' : 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'}`}>{loading ? '처리 중...' : !isMailSent ? '인증 메일 발송' : isVerified ? '🚀 회원가입 완료' : '⏳ 인증 확인 중... (메일함 확인)'}</button>
-
                     {isMailSent && !isVerified && <div className="text-center"><button type="button" onClick={resetSignup} className="text-xs text-gray-400 underline hover:text-gray-600">이메일 주소 다시 입력하기</button></div>}
                 </form>
               )}
 
-              {/* 2. 비밀번호 재설정 폼 */}
               {view === 'reset-password' && (
                 <form onSubmit={handleResetPassword} className="space-y-6 animate-fade-in-up">
                   <div className="group">
                     <label className="block text-xs font-bold text-gray-500 mb-1.5 ml-1">이메일</label>
                     <input type="email" value={email} onChange={e=>setEmail(e.target.value)} disabled={isMailSent} className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-indigo-500 font-bold" placeholder="가입한 이메일을 입력하세요" />
                   </div>
-
                   {message && <div className={`p-4 rounded-xl text-sm font-bold flex items-start gap-3 shadow-sm border ${message.type==='error'?'bg-red-50 border-red-100 text-red-600':'bg-green-50 border-green-100 text-green-700'}`}><span>{message.type==='error'?'🚨':'✅'}</span><span>{message.text}</span></div>}
-
-                  <button type="submit" disabled={loading || isMailSent} className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all duration-300 text-lg ${isMailSent ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}>
-                    {loading ? '전송 중...' : isMailSent ? '메일 발송 완료' : '🔒 재설정 메일 보내기'}
-                  </button>
-
-                  <div className="text-center">
-                    <button type="button" onClick={() => { setView('login'); setMessage(null); }} className="text-sm font-bold text-gray-400 hover:text-gray-600 underline">로그인 화면으로 돌아가기</button>
-                  </div>
+                  <button type="submit" disabled={loading || isMailSent} className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all duration-300 text-lg ${isMailSent ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-200'}`}>{loading ? '전송 중...' : isMailSent ? '메일 발송 완료' : '🔒 재설정 메일 보내기'}</button>
+                  <div className="text-center"><button type="button" onClick={() => { setView('login'); setMessage(null); }} className="text-sm font-bold text-gray-400 hover:text-gray-600 underline">로그인 화면으로 돌아가기</button></div>
                 </form>
               )}
 
-              {/* 하단 로그인 이동 링크들 */}
               {view === 'signup-email' && <div className="text-center pt-4 border-t border-gray-100"><button onClick={() => { resetSignup(); setView('login'); }} className="text-sm font-bold text-indigo-600 hover:underline">로그인 화면으로 돌아가기</button></div>}
 
-              {/* 3. 로그인 폼 */}
               {view === 'login' && (
                 <>
                   <GoogleButton text="Google 계정으로 로그인" />
                   <div className="relative flex items-center justify-center my-8"><div className="absolute w-full border-t border-gray-200"></div><span className="relative bg-white px-4 text-xs font-bold text-gray-400 uppercase tracking-wide">Or login with email</span></div>
                   <form onSubmit={handleAuth} className="space-y-4">
                     <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-indigo-500 font-bold" placeholder="이메일 주소" />
-
                     <div className="relative">
                         <input type={showPassword ? "text" : "password"} value={password} onChange={e=>setPassword(e.target.value)} className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:bg-white focus:border-indigo-500 font-bold pr-12" placeholder="비밀번호" />
                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 transform -translate-y-1/2 focus:outline-none">{showPassword ? <EyeOffIcon /> : <EyeIcon />}</button>
                     </div>
-
                     {message && <div className={`p-4 rounded-xl text-sm font-bold border ${message.type==='error'?'bg-red-50 border-red-100 text-red-600':'bg-blue-50 border-blue-100 text-blue-700'}`}>{message.text}</div>}
-
                     <div className="flex justify-end gap-3 px-1">
                       <button type="button" onClick={() => alert('이메일(아이디)을 잊으신 경우 관리자에게 문의해주세요.')} className="text-xs text-gray-400 hover:text-gray-600 font-medium">아이디 찾기</button>
                       <span className="text-gray-300 text-xs">|</span>
                       <button type="button" onClick={() => { setView('reset-password'); setMessage(null); setEmail(''); }} className="text-xs text-indigo-500 hover:text-indigo-700 font-bold">비밀번호 찾기</button>
                     </div>
-
                     <button type="submit" disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-xl shadow-lg shadow-indigo-200 hover:-translate-y-0.5 transition-all disabled:bg-gray-300">{loading ? '로그인 중...' : '로그인'}</button>
                   </form>
                   <div className="mt-8 pt-6 border-t border-gray-100">
@@ -331,7 +324,6 @@ function LoginForm() {
                 </>
               )}
 
-              {/* 4. 가입 선택 화면 */}
               {view === 'signup-select' && (
                 <div className="space-y-4">
                   <GoogleButton text="Google 계정으로 시작" />
@@ -342,14 +334,12 @@ function LoginForm() {
               )}
             </>
           )}
-
         </div>
       </div>
     </div>
   )
 }
 
-// 👇 3. [핵심 수정] 이렇게 Suspense로 감싸주기만 하면 에러 없이 화면이 잘 뜹니다!
 export default function LoginPage() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500">잠시만 기다려주세요...</div>}>
