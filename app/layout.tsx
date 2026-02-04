@@ -21,6 +21,7 @@ export default function RootLayout({
       <body>
         {/* 👇 2. children을 AppProvider로 감싸주세요 */}
         <AppProvider>
+        <UploadProvider>
           {children}
         </AppProvider>
       </body>
