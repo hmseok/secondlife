@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
     // 🚀 [수정 포인트] 모델명을 'gemini-2.0-flash
     const model = genAI.getGenerativeModel({
-        model: "gemini-2.0-flash";
+        model: "gemini-2.0-flash",
         generationConfig: { responseMimeType: "application/json" }
     });
 
