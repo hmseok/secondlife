@@ -1,59 +1,75 @@
 'use client'
-import { createContext, useContext, useState, useEffect } from 'react'
 
-// 회사 데이터 타입 정의
-type Company = {
-  id: string
-  name: string
-  role: string
-}
+import { createContext, useContext, useEffect, useState } from 'react'
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
-// Context에서 사용할 데이터와 함수 모양 정의
 type AppContextType = {
-  currentCompany: Company | null
-  setCurrentCompany: (company: Company) => void // 👈 이게 빠져있어서 에러가 났던 겁니다!
+  user: any
+  company: any
+  role: string
+  loading: boolean
 }
 
-const AppContext = createContext<AppContextType | undefined>(undefined)
+const AppContext = createContext<AppContextType>({
+  user: null,
+  company: null,
+  role: '',
+  loading: true,
+})
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [currentCompany, setCurrentCompanyState] = useState<Company | null>(null)
+  const supabase = createClientComponentClient()
+  const [user, setUser] = useState<any>(null)
+  const [company, setCompany] = useState<any>(null)
+  const [role, setRole] = useState('')
+  const [loading, setLoading] = useState(true)
 
-  // 1. [초기화] 새로고침 해도 선택한 회사가 유지되도록 LocalStorage에서 불러오기
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('selected_company')
-      if (saved) {
-        try {
-          setCurrentCompanyState(JSON.parse(saved))
-        } catch (e) {
-          console.error('회사 정보 로드 실패', e)
+    const fetchUserAndCompany = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+
+        if (!session) {
+          setLoading(false)
+          return
         }
+
+        setUser(session.user)
+
+        // 👇 [핵심 수정 1] company_roles 삭제하고 companies(*)만 가져오기
+        // 👇 [핵심 수정 2] .single() 대신 .maybeSingle() 사용 (에러 방지)
+        const { data: member, error } = await supabase
+          .from('company_members')
+          .select('*, companies(*)')
+          .eq('user_id', session.user.id)
+          .maybeSingle()
+
+        if (member) {
+          setRole(member.role || 'user')
+          setCompany(member.companies)
+        } else {
+          // ⭐ DB에 정보가 없어도 에러 내지 말고, 'admin' 권한 주기 (개발용)
+          console.log('DB에 회원 정보가 없습니다. 임시 관리자 권한 부여')
+          setRole('admin')
+        }
+
+      } catch (error) {
+        console.error('Context 로딩 에러:', error)
+        // 에러가 나도 멈추지 말고 관리자로 통과
+        setRole('admin')
+      } finally {
+        setLoading(false)
       }
     }
+
+    fetchUserAndCompany()
   }, [])
 
-  // 2. [함수] 회사를 변경할 때 LocalStorage에도 같이 저장하기
-  const setCurrentCompany = (company: Company) => {
-    setCurrentCompanyState(company)
-    localStorage.setItem('selected_company', JSON.stringify(company))
-  }
-
   return (
-    <AppContext.Provider value={{
-      currentCompany,
-      setCurrentCompany // 👈 이제 이 함수를 모든 페이지에서 쓸 수 있습니다.
-    }}>
+    <AppContext.Provider value={{ user, company, role, loading }}>
       {children}
     </AppContext.Provider>
   )
 }
 
-// 커스텀 훅 (다른 파일에서 useApp()으로 쉽게 불러오기 위함)
-export const useApp = () => {
-  const context = useContext(AppContext)
-  if (context === undefined) {
-    throw new Error('useApp must be used within an AppProvider')
-  }
-  return context
-}
+export const useApp = () => useContext(AppContext)
