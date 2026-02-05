@@ -40,7 +40,6 @@ function LoginForm() {
     let intervalId: NodeJS.Timeout;
     if (isMailSent && !isVerified && view === 'signup-email') {
       intervalId = setInterval(async () => {
-        // 이메일 인증이 완료되면 로그인이 성공하므로, 3초마다 로그인 시도하며 체크
         const { data } = await supabase.auth.signInWithPassword({ email, password });
         if (data.session) {
             setIsVerified(true);
@@ -61,7 +60,6 @@ function LoginForm() {
   }
   useEffect(() => { setIsValidPwd(validatePassword(password)) }, [password])
 
-  // [핵심] 구글 로그인 시 현재 도메인 주소 자동 감지
   const handleGoogleLogin = async () => {
     setLoading(true)
     try {
@@ -79,7 +77,6 @@ function LoginForm() {
     }
   }
 
-  // [핵심] 비밀번호 재설정 시 현재 도메인 주소 자동 감지
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return setMessage({ text: '가입하신 이메일을 입력해주세요.', type: 'error' })
@@ -106,7 +103,6 @@ function LoginForm() {
     return '오류가 발생했습니다: ' + errorMsg;
   }
 
-  // [핵심] 회원가입 시 현재 도메인 주소 자동 감지
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
     setMessage(null)
@@ -138,7 +134,6 @@ function LoginForm() {
         const { data, error } = await supabase.auth.signUp({
           email, password,
           options: {
-            // 여기가 핵심입니다! window.location.origin이 현재 접속된 주소(배포 주소)를 자동으로 가져옵니다.
             emailRedirectTo: `${window.location.origin}/auth/callback`,
             data: { name, full_name: name, phone }
           },
