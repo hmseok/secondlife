@@ -1,68 +1,101 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { useRouter } from 'next/navigation'
+import { supabase } from '../utils/supabase' // 경로 확인! (../../utils/supabase 일 수도 있음)
+import Link from 'next/link'
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const supabase = createClientComponentClient()
-  const [status, setStatus] = useState('권한 확인 중...')
-  const [debugData, setDebugData] = useState<any>(null)
+export default function AdminLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  const router = useRouter()
+  const [isAuthorized, setIsAuthorized] = useState(false)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const checkSaaSRole = async () => {
-      // 1. 내 정보 가져오기
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
-        setStatus('❌ 로그인 안 됨')
-        return
-      }
+    const checkAdmin = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
 
-      // 2. SaaS 권한 체크: '내가 속한 회사에서 관리자(Admin)인가?' 확인
-      // companies 테이블과 company_members 테이블을 조인해서 확인해야 합니다.
-      const { data: memberData, error } = await supabase
-        .from('company_members')
-        .select(`
-          *,
-          company_roles ( name ),
-          companies ( name )
-        `)
-        .eq('user_id', session.user.id)
-        .single() // 회사가 하나라고 가정 (여러 개면 로직 달라짐)
+        if (!session) {
+          router.replace('/')
+          return
+        }
 
-      setDebugData({
-        user_id: session.user.id,
-        member_info: memberData,
-        error_log: error
-      })
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .maybeSingle()
 
-      if (memberData) {
-        setStatus(`✅ 확인 완료: ${memberData.companies?.name}의 ${memberData.company_roles?.name} 권한`)
-      } else {
-        setStatus('⚠️ 회사 소속 정보가 없음 (DB 확인 필요)')
+        if (profile?.role === 'god_admin') {
+          setIsAuthorized(true)
+        } else {
+          alert('⛔️ 접근 권한이 없습니다. (최고 관리자 전용)')
+          router.replace('/')
+        }
+      } catch (e) {
+        console.error('관리자 체크 에러:', e)
+        router.replace('/')
+      } finally {
+        setLoading(false)
       }
     }
 
-    checkSaaSRole()
+    checkAdmin()
   }, [])
 
-  // 🚨 절대 리다이렉트 하지 않음 (화면에 상태만 표시)
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* 디버깅용 상단 바 */}
-      <div className="bg-gray-800 text-white p-4 text-sm font-mono">
-        <p><strong>현재 상태:</strong> {status}</p>
-        <details className="mt-2">
-          <summary className="cursor-pointer text-yellow-400">🔍 DB 조회 데이터 보기 (클릭)</summary>
-          <pre className="mt-2 bg-black p-4 rounded overflow-auto max-h-40">
-            {JSON.stringify(debugData, null, 2)}
-          </pre>
-        </details>
-      </div>
+  // 👇 로그아웃 함수 추가
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    router.replace('/') // 로그인 페이지로 쫓아냄
+  }
 
-      {/* 실제 관리자 페이지 내용 */}
-      <div className="flex-1">
-        {children}
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="text-xl font-bold text-gray-800 mb-2">👑 관리자 권한 확인 중...</div>
+          <div className="text-sm text-gray-500">잠시만 기다려주세요.</div>
+        </div>
       </div>
+    )
+  }
+
+  if (!isAuthorized) return null
+
+  return (
+    <div className="flex min-h-screen bg-gray-100">
+      {/* 사이드바 */}
+      <aside className="w-64 bg-slate-900 text-white flex flex-col fixed h-full z-10">
+        <div className="p-6 border-b border-slate-800">
+          <h1 className="text-xl font-bold">SECONDLIFE <span className="text-blue-500">ADMIN</span></h1>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-2">
+          <Link href="/admin" className="block px-4 py-3 rounded-lg bg-blue-600 text-white font-medium">
+            대시보드
+          </Link>
+          {/* 메뉴들 추가 예정... */}
+        </nav>
+
+        {/* 👇 하단 로그아웃 버튼 영역 */}
+        <div className="p-4 border-t border-slate-800">
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-800 hover:bg-red-600/90 text-slate-300 hover:text-white transition-all font-medium text-sm group"
+          >
+            <span>🚪</span> 로그아웃
+          </button>
+        </div>
+      </aside>
+
+      {/* 메인 콘텐츠 (사이드바 너비만큼 밀어주기 pl-64) */}
+      <main className="flex-1 ml-64 p-8">
+        {children}
+      </main>
     </div>
   )
 }

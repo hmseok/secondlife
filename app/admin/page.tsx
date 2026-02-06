@@ -1,205 +1,155 @@
-'use client'
+'use client';
 
-import { useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react';
+import { supabase } from '../utils/supabase'; // 점 두개 확인!
+// 👇 [추가 1] 모달 불러오기 (점 하나)
+import AddCompanyModal from '../components/admin/AddCompanyModal';
 
-// 🎨 탭 버튼
-const TabButton = ({ active, label, icon, onClick }: any) => (
-  <button
-    onClick={onClick}
-    className={`flex items-center gap-2 px-5 py-3 rounded-t-xl font-bold transition-all border-b-2 ${
-      active
-        ? 'bg-white text-indigo-700 border-indigo-600 shadow-sm z-10'
-        : 'bg-gray-50 text-gray-500 border-transparent hover:bg-gray-100 hover:text-gray-700'
-    }`}
-  >
-    <span>{icon}</span>
-    {label}
-  </button>
-)
-
-// 📊 현황판 카드
-const StatCard = ({ title, value, sub, color }: any) => (
-  <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between group hover:shadow-md transition-all">
-    <div>
-      <p className="text-gray-500 text-sm font-bold uppercase tracking-wider">{title}</p>
-      <h3 className="text-3xl font-black text-gray-900 mt-1 group-hover:scale-105 transition-transform origin-left">{value}</h3>
-      <p className={`text-xs font-bold mt-2 ${color}`}>{sub}</p>
-    </div>
-    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl ${color.replace('text-', 'bg-').replace('600', '100')}`}>
-      📊
-    </div>
-  </div>
-)
+type Company = {
+  id: string;
+  name: string;
+  business_number: string | null;
+  plan: string;
+  is_active: boolean;
+  created_at: string;
+};
 
 export default function AdminDashboard() {
-  const [activeTab, setActiveTab] = useState<'company' | 'menu' | 'org'>('company')
-  const supabase = createClientComponentClient()
-  const router = useRouter()
-  const [loading, setLoading] = useState(false)
+   const [companies, setCompanies] = useState<Company[]>([]);
+   const [loading, setLoading] = useState(true);
+   // 👇 [추가 2] 모달 상태 관리
+   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const handleLogout = async () => {
-    setLoading(true)
-    await supabase.auth.signOut()
-    router.replace('/login')
-    router.refresh()
-  }
+   useEffect(() => {
+     fetchCompanies();
+   }, []);
 
-  // 📂 [핵심 수정] 대표님의 폴더 구조를 기반으로 실제 기능 목록 작성
-  // cars, finance, insurance, jiip, invest, loans, quotes, contracts
-  const [features, setFeatures] = useState([
-    { id: 'cars', name: '차량 통합 관리', enabled: true, desc: '차량 조회, 등록, 배차 현황 (cars)' },
-    { id: 'jiip', name: '지입/위수탁 관리', enabled: true, desc: '지입 차주 및 수익금 정산 (jiip)' },
-    { id: 'finance', name: '재무/회계 시스템', enabled: true, desc: '매출/매입 내역 및 세무 처리 (finance)' },
-    { id: 'insurance', name: '보험/사고 처리', enabled: true, desc: '사고 접수 및 보험 이력 관리 (insurance)' },
-    { id: 'invest', name: '투자 관리', enabled: false, desc: '차량 투자자 및 수익 배분 (invest)' },
-    { id: 'loans', name: '대출/리스 금융', enabled: false, desc: '차량 할부 및 리스 스케줄 (loans)' },
-    { id: 'quotes', name: '견적/계약 관리', enabled: true, desc: '고객 견적서 및 전자 계약 (quotes/contracts)' },
-  ])
+   const fetchCompanies = async () => {
+     try {
+       const { data, error } = await supabase
+         .from('companies')
+         .select('*')
+         .order('created_at', { ascending: false });
 
-  const toggleFeature = (id: string) => {
-    setFeatures(features.map(f => f.id === id ? { ...f, enabled: !f.enabled } : f))
-  }
+      if (error) throw error;
+      setCompanies(data || []);
+    } catch (error) {
+      console.error('Error fetching companies:', error);
+      // alert('데이터를 불러오지 못했습니다.'); // 에러 알림은 너무 자주 뜨면 귀찮으니 주석 처리
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div className="p-10 text-center">로딩 중... ⏳</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 animate-fade-in">
+    <div className="max-w-7xl mx-auto p-6">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">👑 Super Admin</h1>
+          <p className="text-gray-500 mt-1">전체 회사 및 고객사 현황 관리</p>
+        </div>
+        <button
+          // 👇 [추가 3] 버튼 누르면 모달 열기
+          onClick={() => setIsModalOpen(true)}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm transition-colors"
+        >
+          + 회사 강제 등록
+        </button>
+      </div>
 
-      {/* 👑 1. 상단 헤더 */}
-      <div className="bg-slate-900 text-white pt-10 pb-24 px-8 shadow-xl">
-        <div className="max-w-7xl mx-auto flex justify-between items-start">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="bg-indigo-500 text-white text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-widest shadow-lg shadow-indigo-500/50">Master Admin</span>
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-              <span className="text-green-400 text-xs font-bold">Online</span>
-            </div>
-            <h1 className="text-4xl font-black tracking-tight">System Control Tower</h1>
-            <p className="text-slate-400 mt-2 font-medium">Sideline 전체 시스템 중앙 제어</p>
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="text-gray-500 text-sm">총 가입 회사</div>
+          <div className="text-3xl font-bold mt-2">{companies.length}개</div>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="text-gray-500 text-sm">활성 구독 (유료)</div>
+          <div className="text-3xl font-bold mt-2 text-indigo-600">
+            {companies.filter(c => c.plan !== 'free').length}개
           </div>
-
-          <button
-            onClick={handleLogout}
-            disabled={loading}
-            className="bg-slate-800 border border-slate-700 hover:bg-red-600 hover:border-red-500 text-white px-5 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2 group"
-          >
-            {loading ? '종료 중...' : '로그아웃'}
-          </button>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div className="text-gray-500 text-sm">이번 달 신규</div>
+          <div className="text-3xl font-bold mt-2 text-green-600">0개</div>
         </div>
       </div>
 
-      {/* 🚀 2. 메인 컨텐츠 */}
-      <div className="max-w-7xl mx-auto px-8 -mt-16 pb-20">
-
-        {/* 요약 현황판 */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <StatCard title="시스템 모듈" value={`${features.length}개`} sub="전체 기능 탑재 완료" color="text-indigo-600" />
-          <StatCard title="활성 모듈" value={`${features.filter(f=>f.enabled).length}개`} sub="현재 가동 중" color="text-emerald-600" />
-          <StatCard title="데이터베이스" value="정상" sub="Supabase 연결됨" color="text-blue-600" />
+      {/* 회사 목록 테이블 */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+          <h2 className="font-semibold text-gray-800">등록된 회사 목록</h2>
+          <span className="text-xs text-gray-500">Total: {companies.length}</span>
         </div>
 
-        {/* 탭 네비게이션 */}
-        <div className="flex gap-2 border-b border-gray-200 mb-8 pl-2">
-           <TabButton active={activeTab === 'company'} onClick={() => setActiveTab('company')} label="기능 모듈 제어" icon="🧩" />
-           <TabButton active={activeTab === 'menu'} onClick={() => setActiveTab('menu')} label="메뉴 접근 권한" icon="🔒" />
-           <TabButton active={activeTab === 'org'} onClick={() => setActiveTab('org')} label="조직 관리" icon="👥" />
-        </div>
-
-        {/* 탭 내용 영역 */}
-        <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm min-h-[500px]">
-
-          {/* [탭 1] 기능 모듈 관리 (실제 폴더 기반) */}
-          {activeTab === 'company' && (
-            <div className="animate-fade-in">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-gray-900">📦 전체 시스템 모듈 관리</h3>
-                <span className="text-xs font-bold text-gray-400">폴더 구조 기반 자동 로드됨</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {features.map((feature) => (
-                  <div key={feature.id} className={`p-5 rounded-2xl border-2 transition-all flex justify-between items-center group ${feature.enabled ? 'border-indigo-100 bg-indigo-50/30' : 'border-gray-100 bg-gray-50 opacity-70'}`}>
-                    <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-sm ${feature.enabled ? 'bg-white' : 'bg-gray-200 grayscale'}`}>
-                        {feature.id === 'cars' ? '🚙' : feature.id === 'finance' ? '💰' : feature.id === 'jiip' ? '🚚' : feature.id === 'insurance' ? '🚑' : '📄'}
-                      </div>
-                      <div>
-                        <h4 className={`font-bold text-lg ${feature.enabled ? 'text-gray-900' : 'text-gray-500'}`}>{feature.name}</h4>
-                        <p className="text-xs text-gray-500">{feature.desc}</p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => toggleFeature(feature.id)}
-                      className={`w-14 h-8 rounded-full transition-colors relative shadow-inner ${feature.enabled ? 'bg-indigo-600' : 'bg-gray-300'}`}
-                    >
-                      <div className={`w-6 h-6 bg-white rounded-full absolute top-1 shadow-md transition-all ${feature.enabled ? 'left-7' : 'left-1'}`}></div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-gray-600">
+            <thead className="bg-gray-50 text-xs uppercase text-gray-500 font-medium">
+              <tr>
+                <th className="px-6 py-3">회사명</th>
+                <th className="px-6 py-3">사업자번호</th>
+                <th className="px-6 py-3">플랜(Plan)</th>
+                <th className="px-6 py-3">상태</th>
+                <th className="px-6 py-3">가입일</th>
+                <th className="px-6 py-3 text-right">관리</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {companies.map((company) => (
+                <tr key={company.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-4 font-medium text-gray-900">
+                    {company.name}
+                  </td>
+                  <td className="px-6 py-4">{company.business_number || '-'}</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-medium
+                      ${company.plan === 'master' ? 'bg-purple-100 text-purple-700' :
+                        company.plan === 'pro' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'}`}>
+                      {(company.plan || 'free').toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {company.is_active ? (
+                      <span className="inline-flex items-center text-green-600 font-medium text-xs">
+                        <span className="w-2 h-2 bg-green-500 rounded-full mr-1.5"></span>
+                        정상
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center text-red-600 font-medium text-xs">
+                        <span className="w-2 h-2 bg-red-500 rounded-full mr-1.5"></span>
+                        정지됨
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-gray-400">
+                    {new Date(company.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button className="text-indigo-600 hover:text-indigo-900 font-medium text-xs hover:underline">
+                      상세보기
                     </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
 
-          {/* [탭 2] 메뉴 권한 관리 (실제 페이지 연동) */}
-          {activeTab === 'menu' && (
-            <div className="animate-fade-in">
-              <h3 className="text-xl font-bold text-gray-900 mb-6">🚦 직급별 페이지 접근 제어</h3>
-              <div className="overflow-hidden rounded-xl border border-gray-200">
-                <table className="w-full text-left bg-white">
-                  <thead>
-                    <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
-                      <th className="py-4 px-6 font-bold">메뉴명 (기능)</th>
-                      <th className="py-4 px-6 text-center w-32 border-l">사원</th>
-                      <th className="py-4 px-6 text-center w-32 border-l">팀장</th>
-                      <th className="py-4 px-6 text-center w-32 border-l bg-indigo-50 text-indigo-700">관리자</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 text-gray-700 font-medium text-sm">
-                    {/* 실제 폴더명 기반의 메뉴 리스트 */}
-                    {[
-                      { name: '차량 관리 (cars)', user: true, mgr: true },
-                      { name: '지입/위수탁 (jiip)', user: false, mgr: true },
-                      { name: '재무/회계 (finance)', user: false, mgr: false },
-                      { name: '보험/사고 (insurance)', user: true, mgr: true },
-                      { name: '투자 관리 (invest)', user: false, mgr: false },
-                      { name: '견적/계약 (quotes)', user: true, mgr: true },
-                    ].map((row, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                        <td className="py-4 px-6">{row.name}</td>
-                        <td className="text-center border-l"><input type="checkbox" defaultChecked={row.user} className="w-5 h-5 accent-indigo-600 rounded" /></td>
-                        <td className="text-center border-l"><input type="checkbox" defaultChecked={row.mgr} className="w-5 h-5 accent-indigo-600 rounded" /></td>
-                        <td className="text-center border-l bg-indigo-50/30"><input type="checkbox" checked disabled className="w-5 h-5 accent-gray-400 cursor-not-allowed" /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="mt-6 flex justify-end">
-                <button className="bg-gray-900 hover:bg-black text-white px-8 py-3 rounded-xl font-bold shadow-lg transition-transform hover:-translate-y-1">
-                  설정 저장하기
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* [탭 3] 조직 관리 */}
-          {activeTab === 'org' && (
-            <div className="animate-fade-in max-w-2xl">
-              <h3 className="text-xl font-bold text-gray-900 mb-6">👥 관리자 계정</h3>
-              <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold">M</div>
-                  <div>
-                    <div className="font-bold text-gray-900">대표님 (Admin)</div>
-                    <div className="text-xs text-indigo-600 font-bold">시스템 최고 관리자</div>
-                  </div>
-                </div>
-                <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full">접속 중</span>
-              </div>
+          {companies.length === 0 && (
+            <div className="p-10 text-center text-gray-400">
+              아직 등록된 회사가 없습니다.
             </div>
           )}
         </div>
       </div>
+
+      {/* 👇 [추가 4] 모달 컴포넌트 실제 배치 */}
+      <AddCompanyModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={fetchCompanies} // 성공하면 목록 새로고침
+      />
     </div>
-  )
+  );
 }

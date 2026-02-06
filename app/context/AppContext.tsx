@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { supabase } from '../utils/supabase'
 
 type AppContextType = {
   user: any
@@ -18,51 +18,47 @@ const AppContext = createContext<AppContextType>({
 })
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const supabase = createClientComponentClient()
   const [user, setUser] = useState<any>(null)
   const [company, setCompany] = useState<any>(null)
   const [role, setRole] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchUserAndCompany = async () => {
+    const fetchSession = async () => {
       try {
+        // 1. 세션 확인
         const { data: { session } } = await supabase.auth.getSession()
 
         if (!session) {
           setLoading(false)
           return
         }
-
         setUser(session.user)
 
-        // 👇 [핵심 수정 1] company_roles 삭제하고 companies(*)만 가져오기
-        // 👇 [핵심 수정 2] .single() 대신 .maybeSingle() 사용 (에러 방지)
-        const { data: member, error } = await supabase
-          .from('company_members')
+        // 2. [핵심 수정] company_members(X) -> profiles(O)
+        // 기존 코드가 여기서 에러를 내고 있었습니다!
+        const { data: profile } = await supabase
+          .from('profiles')
           .select('*, companies(*)')
-          .eq('user_id', session.user.id)
+          .eq('id', session.user.id)
           .maybeSingle()
 
-        if (member) {
-          setRole(member.role || 'user')
-          setCompany(member.companies)
+        if (profile) {
+          console.log('✅ AppContext 로드 성공:', profile.role)
+          setRole(profile.role || 'user')
+          setCompany(profile.companies)
         } else {
-          // ⭐ DB에 정보가 없어도 에러 내지 말고, 'admin' 권한 주기 (개발용)
-          console.log('DB에 회원 정보가 없습니다. 임시 관리자 권한 부여')
-          setRole('admin')
+          setRole('user')
         }
 
       } catch (error) {
         console.error('Context 로딩 에러:', error)
-        // 에러가 나도 멈추지 말고 관리자로 통과
-        setRole('admin')
       } finally {
         setLoading(false)
       }
     }
 
-    fetchUserAndCompany()
+    fetchSession()
   }, [])
 
   return (

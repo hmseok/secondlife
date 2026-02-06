@@ -1,55 +1,57 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useRouter } from 'next/navigation'
+import { supabase } from './utils/supabase'
+// 👇 방금 만든 모달 불러오기
+import LoginModal from './components/auth/LoginModal'
 
 export default function LandingPage() {
   const router = useRouter()
-  const supabase = createClientComponentClient()
-  const [msg, setMsg] = useState('신원 확인 중...')
+  // 👇 로그인 창을 띄울지 말지 결정하는 스위치
+  const [isLoginOpen, setIsLoginOpen] = useState(false)
 
   useEffect(() => {
-    const checkUserAndRedirect = async () => {
-      // 1. 현재 로그인 세션 확인
+    const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
-
-      if (!session) {
-        router.replace('/login')
-        return
-      }
-
-      // 2. 권한 조회 (DB 조회 시도)
-      const { data: member } = await supabase
-        .from('company_members')
-        .select('role')
-        .eq('user_id', session.user.id)
-        .single()
-
-      // 🚨 [핵심 수정] DB에 정보가 없으면 'user'가 아니라 'admin'으로 강제 승격!
-      // (대표님 계정 하나만 쓰는 개발 단계이므로 이게 편합니다)
-      const role = member?.role || 'admin'
-
-      setMsg(`반갑습니다. ${role === 'admin' ? '시스템 최고 관리자' : '사용자'}님. 이동 중...`)
-
-      // 3. 권한별 라우팅
-      if (role === 'admin' || role === 'super_admin') {
-        // 👑 갓 모드 (시스템 통제실)
+      if (session) {
         router.replace('/admin')
-      } else {
-        // 🚗 일반 모드 (차량 관리)
-        router.replace('/cars')
       }
     }
-
-    checkUserAndRedirect()
-  }, [router, supabase])
+    checkSession()
+  }, [])
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-white">
-      <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-600 mb-6"></div>
-      <h2 className="text-2xl font-bold text-gray-800 animate-pulse">{msg}</h2>
-      <p className="text-gray-400 mt-2">잠시만 기다려주세요.</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col items-center justify-center text-white p-4">
+      <div className="text-center space-y-6 max-w-lg">
+        <h1 className="text-5xl font-black tracking-tight mb-2">
+          SECONDLIFE <span className="text-blue-500">ERP</span>
+        </h1>
+        <p className="text-gray-400 text-lg">
+          차량 자산 관리부터 정산까지,<br/>
+          모빌리티 비즈니스를 위한 통합 솔루션
+        </p>
+
+        <div className="pt-8 flex flex-col gap-4">
+          {/* 👇 Link 대신 button으로 변경하고 onClick 이벤트 추가! */}
+          <button
+            onClick={() => setIsLoginOpen(true)}
+            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-8 rounded-xl transition-all transform hover:scale-105 shadow-lg shadow-blue-900/50"
+          >
+            관리자 로그인 / 시작하기
+          </button>
+
+          <div className="text-sm text-gray-500 mt-4">
+            시스템 이용 문의: help@hmseok.com
+          </div>
+        </div>
+      </div>
+
+      {/* 👇 로그인 모달 컴포넌트 배치 */}
+      <LoginModal
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+      />
     </div>
   )
 }

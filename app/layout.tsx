@@ -1,14 +1,13 @@
-import type { Metadata } from 'next'
 import './globals.css'
-import ClientLayout from './components/ClientLayout'
-import SupabaseProvider from './supabase-provider'
-import { UploadProvider } from './context/UploadContext'
-import UploadWidget from './components/UploadWidget'
-import { AppProvider } from './context/AppContext' // 👈 [중요] 회사 관리 기능 추가
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import { AppProvider } from './context/AppContext' // (혹시 경로 다르면 ../context/AppContext)
+
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Sideline', // 👈 이름 변경 완료
-  description: 'Smart Business Management System',
+  title: 'SECONDLIFE ERP',
+  description: '모빌리티 비즈니스 통합 솔루션',
 }
 
 export default function RootLayout({
@@ -18,12 +17,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body>
-        {/* 👇 2. children을 AppProvider로 감싸주세요 */}
+      <body className={inter.className}>
+        {/* 사이드바는 여기서 빼고, AppProvider로 감싸기만 합니다 */}
         <AppProvider>
-        <UploadProvider>
           {children}
-        </UploadProvider>
         </AppProvider>
       </body>
     </html>
