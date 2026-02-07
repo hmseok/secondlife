@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 // 👇 경로 수정: utils가 루트에 있다면 점 두 개(../..)가 맞습니다.
-import { supabase } from '../../utils/supabase'
+import { supabase } from '../utils/supabase'
 import Link from 'next/link'
 
 export default function AdminLayout({
