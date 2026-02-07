@@ -220,7 +220,9 @@ function AuthPage() {
            <div className="space-y-2">
              <h3 className="text-lg font-bold text-white">Always Connected</h3>
              <p className="text-sm text-slate-400 leading-relaxed">
-               어디서든 안전하게 접속하세요.<br/>실시간 데이터 동기화로 업무의 연속성을 보장합니다.
+               "More than a Tool. It’s the Engine of Your Core Business."
+               <br/>어디서든 안전하게 접속하세요.
+               <br/>실시간 데이터 동기화로 업무의 연속성을 보장합니다.
              </p>
            </div>
         </div>
