@@ -1,21 +1,20 @@
 'use client'
+
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-import { useUpload } from '../../context/UploadContext' // 👈 Context Hook import
+// 👇 경로가 중요하다면 ../../../ 또는 ../../ 등을 확인해주세요.
+// 현재 에러는 경로 문제가 아니라 Provider 감싸기 문제이므로 아래 코드로 해결됩니다.
+import { UploadProvider, useUpload } from '@/app/context/UploadContext'
 
-// 🏷️ 자금 성격별 분류 체계 (유지)
+// 🏷️ 자금 성격별 분류 체계
 const DEFAULT_RULES = [
-  // ... (기존 분류 규칙과 동일)
-  // 🟢 입금 (Income)
   { group: '매출(영업수익)', label: '렌트/운송수입', type: 'income', keywords: ['매출', '정산', '운송료', '입금'] },
   { group: '매출(영업수익)', label: '지입 관리비/수수료', type: 'income', keywords: ['지입료', '관리비', '번호판', '수수료'] },
   { group: '자본변동(입금)', label: '투자원금 입금', type: 'income', keywords: ['투자', '증자', '자본'] },
   { group: '자본변동(입금)', label: '지입 초기비용/보증금', type: 'income', keywords: ['보증금', '인수금', '초기'] },
   { group: '자본변동(입금)', label: '대출 실행(입금)', type: 'income', keywords: ['대출입금', '론', '대출실행'] },
   { group: '기타수입', label: '이자/잡이익', type: 'income', keywords: ['이자', '환급', '캐시백'] },
-
-  // 🔴 출금 (Expense)
   { group: '지입/운송원가', label: '지입 수익배분금(출금)', type: 'expense', keywords: ['수익배분', '정산금', '배분금', '지입대금'] },
   { group: '차량유지비', label: '유류비', type: 'expense', keywords: ['주유', '가스', '엘피지', 'GS', 'SK', 'S-OIL'] },
   { group: '차량유지비', label: '정비/수리비', type: 'expense', keywords: ['정비', '모터스', '타이어', '공업사', '수리', '부품'] },
@@ -31,23 +30,25 @@ const DEFAULT_RULES = [
   { group: '일반관리', label: '통신/소모품', type: 'expense', keywords: ['KT', 'SKT', 'LG', '인터넷', '다이소', '문구', '쿠팡', '네이버'] },
 ]
 
-export default function UploadFinancePage() {
+// 1️⃣ [알맹이] 실제 로직이 들어가는 내부 컴포넌트
+// (이 컴포넌트는 export default 하지 않습니다!)
+function UploadContent() {
   const router = useRouter()
+  const supabase = createClientComponentClient()
 
-  // ✅ Context에서 상태와 함수 가져오기
+  // ⚠️ 여기가 에러가 나던 곳입니다.
+  // 이제 부모(UploadFinancePage)가 Provider를 제공하므로 에러가 나지 않습니다.
   const {
-    results, // 분석 완료된 리스트
-    status, // idle, processing, completed
+    results,
+    status,
     addFiles,
     startProcessing,
-    updateTransaction, // Context에 추가한 수정 함수
-    deleteTransaction, // Context에 추가한 삭제 함수
+    updateTransaction,
+    deleteTransaction,
     clearResults
   } = useUpload()
 
   const [isDragging, setIsDragging] = useState(false)
-
-  // 🏷️ 기초 데이터 (DB 불러오기)
   const [cars, setCars] = useState<any[]>([])
   const [investors, setInvestors] = useState<any[]>([])
   const [jiips, setJiips] = useState<any[]>([])
@@ -61,11 +62,10 @@ export default function UploadFinancePage() {
     const { data: j } = await supabase.from('jiip_contracts').select('id, contractor_name'); setJiips(j||[])
   }
 
-  // 🖱️ 파일 업로드 핸들러 (Context로 전달)
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       addFiles(Array.from(e.target.files));
-      startProcessing(); // 파일 추가 즉시 분석 시작
+      startProcessing();
     }
     e.target.value = '';
   }
@@ -81,38 +81,30 @@ export default function UploadFinancePage() {
     }
   }
 
-  // ✏️ 항목 수정 (Context 함수 호출)
   const handleUpdateItem = (id: number, field: string, val: any, item: any) => {
-    // 1. 단일 수정
     updateTransaction(id, field, val);
-
-    // 2. 일괄 수정 모드 (거래처명이 같은 경우 함께 변경)
     if (bulkMode && field !== 'amount' && field !== 'transaction_date' && field !== 'description') {
         const sameClientItems = results.filter(r => r.client_name === item.client_name && r.id !== id);
         sameClientItems.forEach(r => updateTransaction(r.id, field, val));
     }
   }
 
-  // 💾 DB 저장
   const handleBulkSave = async () => {
     if(results.length === 0) return alert('저장할 내역이 없습니다.');
     if(!confirm(`총 ${results.length}건을 저장하시겠습니까?`)) return;
 
-    // 저장 시 불필요한 필드 제외 (id는 DB에서 자동 생성되므로 제외해도 됨, 혹은 로컬 id 제외)
     const payload = results.map(({ id, ...rest }) => rest);
-
     const { error } = await supabase.from('transactions').insert(payload);
 
     if(error) {
         alert('저장 실패: ' + error.message);
     } else {
         alert('✅ 저장되었습니다!');
-        clearResults(); // 저장 후 리스트 초기화
+        clearResults();
         router.push('/finance');
     }
   }
 
-  // ⭐️ 규칙 저장 (DB)
   const saveRuleToDb = async (item: any) => {
       if (!item.client_name) return alert('키워드 없음');
       const keyword = prompt(`'${item.client_name}' 규칙 저장`, item.client_name);
@@ -132,16 +124,14 @@ export default function UploadFinancePage() {
 
   return (
     <div className="max-w-full mx-auto py-10 px-6 animate-fade-in-up">
-      {/* 상단 헤더 */}
       <div className="flex justify-between items-center mb-8 max-w-6xl mx-auto">
           <div>
             <h1 className="text-3xl font-black text-gray-900">✨ AI 금융 내역 분석기</h1>
-            <p className="text-gray-500 mt-2">파일을 업로드하면 백그라운드에서 AI가 분석합니다. 다른 페이지로 이동해도 유지됩니다.</p>
+            <p className="text-gray-500 mt-2">파일을 업로드하면 백그라운드에서 AI가 분석합니다.</p>
           </div>
           <button onClick={() => router.back()} className="text-gray-500 font-bold hover:text-black">← 돌아가기</button>
       </div>
 
-      {/* 파일 드래그 영역 */}
       <div onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
           className={`max-w-6xl mx-auto relative border-2 border-dashed rounded-3xl p-10 text-center mb-8 transition-all duration-300 group ${isDragging ? 'border-indigo-500 bg-indigo-50 scale-[1.01]' : 'border-gray-300 bg-white hover:border-indigo-300'}`}>
           <input type="file" multiple accept=".xlsx, .xls, .csv, image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
@@ -152,17 +142,15 @@ export default function UploadFinancePage() {
           </div>
       </div>
 
-      {/* 상태 알림 (분석 중일 때) */}
       {status === 'processing' && (
         <div className="max-w-6xl mx-auto mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center justify-between animate-pulse">
             <div className="flex items-center gap-3">
                 <span className="text-2xl">🔄</span>
-                <span className="font-bold text-blue-800">AI가 데이터를 분석하고 있습니다... (우측 하단 위젯에서 확인 가능)</span>
+                <span className="font-bold text-blue-800">AI가 데이터를 분석하고 있습니다...</span>
             </div>
         </div>
       )}
 
-      {/* 결과 테이블 */}
       {results.length > 0 && (
           <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden max-w-full mx-auto">
               <div className="p-4 bg-gray-50 border-b flex flex-wrap gap-4 justify-between items-center sticky top-0 z-20 shadow-sm">
@@ -199,7 +187,6 @@ export default function UploadFinancePage() {
                             <tr key={item.id} className="hover:bg-indigo-50/50 transition-colors">
                                 <td className="p-3 text-center"><button onClick={() => saveRuleToDb(item)} className="text-gray-300 hover:text-yellow-500 text-lg">⭐</button></td>
                                 <td className="p-3"><input value={item.transaction_date} onChange={e=>handleUpdateItem(item.id, 'transaction_date', e.target.value, item)} className="bg-transparent w-24 outline-none text-gray-700"/></td>
-
                                 <td className="p-3">
                                     {item.payment_method === 'Card' ? (
                                         <span className="px-2 py-1 rounded text-xs font-bold bg-yellow-100 text-yellow-800">💳 카드</span>
@@ -209,17 +196,14 @@ export default function UploadFinancePage() {
                                         </span>
                                     )}
                                 </td>
-
                                 <td className="p-3"><input value={item.client_name} onChange={e=>handleUpdateItem(item.id, 'client_name', e.target.value, item)} className="w-full bg-transparent outline-none font-bold text-gray-800"/></td>
                                 <td className="p-3"><input value={item.description} onChange={e=>handleUpdateItem(item.id, 'description', e.target.value, item)} className="w-full bg-white border border-gray-100 rounded px-2 py-1 outline-none text-xs text-gray-600 focus:border-indigo-300"/></td>
-
                                 <td className="p-3">
                                     <select value={item.category} onChange={e=>handleUpdateItem(item.id, 'category', e.target.value, item)} className="bg-white border border-gray-200 px-2 py-1.5 rounded text-gray-700 font-bold w-32 text-xs outline-none">
                                         <option value="기타">기타</option>
                                         {DEFAULT_RULES.map((r, i) => <option key={i} value={r.label}>{r.label}</option>)}
                                     </select>
                                 </td>
-
                                 <td className="p-3">
                                     <select value={item.related_id?`${item.related_type}_${item.related_id}`:''} onChange={e=>handleUpdateItem(item.id, 'related_composite', e.target.value, item)} className="w-full border rounded p-1.5 text-xs outline-none bg-white text-gray-600">
                                         <option value="">- 연결 없음 -</option>
@@ -228,7 +212,6 @@ export default function UploadFinancePage() {
                                         <optgroup label="🚗 차량">{cars.map(c=><option key={c.id} value={`car_${c.id}`}>{c.number}</option>)}</optgroup>
                                     </select>
                                 </td>
-
                                 <td className="p-3 text-right font-black text-gray-900">{item.amount.toLocaleString()}</td>
                                 <td className="p-3 text-center"><button onClick={()=>deleteTransaction(item.id)} className="text-gray-300 hover:text-red-500 font-bold px-2">×</button></td>
                             </tr>
@@ -239,5 +222,15 @@ export default function UploadFinancePage() {
           </div>
       )}
     </div>
+  )
+}
+
+// 2️⃣ [껍데기] Provider로 알맹이를 감싸주는 메인 페이지 컴포넌트
+// 👇 이 부분이 핵심입니다! 이것 때문에 에러가 사라집니다.
+export default function UploadFinancePage() {
+  return (
+    <UploadProvider>
+      <UploadContent />
+    </UploadProvider>
   )
 }
