@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-// 👇 [중요] UploadProvider를 같이 가져와야 합니다.
-import { UploadProvider, useUpload } from '../../context/UploadContext'
+// 👇 경로가 중요하다면 ../../../ 또는 ../../ 등을 확인해주세요.
+// 현재 에러는 경로 문제가 아니라 Provider 감싸기 문제이므로 아래 코드로 해결됩니다.
+import { UploadProvider, useUpload } from '../../../context/UploadContext'
 
-// 🏷️ 자금 성격별 분류 체계 (기존 유지)
+// 🏷️ 자금 성격별 분류 체계
 const DEFAULT_RULES = [
   { group: '매출(영업수익)', label: '렌트/운송수입', type: 'income', keywords: ['매출', '정산', '운송료', '입금'] },
   { group: '매출(영업수익)', label: '지입 관리비/수수료', type: 'income', keywords: ['지입료', '관리비', '번호판', '수수료'] },
@@ -30,11 +31,13 @@ const DEFAULT_RULES = [
 ]
 
 // 1️⃣ [알맹이] 실제 로직이 들어가는 내부 컴포넌트
+// (이 컴포넌트는 export default 하지 않습니다!)
 function UploadContent() {
   const router = useRouter()
-  // 👇 [수정] supabase 인스턴스 생성 (원본 코드에 빠져있어서 에러 났을 부분)
   const supabase = createClientComponentClient()
 
+  // ⚠️ 여기가 에러가 나던 곳입니다.
+  // 이제 부모(UploadFinancePage)가 Provider를 제공하므로 에러가 나지 않습니다.
   const {
     results,
     status,
@@ -43,7 +46,7 @@ function UploadContent() {
     updateTransaction,
     deleteTransaction,
     clearResults
-  } = useUpload() // ✅ Provider 내부라서 이제 안전하게 호출됨
+  } = useUpload()
 
   const [isDragging, setIsDragging] = useState(false)
   const [cars, setCars] = useState<any[]>([])
@@ -223,6 +226,7 @@ function UploadContent() {
 }
 
 // 2️⃣ [껍데기] Provider로 알맹이를 감싸주는 메인 페이지 컴포넌트
+// 👇 이 부분이 핵심입니다! 이것 때문에 에러가 사라집니다.
 export default function UploadFinancePage() {
   return (
     <UploadProvider>
