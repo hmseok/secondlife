@@ -78,7 +78,7 @@ export default function AdminLayout({
         <div className="p-6 border-b border-slate-800">
           <h1 className="text-xl font-bold">Sideline <span className="text-blue-500">ADMIN</span></h1>
         </div>
-        
+
         <nav className="flex-1 p-4 space-y-2">
           <Link href="/admin" className="block px-4 py-3 rounded-lg bg-blue-600 text-white font-medium">
             대시보드
@@ -86,7 +86,7 @@ export default function AdminLayout({
         </nav>
 
         <div className="p-4 border-t border-slate-800">
-          <button 
+          <button
             onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-800 hover:bg-red-600/90 text-slate-300 hover:text-white transition-all font-medium text-sm group"
           >
