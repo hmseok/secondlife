@@ -46,6 +46,7 @@ function AuthPage() {
     // onAuthStateChange: 다른 탭에서 인증 완료 시 감지
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
+        setMessage(null)
         setView('verified')
       }
     })
@@ -59,6 +60,7 @@ function AuthPage() {
       })
       if (!error) {
         clearInterval(interval)
+        setMessage(null)
         setView('verified')
       }
     }, 4000)
