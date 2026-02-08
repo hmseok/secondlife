@@ -260,9 +260,9 @@ export default function EmployeesPage() {
                           </td>
                           <td className="p-4">
                             <select value={editForm.role} onChange={e => setEditForm({...editForm, role: e.target.value})} className="border rounded px-2 py-1 text-sm">
-                              <option value="user">user</option>
-                              <option value="master">master</option>
-                              {role === 'god_admin' && <option value="god_admin">god_admin</option>}
+                              <option value="user">직원</option>
+                              <option value="master">관리자</option>
+                              {role === 'god_admin' && <option value="god_admin">GOD ADMIN</option>}
                             </select>
                           </td>
                           <td className="p-4">
@@ -292,14 +292,14 @@ export default function EmployeesPage() {
                         <>
                           <td className="p-4">
                             <div className="font-bold text-slate-900">{emp.employee_name || '(이름 미설정)'}</div>
-                            <div className="text-xs text-slate-400 mt-0.5">{emp.id.slice(0,8)}...</div>
+                            <div className="text-xs text-slate-400 mt-0.5">{emp.email}</div>
                           </td>
                           <td className="p-4">
                             <span className={`text-xs font-bold px-2 py-1 rounded ${
                               emp.role === 'god_admin' ? 'bg-purple-100 text-purple-700' :
                               emp.role === 'master' ? 'bg-blue-100 text-blue-700' :
                               'bg-slate-100 text-slate-600'
-                            }`}>{emp.role}</span>
+                            }`}>{emp.role === 'god_admin' ? 'GOD ADMIN' : emp.role === 'master' ? '관리자' : '직원'}</span>
                           </td>
                           <td className="p-4 text-sm text-slate-600">{emp.position?.name || '-'}</td>
                           <td className="p-4 text-sm text-slate-600">{emp.department?.name || '-'}</td>

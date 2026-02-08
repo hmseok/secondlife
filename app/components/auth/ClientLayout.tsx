@@ -245,6 +245,13 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                   </span>
                 )}
               </div>
+              {/* 승인 대기 상태 */}
+              {company && company.is_active === false && role !== 'god_admin' && (
+                <div className="mt-2 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse"></span>
+                  <span className="text-[10px] font-bold text-yellow-400">승인 대기중</span>
+                </div>
+              )}
               {/* 회사 미배정 안내 */}
               {!company && role !== 'god_admin' && !loading && (
                 <p className="mt-2 text-[10px] text-yellow-400">관리자에게 회사 배정을 요청하세요</p>

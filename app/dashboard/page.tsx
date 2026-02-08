@@ -260,6 +260,59 @@ export default function DashboardPage() {
     )
   }
 
+  // 회사 승인 대기 상태
+  if (company && company.is_active === false && role !== 'god_admin') {
+    return (
+      <div className="max-w-7xl mx-auto py-8 px-6 min-h-screen bg-gray-50">
+        <div className="mb-8">
+          <p className="text-gray-500 text-sm font-medium">
+            {currentTime.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+          </p>
+          <h1 className="text-3xl font-black text-gray-900 mt-1">
+            {getGreeting()}, <span className="text-indigo-600">{company.name}</span>
+          </h1>
+        </div>
+        <div className="bg-white rounded-2xl p-10 border border-yellow-200 shadow-sm text-center">
+          <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-black text-gray-800 mb-3">가입 승인 대기중</h2>
+          <p className="text-gray-500 mb-1">회사 가입 신청이 접수되었습니다.</p>
+          <p className="text-gray-500 mb-4">플랫폼 관리자의 승인 후 서비스를 이용하실 수 있습니다.</p>
+          <div className="inline-flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-5 py-3">
+            <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+            <span className="text-sm font-bold text-yellow-700">승인 대기중</span>
+          </div>
+          <div className="mt-8 bg-gray-50 rounded-xl p-5 max-w-md mx-auto">
+            <h3 className="text-sm font-bold text-gray-600 mb-2">가입 정보</h3>
+            <div className="space-y-1.5 text-sm text-left">
+              <div className="flex justify-between">
+                <span className="text-gray-400">회사명</span>
+                <span className="font-bold text-gray-700">{company.name}</span>
+              </div>
+              {company.business_number && (
+                <div className="flex justify-between">
+                  <span className="text-gray-400">사업자번호</span>
+                  <span className="font-bold text-gray-700">{company.business_number}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span className="text-gray-400">플랜</span>
+                <span className="font-bold text-gray-700">{company.plan?.toUpperCase() || 'FREE'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">신청일</span>
+                <span className="font-bold text-gray-700">{new Date(company.created_at).toLocaleDateString('ko-KR')}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-7xl mx-auto py-8 px-6 min-h-screen bg-gray-50">
 
