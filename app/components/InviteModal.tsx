@@ -1,7 +1,6 @@
 'use client'
+import { supabase } from '../utils/supabase'
 import { useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-
 interface Props {
   companyName: string // 회사 이름 표시용
   companyId: string
@@ -11,9 +10,7 @@ interface Props {
 }
 
 export default function InviteModal({ companyName, companyId, isOpen, onClose, onSuccess }: Props) {
-  const supabase = createClientComponentClient()
-
-  const [email, setEmail] = useState('')
+const [email, setEmail] = useState('')
   const [role, setRole] = useState('staff')
   const [department, setDepartment] = useState('')
   const [position, setPosition] = useState('')

@@ -1,12 +1,11 @@
 'use client'
+import { supabase } from '../utils/supabase'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useApp } from '../context/AppContext'
 
 export default function JiipListPage() {
-  const supabase = createClientComponentClient()
-  const router = useRouter()
+const router = useRouter()
 
   // ✅ [핵심 1] 전역 상태에서 '현재 선택된 회사' 가져오기
   const { currentCompany } = useApp()

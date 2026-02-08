@@ -1,9 +1,9 @@
 'use client'
+import { supabase } from '../../utils/supabase'
 // 1. 맨 위에 이 import 문을 추가하세요
 import { useEffect, useState, useRef } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 // 👇 [경로 유지] 기존 파일과 동일하게 설정
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import ContractPaper from '../../components/ContractPaper'
 import { useDaumPostcodePopup } from 'react-daum-postcode'
 import SignatureCanvas from 'react-signature-canvas'
@@ -19,9 +19,7 @@ const KOREAN_BANKS = [
 ]
 
 export default function JiipDetailPage() {
-
-  const supabase = createClientComponentClient()
-  const router = useRouter()
+const router = useRouter()
   const params = useParams()
   const isNew = params.id === 'new'
   const jiipId = isNew ? null : params.id

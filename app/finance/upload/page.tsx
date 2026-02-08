@@ -1,9 +1,8 @@
 'use client'
 
+import { supabase } from '../../utils/supabase'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-// 👇 경로가 중요하다면 ../../../ 또는 ../../ 등을 확인해주세요.
 // 현재 에러는 경로 문제가 아니라 Provider 감싸기 문제이므로 아래 코드로 해결됩니다.
 import { UploadProvider, useUpload } from '@/app/context/UploadContext'
 
@@ -34,9 +33,7 @@ const DEFAULT_RULES = [
 // (이 컴포넌트는 export default 하지 않습니다!)
 function UploadContent() {
   const router = useRouter()
-  const supabase = createClientComponentClient()
-
-  // ⚠️ 여기가 에러가 나던 곳입니다.
+// ⚠️ 여기가 에러가 나던 곳입니다.
   // 이제 부모(UploadFinancePage)가 Provider를 제공하므로 에러가 나지 않습니다.
   const {
     results,

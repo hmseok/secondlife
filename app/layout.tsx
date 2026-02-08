@@ -2,6 +2,7 @@ import './globals.css'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import { AppProvider } from '@/app/context/AppContext'
+import ClientLayout from '@/app/components/auth/ClientLayout'
 
 const inter = Inter({ subsets: ['latin'] })
 
@@ -18,9 +19,10 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={inter.className}>
-        {/* 👇 여기에 Sidebar가 있으면 절대 안 됩니다. 오직 Provider와 children만! */}
         <AppProvider>
-          {children}
+          <ClientLayout>
+            {children}
+          </ClientLayout>
         </AppProvider>
       </body>
     </html>

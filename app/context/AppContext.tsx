@@ -2,67 +2,146 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../utils/supabase'
+import type { Profile, PagePermission, Position, Department } from '../types/rbac'
+
+// ============================================
+// AppContext - 전역 상태 (사용자 + 권한)
+// ============================================
 
 type AppContextType = {
   user: any
+  profile: Profile | null
   company: any
   role: string
+  position: Position | null
+  department: Department | null
+  permissions: PagePermission[]
   loading: boolean
+  refreshAuth: () => Promise<void>     // 외부에서 새로고침 호출용
 }
 
 const AppContext = createContext<AppContextType>({
   user: null,
+  profile: null,
   company: null,
   role: '',
+  position: null,
+  department: null,
+  permissions: [],
   loading: true,
+  refreshAuth: async () => {},
 })
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any>(null)
+  const [profile, setProfile] = useState<Profile | null>(null)
   const [company, setCompany] = useState<any>(null)
   const [role, setRole] = useState('')
+  const [position, setPosition] = useState<Position | null>(null)
+  const [department, setDepartment] = useState<Department | null>(null)
+  const [permissions, setPermissions] = useState<PagePermission[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const fetchSession = async () => {
-      try {
-        // 1. 세션 확인
-        const { data: { session } } = await supabase.auth.getSession()
+  // 세션 없을 때 상태 초기화
+  const clearState = () => {
+    setUser(null)
+    setProfile(null)
+    setCompany(null)
+    setRole('')
+    setPosition(null)
+    setDepartment(null)
+    setPermissions([])
+  }
 
-        if (!session) {
-          setLoading(false)
-          return
-        }
-        setUser(session.user)
+  const fetchSession = async () => {
+    try {
+      // 1. 세션 확인
+      const { data: { session } } = await supabase.auth.getSession()
 
-        // 2. [핵심 수정] company_members(X) -> profiles(O)
-        // 기존 코드가 여기서 에러를 내고 있었습니다!
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*, companies(*)')
-          .eq('id', session.user.id)
-          .maybeSingle()
-
-        if (profile) {
-          console.log('✅ AppContext 로드 성공:', profile.role)
-          setRole(profile.role || 'user')
-          setCompany(profile.companies)
-        } else {
-          setRole('user')
-        }
-
-      } catch (error) {
-        console.error('Context 로딩 에러:', error)
-      } finally {
+      if (!session) {
+        clearState()
         setLoading(false)
+        return
       }
-    }
+      setUser(session.user)
 
+      // 2. 프로필 + 직급 + 부서 + 회사 한 번에 로드
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          companies(*),
+          position:positions(*),
+          department:departments(*)
+        `)
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (profileData) {
+        console.log('✅ AppContext 로드:', profileData.role, profileData.position?.name)
+        setProfile(profileData as Profile)
+        setRole(profileData.role || 'user')
+        setCompany(profileData.companies)
+        setPosition(profileData.position || null)
+        setDepartment(profileData.department || null)
+
+        // 3. 페이지 권한 로드 (직급이 있는 경우만)
+        if (profileData.position_id && profileData.company_id) {
+          const { data: permsData } = await supabase
+            .from('page_permissions')
+            .select('*')
+            .eq('company_id', profileData.company_id)
+            .eq('position_id', profileData.position_id)
+
+          setPermissions(permsData || [])
+        }
+        // god_admin이나 master는 권한 테이블 없어도 전체 허용 (usePermission에서 처리)
+      } else {
+        setRole('user')
+      }
+    } catch (error) {
+      console.error('AppContext 로딩 에러:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    // 초기 세션 로드
     fetchSession()
+
+    // ✅ 핵심: 로그인/로그아웃 이벤트 감지 → 자동으로 상태 갱신
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log('🔄 Auth 상태 변경:', event)
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // 로그인 또는 토큰 갱신 → 로딩 상태로 전환 후 세션 데이터 다시 로드
+          setLoading(true)
+          fetchSession()
+        } else if (event === 'SIGNED_OUT') {
+          // 로그아웃 → 상태 초기화
+          clearState()
+        }
+      }
+    )
+
+    return () => {
+      subscription.unsubscribe()
+    }
   }, [])
 
   return (
-    <AppContext.Provider value={{ user, company, role, loading }}>
+    <AppContext.Provider value={{
+      user,
+      profile,
+      company,
+      role,
+      position,
+      department,
+      permissions,
+      loading,
+      refreshAuth: fetchSession,
+    }}>
       {children}
     </AppContext.Provider>
   )

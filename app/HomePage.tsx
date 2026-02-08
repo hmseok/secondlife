@@ -1,6 +1,6 @@
 'use client'
+import { supabase } from './utils/supabase'
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import Link from 'next/link'
 
 interface Car {

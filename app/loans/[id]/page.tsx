@@ -1,9 +1,8 @@
 'use client'
+import { supabase } from '../../utils/supabase'
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 // 👇 [경로 체크] app/loans/[id] 위치이므로 3단계 상위(../..)가 맞습니다.
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-
 export default function LoanDetailPage() {
   const router = useRouter()
   const params = useParams()

@@ -1,13 +1,12 @@
 'use client'
+import { supabase } from '../utils/supabase'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation' // 👈 페이지 이동을 위해 추가
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs' // 👈 경로: app/loans/page.tsx 이므로 ../utils 가 맞음
 
 export default function LoanListPage() {
 
 // ✅ [수정 2] supabase 클라이언트 생성 (이 줄이 없어서 에러가 난 겁니다!)
-  const supabase = createClientComponentClient()
-  const router = useRouter()
+const router = useRouter()
   const [loans, setLoans] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 

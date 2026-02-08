@@ -1,7 +1,6 @@
 'use client'
+import { supabase } from '../../utils/supabase'
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-
 export default function DepreciationPage() {
   const [list, setList] = useState<any[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)

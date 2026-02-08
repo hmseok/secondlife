@@ -1,8 +1,8 @@
 'use client'
+import { supabase } from '../../../utils/supabase'
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 // 👇 [수정됨] 지입 폴더 깊이(3단계)에 맞춰 점 3개(../../../)가 정답입니다!
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import ContractPaper from '../../../components/ContractPaper'
 import SignatureCanvas from 'react-signature-canvas'
 import { toPng } from 'html-to-image'

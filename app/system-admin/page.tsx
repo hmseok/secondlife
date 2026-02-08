@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { supabase } from '../utils/supabase'
 import { useRouter } from 'next/navigation'
+import { useApp } from '../context/AppContext'
 
 // 아이콘 매핑 (ClientLayout과 동일)
 const IconMap: any = {
@@ -12,8 +13,8 @@ const IconMap: any = {
 }
 
 export default function SystemAdminPage() {
-  const supabase = createClientComponentClient()
   const router = useRouter()
+  const { user, role, loading: appLoading } = useApp()
 
   const [loading, setLoading] = useState(true)
   const [companies, setCompanies] = useState<any[]>([])
@@ -23,22 +24,16 @@ export default function SystemAdminPage() {
   // 초기 로딩
   useEffect(() => {
     checkPermissionAndLoad()
-  }, [])
+  }, [appLoading, role])
 
   const checkPermissionAndLoad = async () => {
+    if (appLoading) return
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
 
-    // 1. 보안 검사: 진짜 슈퍼 어드민 맞아?
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_super_admin')
-      .eq('id', user?.id)
-      .single()
-
-    if (!profile?.is_super_admin) {
+    // 1. 보안 검사: god_admin만 접근 가능
+    if (role !== 'god_admin') {
       alert('접근 권한이 없습니다. (시스템 총괄 전용)')
-      router.replace('/') // 쫓아내기
+      router.replace('/cars')
       return
     }
 

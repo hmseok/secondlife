@@ -1,13 +1,12 @@
 'use client'
+import { supabase } from '../utils/supabase'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 export default function QuoteListPage() {
-  const supabase = createClientComponentClient()
-  const router = useRouter()
+const router = useRouter()
   const [quotes, setQuotes] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 

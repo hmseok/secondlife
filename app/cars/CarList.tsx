@@ -1,7 +1,7 @@
 'use client'
 
+import { supabase } from '../utils/supabase'
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 import { useRouter } from 'next/navigation'
 
 // ✅ DB 컬럼명에 맞춰서 타입 정의 수정 (cars 테이블 기준)
@@ -19,8 +19,7 @@ type Car = {
 }
 
 export default function CarListPage() {
-  const supabase = createClientComponentClient()
-  const router = useRouter()
+const router = useRouter()
 
   const [cars, setCars] = useState<Car[]>([])
   const [loading, setLoading] = useState(true)

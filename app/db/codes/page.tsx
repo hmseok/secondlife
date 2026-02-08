@@ -1,7 +1,6 @@
 'use client'
+import { supabase } from '../../utils/supabase'
 import { useEffect, useState } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-
 export default function CarCodePage() {
   // 상태값들 (기존 유지)
   const [models, setModels] = useState<any[]>([])

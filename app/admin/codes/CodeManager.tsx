@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs' // 경로 확인! (../../utils/supabase 일 수도 있습니다)
-import { CommonCode } from '../../types/database' // 아까 만든 타입 (없으면 any로 하셔도 됩니다)
+import { supabase } from '../../utils/supabase'
 
 export default function CodeManager() {
-  const [codes, setCodes] = useState<CommonCode[]>([])
+  const [codes, setCodes] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
   // 입력 폼 상태

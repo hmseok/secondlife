@@ -1,14 +1,11 @@
 'use client'
 
+import { supabase } from '../../utils/supabase'
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
-
 export default function CompanyDashboard() {
   const params = useParams()
-  const supabase = createClientComponentClient()
-
-  const [loading, setLoading] = useState(true)
+const [loading, setLoading] = useState(true)
   const [company, setCompany] = useState<any>(null)
 
   // 대시보드용 가짜 데이터 (나중에 DB 연결하면 됩니다)

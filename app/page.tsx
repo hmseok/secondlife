@@ -2,11 +2,10 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
+import { supabase } from './utils/supabase'
 
 function AuthPage() {
   const router = useRouter()
-  const supabase = createClientComponentClient()
   const isLocal = process.env.NODE_ENV === 'development'
 
   // 상태 관리: 'verify' 상태 추가 (인증 대기 화면)
@@ -42,42 +41,16 @@ function AuthPage() {
     companyName: false,
   })
 
- // app/page.tsx 수정
-
- // ... 기존 코드 ...
-
-   // app/page.tsx 내부의 AuthPage 컴포넌트 안쪽
-
-     // ... (상태 변수들 아래에 위치)
-
-     // ✅ [수정됨] 강력한 인증 감지 로직 (리스너 + 폴링 이중 체크)
-     useEffect(() => {
-       // 1. 이벤트 리스너 (수동적 감지)
-       const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-         if (event === 'SIGNED_IN' || session) {
-           // 인증 확인되면 바로 이동
-           router.replace('/admin')
-         }
-       })
-
-       // 2. 인터벌 체크 (능동적 감지) - 2초마다 세션 강제 확인
-       // 브라우저 탭 간 통신이 늦을 경우를 대비한 안전장치입니다.
-       const interval = setInterval(async () => {
-         const { data: { session } } = await supabase.auth.getSession()
-         if (session) {
-           router.replace('/admin')
-         }
-       }, 2000)
-
-       return () => {
-         subscription.unsubscribe()
-         clearInterval(interval)
-       }
-     }, [supabase, router])
-
-     // ... (나머지 코드 동일)
-
- // ... 나머지 코드 ...
+  // ✅ 이미 로그인된 사용자 → 바로 이동 (1회만 체크)
+  useEffect(() => {
+    const checkExistingSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        router.replace('/cars')
+      }
+    }
+    checkExistingSession()
+  }, [router])
   // 입력 핸들러
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -139,8 +112,7 @@ function AuthPage() {
       setMessage({ text: '계정 정보를 찾을 수 없습니다.', type: 'error' })
       setLoading(false)
     } else {
-      router.refresh()
-      router.replace('/admin')
+      router.replace('/cars')
     }
   }
 
@@ -193,7 +165,7 @@ function AuthPage() {
     const { data: { session }, error } = await supabase.auth.refreshSession()
 
     if (session) {
-       router.replace('/admin')
+       router.replace('/cars')
     } else {
        // 단순히 로그인 시도 (비번 입력 없이 이메일만으로 체크 불가하므로, 사용자에게 로그인 유도)
        setMessage({ text: '아직 인증이 완료되지 않았습니다. 메일의 링크를 클릭하셨나요?', type: 'error' })
