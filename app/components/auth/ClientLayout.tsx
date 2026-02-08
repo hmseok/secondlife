@@ -37,19 +37,12 @@ const PATH_TO_GROUP: Record<string, string> = {
   '/quotes': 'sales', '/customers': 'sales',
   '/finance': 'finance', '/loans': 'finance',
   '/invest': 'invest', '/jiip': 'invest',
-  '/db/models': 'data', '/db/maintenance': 'data', '/db/codes': 'data',
-  '/db/depreciation': 'data', '/db/lotte': 'data',
 }
 
 // 메뉴명 오버라이드
 const NAME_OVERRIDES: Record<string, string> = {
   '/invest': '일반투자',
   '/jiip': '지입투자',
-  '/db/models': '차량 시세 DB',
-  '/db/maintenance': '정비/부품 DB',
-  '/db/codes': '차량 코드 DB',
-  '/db/depreciation': '잔가율 DB',
-  '/db/lotte': '롯데렌터카 DB',
 }
 
 // 비즈니스 그룹 (표시 순서)
@@ -58,21 +51,17 @@ const BUSINESS_GROUPS = [
   { id: 'sales', label: '영업' },
   { id: 'finance', label: '재무' },
   { id: 'invest', label: '투자' },
-  { id: 'data', label: '데이터' },
 ]
 
 // god_admin 전용: 플랫폼 관리
 const PLATFORM_MENUS = [
   { name: '회사/가입 관리', path: '/admin', iconKey: 'Admin' },
   { name: '구독 관리', path: '/system-admin', iconKey: 'Setting' },
-  { name: '차종 코드', path: '/admin/model', iconKey: 'Car' },
-  { name: '공통 코드', path: '/admin/codes', iconKey: 'Database' },
 ]
 
 // god_admin + master: 설정
 const SETTINGS_MENUS = [
-  { name: '조직 관리', path: '/admin/employees', iconKey: 'Users' },
-  { name: '권한 설정', path: '/admin/permissions', iconKey: 'Admin' },
+  { name: '조직/권한 관리', path: '/admin/employees', iconKey: 'Users' },
 ]
 
 // ============================================
@@ -169,6 +158,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   // 로그인/인증 페이지 제외
   if (pathname === '/' || pathname.startsWith('/auth')) return <>{children}</>
+
+  // 로그아웃 상태 → 로그인 페이지로 즉시 이동
+  if (!loading && !user) {
+    router.replace('/')
+    return null
+  }
 
   // 비즈니스 그룹별 메뉴 빌드
   const businessGroups = BUSINESS_GROUPS

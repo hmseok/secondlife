@@ -65,46 +65,36 @@ export default function AdminDashboard() {
     }
   }
 
-  // 회사 승인
+  // 회사 승인 (RPC 사용 - RLS 우회)
   const approveCompany = async (companyId: string) => {
-    const { error: compError } = await supabase
-      .from('companies')
-      .update({ is_active: true })
-      .eq('id', companyId)
-
-    // 해당 회사의 master 유저도 활성화
-    const { error: userError } = await supabase
-      .from('profiles')
-      .update({ is_active: true })
-      .eq('company_id', companyId)
-      .eq('role', 'master')
-
-    if (!compError && !userError) {
-      fetchData()
+    const { data, error } = await supabase.rpc('approve_company', { target_company_id: companyId })
+    if (error) {
+      alert('승인 실패: ' + error.message)
+    } else if (data && !data.success) {
+      alert('승인 실패: ' + data.error)
     } else {
-      alert('승인 실패: ' + (compError?.message || userError?.message))
+      fetchData()
     }
   }
 
-  // 회사 거부 (삭제)
+  // 회사 거부 (RPC 사용 - RLS 우회)
   const rejectCompany = async (companyId: string) => {
     if (!confirm('이 회사 가입 요청을 거부하시겠습니까? 관련 데이터가 삭제됩니다.')) return
-
-    // 소속 유저 profiles 삭제
-    await supabase.from('profiles').delete().eq('company_id', companyId)
-    // 직급/부서/모듈 삭제 (CASCADE로 처리되는 것도 있지만 안전하게)
-    await supabase.from('company_modules').delete().eq('company_id', companyId)
-    await supabase.from('positions').delete().eq('company_id', companyId)
-    await supabase.from('departments').delete().eq('company_id', companyId)
-    // 회사 삭제
-    await supabase.from('companies').delete().eq('id', companyId)
-
-    fetchData()
+    const { data, error } = await supabase.rpc('reject_company', { target_company_id: companyId })
+    if (error) {
+      alert('거부 실패: ' + error.message)
+    } else {
+      fetchData()
+    }
   }
 
-  // 개별 유저 활성화/비활성화
+  // 개별 유저 활성화/비활성화 (RPC 사용)
   const toggleUserActive = async (userId: string, currentActive: boolean) => {
-    await supabase.from('profiles').update({ is_active: !currentActive }).eq('id', userId)
+    const { error } = await supabase.rpc('toggle_user_active', {
+      target_user_id: userId,
+      new_active: !currentActive,
+    })
+    if (error) alert('변경 실패: ' + error.message)
     fetchData()
   }
 
@@ -171,7 +161,7 @@ export default function AdminDashboard() {
           </div>
           <Link href="/admin/employees" className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-300 hover:shadow-md transition-all group">
             <div className="text-xs font-bold text-slate-400 uppercase mb-1">바로가기</div>
-            <div className="text-lg font-bold text-slate-700 group-hover:text-blue-600">조직 관리 →</div>
+            <div className="text-lg font-bold text-slate-700 group-hover:text-blue-600">조직/권한 관리 →</div>
           </Link>
         </div>
 

@@ -119,7 +119,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setLoading(true)
           fetchSession()
         } else if (event === 'SIGNED_OUT') {
-          // 로그아웃 → 상태 초기화
+          // 로그아웃 → 상태 초기화 + 로딩 상태로 전환 (중간 화면 방지)
+          setLoading(true)
           clearState()
         }
       }

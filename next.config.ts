@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '10mb',
     },
   },
+
+  // 3. 개발모드 인디케이터 비활성화 (좌측하단 떠다니는 N 아이콘)
+  devIndicators: false,
 };
 
 export default nextConfig;

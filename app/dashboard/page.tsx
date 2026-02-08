@@ -8,6 +8,8 @@ import { useApp } from '../context/AppContext'
 
 // ============================================
 // 대시보드 - 로그인 후 첫 화면
+// god_admin → 플랫폼 관리 대시보드
+// 회사 사용자 → 비즈니스 KPI 대시보드
 // ============================================
 
 type DashboardStats = {
@@ -27,8 +29,11 @@ type DashboardStats = {
 type PlatformStats = {
   totalCompanies: number
   activeCompanies: number
+  pendingCompanies: number
   totalUsers: number
-  recentCompanies: { id: string; name: string; plan: string; created_at: string }[]
+  totalActiveModules: number
+  pendingList: { id: string; name: string; business_number: string; plan: string; created_at: string }[]
+  companyList: { id: string; name: string; plan: string; is_active: boolean; created_at: string; moduleCount: number }[]
 }
 
 export default function DashboardPage() {
@@ -41,7 +46,9 @@ export default function DashboardPage() {
   })
   const [recentCars, setRecentCars] = useState<any[]>([])
   const [platformStats, setPlatformStats] = useState<PlatformStats>({
-    totalCompanies: 0, activeCompanies: 0, totalUsers: 0, recentCompanies: [],
+    totalCompanies: 0, activeCompanies: 0, pendingCompanies: 0,
+    totalUsers: 0, totalActiveModules: 0,
+    pendingList: [], companyList: [],
   })
   const [activeModules, setActiveModules] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -69,111 +76,135 @@ export default function DashboardPage() {
       const isGodAdmin = role === 'god_admin'
       const companyId = company?.id
 
-      // 활성 모듈 목록 가져오기
       if (isGodAdmin) {
-        // god_admin은 전체 모듈 접근 가능
-        const { data: allModules } = await supabase.from('system_modules').select('path')
-        if (allModules) {
-          setActiveModules(new Set(allModules.map(m => m.path)))
-        }
-      } else if (companyId) {
-        const { data: companyModules } = await supabase
-          .from('company_modules')
-          .select('module:system_modules(path)')
-          .eq('company_id', companyId)
-          .eq('is_active', true)
-        if (companyModules) {
-          setActiveModules(new Set(companyModules.map((m: any) => m.module?.path).filter(Boolean)))
-        }
-      }
-
-      // 차량 통계
-      let carQuery = supabase.from('cars').select('id, status', { count: 'exact' })
-      if (!isGodAdmin && companyId) carQuery = carQuery.eq('company_id', companyId)
-      const { data: carData } = await carQuery
-
-      const cars = carData || []
-      const available = cars.filter(c => c.status === 'available').length
-      const rented = cars.filter(c => c.status === 'rented').length
-      const maintenance = cars.filter(c => c.status === 'maintenance').length
-
-      // 최근 등록 차량 5개
-      let recentQuery = supabase.from('cars').select('*').order('created_at', { ascending: false }).limit(5)
-      if (!isGodAdmin && companyId) recentQuery = recentQuery.eq('company_id', companyId)
-      const { data: recentData } = await recentQuery
-
-      // 고객 수
-      let custQuery = supabase.from('customers').select('id', { count: 'exact' })
-      if (!isGodAdmin && companyId) custQuery = custQuery.eq('company_id', companyId)
-      const { count: custCount } = await custQuery
-
-      // 일반투자 통계
-      let investQuery = supabase.from('general_investments').select('invest_amount')
-      if (!isGodAdmin && companyId) investQuery = investQuery.eq('company_id', companyId)
-      const { data: investData } = await investQuery
-
-      const totalInvest = (investData || []).reduce((sum, i) => sum + (i.invest_amount || 0), 0)
-
-      // 지입 계약 수
-      let jiipQuery = supabase.from('jiip_contracts').select('id', { count: 'exact' })
-      if (!isGodAdmin && companyId) jiipQuery = jiipQuery.eq('company_id', companyId)
-      const { count: jiipCount } = await jiipQuery
-
-      // 월 매출 (활성 렌트 계약의 월 렌트료)
-      let revenueQuery = supabase.from('quotes').select('rent_fee').eq('status', 'active')
-      if (!isGodAdmin && companyId) revenueQuery = revenueQuery.eq('company_id', companyId)
-      const { data: revenueData } = await revenueQuery
-      const monthlyRevenue = (revenueData || []).reduce((sum: number, q: any) => sum + (q.rent_fee || 0), 0)
-
-      // 월 지출 1: 할부금 (금융 상품 월 납입금)
-      let financeQuery = supabase.from('financial_products').select('monthly_payment')
-      if (!isGodAdmin && companyId) financeQuery = financeQuery.eq('company_id', companyId)
-      const { data: financeData } = await financeQuery
-      const totalFinance = (financeData || []).reduce((sum: number, f: any) => sum + (f.monthly_payment || 0), 0)
-
-      // 월 지출 2: 보험료 (연 보험료 → 월 환산)
-      let insuranceQuery = supabase.from('insurance_contracts').select('total_premium')
-      if (!isGodAdmin && companyId) insuranceQuery = insuranceQuery.eq('company_id', companyId)
-      const { data: insuranceData } = await insuranceQuery
-      const totalInsurance = (insuranceData || []).reduce((sum: number, i: any) => sum + Math.round((i.total_premium || 0) / 12), 0)
-
-      const monthlyExpense = totalFinance + totalInsurance
-      const netProfit = monthlyRevenue - monthlyExpense
-
-      setStats({
-        totalCars: cars.length,
-        availableCars: available,
-        rentedCars: rented,
-        maintenanceCars: maintenance,
-        totalCustomers: custCount || 0,
-        activeInvestments: (investData || []).length,
-        totalInvestAmount: totalInvest,
-        jiipContracts: jiipCount || 0,
-        monthlyRevenue,
-        monthlyExpense,
-        netProfit,
-      })
-
-      setRecentCars(recentData || [])
-
-      // god_admin: 플랫폼 전체 통계
-      if (isGodAdmin) {
+        // ========================================
+        // god_admin: 플랫폼 통계만 로드
+        // ========================================
         const { count: companyCount } = await supabase
           .from('companies').select('id', { count: 'exact', head: true })
         const { count: activeCount } = await supabase
           .from('companies').select('id', { count: 'exact', head: true }).eq('is_active', true)
+        const { count: pendingCount } = await supabase
+          .from('companies').select('id', { count: 'exact', head: true }).eq('is_active', false)
         const { count: userCount } = await supabase
           .from('profiles').select('id', { count: 'exact', head: true })
-        const { data: recentCompanyData } = await supabase
-          .from('companies').select('id, name, plan, created_at')
-          .order('created_at', { ascending: false }).limit(5)
+
+        // 활성 모듈 총 수 (RPC 사용)
+        const { data: moduleData } = await supabase.rpc('get_all_company_modules')
+        const activeModuleCount = moduleData?.filter((m: any) => m.is_active).length || 0
+
+        // 승인 대기 회사 목록
+        const { data: pendingData } = await supabase
+          .from('companies')
+          .select('id, name, business_number, plan, created_at')
+          .eq('is_active', false)
+          .order('created_at', { ascending: false })
+
+        // 전체 회사 목록 (활성 모듈 수 포함)
+        const { data: allCompanies } = await supabase
+          .from('companies')
+          .select('id, name, plan, is_active, created_at')
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+
+        // 회사별 활성 모듈 수 계산
+        const companyModuleCounts: Record<string, number> = {}
+        if (moduleData) {
+          moduleData.forEach((m: any) => {
+            if (m.is_active) {
+              companyModuleCounts[m.company_id] = (companyModuleCounts[m.company_id] || 0) + 1
+            }
+          })
+        }
 
         setPlatformStats({
           totalCompanies: companyCount || 0,
           activeCompanies: activeCount || 0,
+          pendingCompanies: pendingCount || 0,
           totalUsers: userCount || 0,
-          recentCompanies: recentCompanyData || [],
+          totalActiveModules: activeModuleCount,
+          pendingList: pendingData || [],
+          companyList: (allCompanies || []).map(c => ({
+            ...c,
+            moduleCount: companyModuleCounts[c.id] || 0,
+          })),
         })
+
+      } else {
+        // ========================================
+        // 회사 사용자: 비즈니스 통계 로드
+        // ========================================
+
+        // 활성 모듈 목록
+        if (companyId) {
+          const { data: companyModules } = await supabase
+            .from('company_modules')
+            .select('module:system_modules(path)')
+            .eq('company_id', companyId)
+            .eq('is_active', true)
+          if (companyModules) {
+            setActiveModules(new Set(companyModules.map((m: any) => m.module?.path).filter(Boolean)))
+          }
+        }
+
+        // 차량 통계
+        let carQuery = supabase.from('cars').select('id, status', { count: 'exact' })
+        if (companyId) carQuery = carQuery.eq('company_id', companyId)
+        const { data: carData } = await carQuery
+        const cars = carData || []
+
+        // 최근 등록 차량 5개
+        let recentQuery = supabase.from('cars').select('*').order('created_at', { ascending: false }).limit(5)
+        if (companyId) recentQuery = recentQuery.eq('company_id', companyId)
+        const { data: recentData } = await recentQuery
+
+        // 고객 수
+        let custQuery = supabase.from('customers').select('id', { count: 'exact' })
+        if (companyId) custQuery = custQuery.eq('company_id', companyId)
+        const { count: custCount } = await custQuery
+
+        // 일반투자 통계
+        let investQuery = supabase.from('general_investments').select('invest_amount')
+        if (companyId) investQuery = investQuery.eq('company_id', companyId)
+        const { data: investData } = await investQuery
+        const totalInvest = (investData || []).reduce((sum, i) => sum + (i.invest_amount || 0), 0)
+
+        // 지입 계약 수
+        let jiipQuery = supabase.from('jiip_contracts').select('id', { count: 'exact' })
+        if (companyId) jiipQuery = jiipQuery.eq('company_id', companyId)
+        const { count: jiipCount } = await jiipQuery
+
+        // 월 매출
+        let revenueQuery = supabase.from('quotes').select('rent_fee').eq('status', 'active')
+        if (companyId) revenueQuery = revenueQuery.eq('company_id', companyId)
+        const { data: revenueData } = await revenueQuery
+        const monthlyRevenue = (revenueData || []).reduce((sum: number, q: any) => sum + (q.rent_fee || 0), 0)
+
+        // 월 지출
+        let financeQuery = supabase.from('financial_products').select('monthly_payment')
+        if (companyId) financeQuery = financeQuery.eq('company_id', companyId)
+        const { data: financeData } = await financeQuery
+        const totalFinance = (financeData || []).reduce((sum: number, f: any) => sum + (f.monthly_payment || 0), 0)
+
+        let insuranceQuery = supabase.from('insurance_contracts').select('total_premium')
+        if (companyId) insuranceQuery = insuranceQuery.eq('company_id', companyId)
+        const { data: insuranceData } = await insuranceQuery
+        const totalInsurance = (insuranceData || []).reduce((sum: number, i: any) => sum + Math.round((i.total_premium || 0) / 12), 0)
+
+        setStats({
+          totalCars: cars.length,
+          availableCars: cars.filter(c => c.status === 'available').length,
+          rentedCars: cars.filter(c => c.status === 'rented').length,
+          maintenanceCars: cars.filter(c => c.status === 'maintenance').length,
+          totalCustomers: custCount || 0,
+          activeInvestments: (investData || []).length,
+          totalInvestAmount: totalInvest,
+          jiipContracts: jiipCount || 0,
+          monthlyRevenue,
+          monthlyExpense: totalFinance + totalInsurance,
+          netProfit: monthlyRevenue - (totalFinance + totalInsurance),
+        })
+        setRecentCars(recentData || [])
       }
 
     } catch (err) {
@@ -183,6 +214,9 @@ export default function DashboardPage() {
     }
   }
 
+  // ============================================
+  // 공통 헬퍼
+  // ============================================
   const formatMoney = (n: number) => {
     if (n >= 100000000) return (n / 100000000).toFixed(1) + '억'
     if (n >= 10000) return (n / 10000).toFixed(0) + '만'
@@ -197,36 +231,27 @@ export default function DashboardPage() {
     return '좋은 저녁이에요'
   }
 
-  const getDisplayName = () => {
-    if (role === 'god_admin') return 'Platform Admin'
-    return company?.name || user?.email?.split('@')[0] || '사용자'
+  // ============================================
+  // god_admin 승인/거부 액션
+  // ============================================
+  const approveCompany = async (companyId: string) => {
+    const { data, error } = await supabase.rpc('approve_company', { target_company_id: companyId })
+    if (error) alert('승인 실패: ' + error.message)
+    else if (data && !data.success) alert('승인 실패: ' + data.error)
+    else fetchDashboardData()
   }
 
-  // 빠른 액션 메뉴 (모듈 path 매핑)
-  const allQuickActions = [
-    { label: '차량 관리', desc: '차량 등록/조회', href: '/cars', icon: '🚗', color: 'from-blue-500 to-blue-600', modulePath: '/cars' },
-    { label: '고객 관리', desc: '고객 정보 관리', href: '/customers', icon: '👥', color: 'from-emerald-500 to-emerald-600', modulePath: '/customers' },
-    { label: '견적/계약', desc: '견적서 작성', href: '/quotes', icon: '📋', color: 'from-amber-500 to-amber-600', modulePath: '/quotes' },
-    { label: '일반투자', desc: '투자 현황 관리', href: '/invest', icon: '💰', color: 'from-purple-500 to-purple-600', modulePath: '/invest' },
-    { label: '지입투자', desc: '지입 계약 관리', href: '/jiip', icon: '🚛', color: 'from-rose-500 to-rose-600', modulePath: '/jiip' },
-    { label: '재무관리', desc: '수입/지출 관리', href: '/finance', icon: '📊', color: 'from-cyan-500 to-cyan-600', modulePath: '/finance' },
-  ]
-  const quickActions = allQuickActions.filter(a => hasModule(a.modulePath))
+  const rejectCompany = async (companyId: string) => {
+    if (!confirm('이 회사 가입 요청을 거부하시겠습니까? 관련 데이터가 삭제됩니다.')) return
+    const { data, error } = await supabase.rpc('reject_company', { target_company_id: companyId })
+    if (error) alert('거부 실패: ' + error.message)
+    else if (data && !data.success) alert('거부 실패: ' + data.error)
+    else fetchDashboardData()
+  }
 
-  // god_admin 전용 액션
-  const adminActions = [
-    { label: '회사/가입 관리', desc: '가입 승인 관리', href: '/admin', icon: '🔧', color: 'from-purple-600 to-indigo-600' },
-    { label: '모듈 구독관리', desc: '기능 ON/OFF', href: '/system-admin', icon: '⚡', color: 'from-yellow-500 to-orange-500' },
-    { label: '차종 코드관리', desc: '차종 데이터 관리', href: '/admin/model', icon: '🏷️', color: 'from-pink-500 to-rose-500' },
-    { label: '직원 관리', desc: '직원/권한 설정', href: '/admin/employees', icon: '👨‍💼', color: 'from-teal-500 to-cyan-500' },
-  ]
-
-  // 차량 관련 모듈 활성 여부
-  const showCars = hasModule('/cars')
-  const showCustomers = hasModule('/customers')
-  const showInvest = hasModule('/invest') || hasModule('/jiip')
-  const showFinance = hasModule('/finance') || hasModule('/quotes')
-
+  // ============================================
+  // 로딩 상태
+  // ============================================
   if (appLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -285,33 +310,212 @@ export default function DashboardPage() {
             <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
             <span className="text-sm font-bold text-yellow-700">승인 대기중</span>
           </div>
-          <div className="mt-8 bg-gray-50 rounded-xl p-5 max-w-md mx-auto">
-            <h3 className="text-sm font-bold text-gray-600 mb-2">가입 정보</h3>
-            <div className="space-y-1.5 text-sm text-left">
-              <div className="flex justify-between">
-                <span className="text-gray-400">회사명</span>
-                <span className="font-bold text-gray-700">{company.name}</span>
-              </div>
-              {company.business_number && (
-                <div className="flex justify-between">
-                  <span className="text-gray-400">사업자번호</span>
-                  <span className="font-bold text-gray-700">{company.business_number}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-gray-400">플랜</span>
-                <span className="font-bold text-gray-700">{company.plan?.toUpperCase() || 'FREE'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">신청일</span>
-                <span className="font-bold text-gray-700">{new Date(company.created_at).toLocaleDateString('ko-KR')}</span>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     )
   }
+
+  // ============================================
+  // GOD ADMIN 대시보드
+  // ============================================
+  if (role === 'god_admin') {
+    const adminActions = [
+      { label: '회사/가입 관리', desc: '가입 승인 및 회사 관리', href: '/admin', icon: '🏢', color: 'from-purple-600 to-indigo-600' },
+      { label: '모듈 구독관리', desc: '회사별 기능 ON/OFF', href: '/system-admin', icon: '⚡', color: 'from-yellow-500 to-orange-500' },
+      { label: '조직/권한 관리', desc: '직원 및 권한 설정', href: '/admin/employees', icon: '👥', color: 'from-teal-500 to-cyan-500' },
+    ]
+
+    return (
+      <div className="max-w-7xl mx-auto py-8 px-6 min-h-screen bg-gray-50">
+
+        {/* 헤더 */}
+        <div className="mb-8">
+          <div className="flex items-end justify-between">
+            <div>
+              <p className="text-gray-500 text-sm font-medium">
+                {currentTime.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
+              </p>
+              <h1 className="text-3xl font-black text-gray-900 mt-1">
+                {getGreeting()}, <span className="text-purple-600">Platform Admin</span>
+              </h1>
+              <p className="text-gray-400 mt-1 text-sm">플랫폼 전체 현황을 확인하세요</p>
+            </div>
+            <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-700">
+              GOD ADMIN
+            </span>
+          </div>
+        </div>
+
+        {/* 플랫폼 KPI 카드 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-5 text-white shadow-lg">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-purple-200 uppercase">등록 회사</span>
+              <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">🏢</span>
+            </div>
+            <p className="text-3xl font-black">{loading ? '-' : platformStats.totalCompanies}<span className="text-base font-bold text-purple-200 ml-1">개</span></p>
+            <p className="mt-2 text-[11px] text-purple-200">활성 {platformStats.activeCompanies}개</p>
+          </div>
+
+          <div className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-2xl p-5 text-white shadow-lg">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-blue-200 uppercase">전체 사용자</span>
+              <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">👤</span>
+            </div>
+            <p className="text-3xl font-black">{loading ? '-' : platformStats.totalUsers}<span className="text-base font-bold text-blue-200 ml-1">명</span></p>
+            <p className="mt-2 text-[11px] text-blue-200">가입된 전체 사용자</p>
+          </div>
+
+          <div className={`rounded-2xl p-5 shadow-lg ${
+            platformStats.pendingCompanies > 0
+              ? 'bg-gradient-to-br from-yellow-500 to-orange-500 text-white'
+              : 'bg-white border border-gray-100 text-gray-900'
+          }`}>
+            <div className="flex items-center justify-between mb-3">
+              <span className={`text-xs font-bold uppercase ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>승인 대기</span>
+              <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">⏳</span>
+            </div>
+            <p className="text-3xl font-black">{loading ? '-' : platformStats.pendingCompanies}<span className={`text-base font-bold ml-1 ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>건</span></p>
+            <p className={`mt-2 text-[11px] ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>
+              {platformStats.pendingCompanies > 0 ? '처리가 필요합니다' : '대기 없음'}
+            </p>
+          </div>
+
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-gray-400 uppercase">활성 모듈</span>
+              <span className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center text-sm">📦</span>
+            </div>
+            <p className="text-3xl font-black text-gray-900">{loading ? '-' : platformStats.totalActiveModules}<span className="text-base font-bold text-gray-400 ml-1">개</span></p>
+            <p className="mt-2 text-[11px] text-gray-400">전체 회사 활성 모듈</p>
+          </div>
+        </div>
+
+        {/* 승인 대기 목록 */}
+        {platformStats.pendingList.length > 0 && (
+          <div className="mb-8">
+            <h2 className="text-sm font-bold text-orange-500 uppercase tracking-wider mb-3">승인 대기 ({platformStats.pendingList.length})</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {platformStats.pendingList.map(c => (
+                <div key={c.id} className="bg-white rounded-xl p-4 border-2 border-yellow-200 shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-black text-gray-900">{c.name}</span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                          c.plan === 'master' ? 'bg-yellow-100 text-yellow-700' :
+                          c.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{c.plan?.toUpperCase() || 'FREE'}</span>
+                      </div>
+                      {c.business_number && <p className="text-xs text-gray-400">사업자번호: {c.business_number}</p>}
+                      <p className="text-xs text-gray-400">신청일: {new Date(c.created_at).toLocaleDateString('ko-KR')}</p>
+                    </div>
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => approveCompany(c.id)}
+                        className="px-3 py-1.5 text-xs font-bold bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                      >
+                        승인
+                      </button>
+                      <button
+                        onClick={() => rejectCompany(c.id)}
+                        className="px-3 py-1.5 text-xs font-bold bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors"
+                      >
+                        거부
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 플랫폼 관리 바로가기 */}
+        <div className="mb-8">
+          <h2 className="text-sm font-bold text-purple-500 uppercase tracking-wider mb-3">플랫폼 관리</h2>
+          <div className="grid grid-cols-3 gap-3">
+            {adminActions.map(action => (
+              <Link
+                key={action.href}
+                href={action.href}
+                className="group bg-gray-900 rounded-xl p-5 hover:bg-gray-800 transition-all hover:scale-[1.02] border border-gray-800"
+              >
+                <span className="text-2xl">{action.icon}</span>
+                <p className="text-white font-bold text-sm mt-2">{action.label}</p>
+                <p className="text-gray-500 text-xs mt-0.5">{action.desc}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* 회사별 현황 테이블 */}
+        {platformStats.companyList.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">활성 회사 현황</h2>
+              <Link href="/admin" className="text-xs text-indigo-500 hover:text-indigo-700 font-bold">
+                전체 관리 →
+              </Link>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50 text-gray-400 text-xs font-bold uppercase tracking-wider">
+                  <tr>
+                    <th className="p-4">회사명</th>
+                    <th className="p-4 text-center">플랜</th>
+                    <th className="p-4 text-center">활성 모듈</th>
+                    <th className="p-4 text-right">가입일</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {platformStats.companyList.map(c => (
+                    <tr key={c.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => router.push('/system-admin')}>
+                      <td className="p-4">
+                        <span className="font-bold text-gray-900">{c.name}</span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                          c.plan === 'master' ? 'bg-yellow-100 text-yellow-700' :
+                          c.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-500'
+                        }`}>{c.plan?.toUpperCase() || 'FREE'}</span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <span className="text-sm font-bold text-gray-700">{c.moduleCount}</span>
+                        <span className="text-xs text-gray-400">/9</span>
+                      </td>
+                      <td className="p-4 text-right text-xs text-gray-400">{new Date(c.created_at).toLocaleDateString('ko-KR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+      </div>
+    )
+  }
+
+  // ============================================
+  // 회사 사용자 대시보드 (기존)
+  // ============================================
+  const allQuickActions = [
+    { label: '차량 관리', desc: '차량 등록/조회', href: '/cars', icon: '🚗', color: 'from-blue-500 to-blue-600', modulePath: '/cars' },
+    { label: '고객 관리', desc: '고객 정보 관리', href: '/customers', icon: '👥', color: 'from-emerald-500 to-emerald-600', modulePath: '/customers' },
+    { label: '견적/계약', desc: '견적서 작성', href: '/quotes', icon: '📋', color: 'from-amber-500 to-amber-600', modulePath: '/quotes' },
+    { label: '일반투자', desc: '투자 현황 관리', href: '/invest', icon: '💰', color: 'from-purple-500 to-purple-600', modulePath: '/invest' },
+    { label: '지입투자', desc: '지입 계약 관리', href: '/jiip', icon: '🚛', color: 'from-rose-500 to-rose-600', modulePath: '/jiip' },
+    { label: '재무관리', desc: '수입/지출 관리', href: '/finance', icon: '📊', color: 'from-cyan-500 to-cyan-600', modulePath: '/finance' },
+  ]
+  const quickActions = allQuickActions.filter(a => hasModule(a.modulePath))
+
+  const showCars = hasModule('/cars')
+  const showCustomers = hasModule('/customers')
+  const showInvest = hasModule('/invest') || hasModule('/jiip')
+  const showFinance = hasModule('/finance') || hasModule('/quotes')
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-6 min-h-screen bg-gray-50">
@@ -324,43 +528,31 @@ export default function DashboardPage() {
               {currentTime.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
             </p>
             <h1 className="text-3xl font-black text-gray-900 mt-1">
-              {getGreeting()}, <span className="text-indigo-600">{getDisplayName()}</span>
+              {getGreeting()}, <span className="text-indigo-600">{company?.name || user?.email?.split('@')[0] || '사용자'}</span>
             </h1>
-            <p className="text-gray-400 mt-1 text-sm">
-              {role === 'god_admin' ? '플랫폼 전체 현황을 확인하세요' : '오늘의 업무 현황을 확인하세요'}
-            </p>
+            <p className="text-gray-400 mt-1 text-sm">오늘의 업무 현황을 확인하세요</p>
           </div>
-          {role !== 'god_admin' && (
-            <div className="flex gap-2 items-center">
-              {company?.plan && (
-                <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
-                  company.plan === 'master' ? 'bg-yellow-100 text-yellow-700' :
-                  company.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
-                  'bg-gray-100 text-gray-500'
-                }`}>
-                  {company.plan.toUpperCase()}
-                </span>
-              )}
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                role === 'master' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-              }`}>
-                {role === 'master' ? '관리자' : '직원'}
-              </span>
-              {position && (
-                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">
-                  {position.name}
-                </span>
-              )}
-            </div>
-          )}
+          <div className="flex gap-2 items-center">
+            {company?.plan && (
+              <span className={`text-xs font-black px-2.5 py-1 rounded-full ${
+                company.plan === 'master' ? 'bg-yellow-100 text-yellow-700' :
+                company.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
+                'bg-gray-100 text-gray-500'
+              }`}>{company.plan.toUpperCase()}</span>
+            )}
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+              role === 'master' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+            }`}>{role === 'master' ? '관리자' : '직원'}</span>
+            {position && (
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-green-100 text-green-700">{position.name}</span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* KPI 카드 영역 - 활성 모듈만 표시 */}
+      {/* KPI 카드 영역 */}
       {(showCars || showCustomers || showInvest) && (
-        <div className={`grid grid-cols-2 md:grid-cols-${
-          [showCars, showCustomers, showInvest, showCars].filter(Boolean).length
-        } gap-4 mb-8`}>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {showCars && (
             <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
@@ -375,7 +567,6 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
-
           {showCustomers && (
             <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
@@ -386,7 +577,6 @@ export default function DashboardPage() {
               <p className="mt-2 text-[11px] text-gray-400">등록된 전체 고객</p>
             </div>
           )}
-
           {showInvest && (
             <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
@@ -397,7 +587,6 @@ export default function DashboardPage() {
               <p className="mt-2 text-[11px] text-gray-400">일반투자 {stats.activeInvestments}건 / 지입 {stats.jiipContracts}건</p>
             </div>
           )}
-
           {showCars && (
             <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
               <div className="flex items-center justify-between mb-3">
@@ -414,10 +603,10 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 경영 현황판 - 재무/견적 모듈 활성시만 */}
+      {/* 경영 현황판 */}
       {showFinance && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">월 예상 매출</span>
               <span className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-sm">💵</span>
@@ -425,8 +614,7 @@ export default function DashboardPage() {
             <p className="text-2xl font-black text-blue-600">{loading ? '-' : formatMoney(stats.monthlyRevenue)}<span className="text-sm font-bold text-gray-400 ml-1">원</span></p>
             <p className="mt-2 text-[11px] text-gray-400">활성 렌트 계약 기준</p>
           </div>
-
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">월 고정 지출</span>
               <span className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center text-sm">💸</span>
@@ -434,8 +622,7 @@ export default function DashboardPage() {
             <p className="text-2xl font-black text-red-500">{loading ? '-' : formatMoney(stats.monthlyExpense)}<span className="text-sm font-bold text-gray-400 ml-1">원</span></p>
             <p className="mt-2 text-[11px] text-gray-400">할부금 + 보험료 (월 환산)</p>
           </div>
-
-          <div className="bg-gray-900 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-shadow ring-2 ring-gray-100">
+          <div className="bg-gray-900 rounded-2xl p-5 shadow-lg ring-2 ring-gray-100">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-yellow-400 uppercase tracking-wide">월 순수익</span>
               <span className="w-8 h-8 rounded-lg bg-yellow-900/30 flex items-center justify-center text-sm">🏆</span>
@@ -448,73 +635,8 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* god_admin 전용: 플랫폼 현황 */}
-      {role === 'god_admin' && (
-        <div className="mb-8">
-          <h2 className="text-sm font-bold text-purple-500 uppercase tracking-wider mb-3">플랫폼 현황</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-5 text-white shadow-lg">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-purple-200 uppercase">등록 회사</span>
-                <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">🏢</span>
-              </div>
-              <p className="text-3xl font-black">{loading ? '-' : platformStats.totalCompanies}<span className="text-base font-bold text-purple-200 ml-1">개</span></p>
-              <p className="mt-2 text-[11px] text-purple-200">활성 {platformStats.activeCompanies}개</p>
-            </div>
-            <div className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-2xl p-5 text-white shadow-lg">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-blue-200 uppercase">전체 사용자</span>
-                <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">👤</span>
-              </div>
-              <p className="text-3xl font-black">{loading ? '-' : platformStats.totalUsers}<span className="text-base font-bold text-blue-200 ml-1">명</span></p>
-              <p className="mt-2 text-[11px] text-blue-200">가입된 전체 사용자</p>
-            </div>
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase">최근 가입 회사</span>
-              </div>
-              {platformStats.recentCompanies.length === 0 ? (
-                <p className="text-gray-400 text-sm">가입된 회사가 없습니다</p>
-              ) : (
-                <div className="space-y-2">
-                  {platformStats.recentCompanies.slice(0, 3).map(c => (
-                    <div key={c.id} className="flex items-center justify-between">
-                      <span className="text-sm font-bold text-gray-800 truncate">{c.name}</span>
-                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
-                        c.plan === 'master' ? 'bg-yellow-100 text-yellow-700' :
-                        c.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-500'
-                      }`}>
-                        {c.plan?.toUpperCase()}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <h2 className="text-sm font-bold text-purple-500 uppercase tracking-wider mb-3">플랫폼 관리</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {adminActions.map(action => (
-              <Link
-                key={action.href}
-                href={action.href}
-                className="group bg-gray-900 rounded-xl p-4 hover:bg-gray-800 transition-all hover:scale-[1.02] border border-gray-800"
-              >
-                <span className="text-2xl">{action.icon}</span>
-                <p className="text-white font-bold text-sm mt-2">{action.label}</p>
-                <p className="text-gray-500 text-xs mt-0.5">{action.desc}</p>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* 빠른 액션 + 최근 차량 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* 빠른 액션 - 활성 모듈만 */}
         {quickActions.length > 0 && (
           <div className="lg:col-span-1">
             <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">빠른 이동</h2>
@@ -536,14 +658,11 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 최근 등록 차량 - 차량 모듈 활성시만 */}
         {showCars && (
           <div className={quickActions.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'}>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">최근 등록 차량</h2>
-              <Link href="/cars" className="text-xs text-indigo-500 hover:text-indigo-700 font-bold">
-                전체 보기 →
-              </Link>
+              <Link href="/cars" className="text-xs text-indigo-500 hover:text-indigo-700 font-bold">전체 보기 →</Link>
             </div>
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
               {loading ? (

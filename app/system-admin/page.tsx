@@ -4,162 +4,247 @@ import { supabase } from '../utils/supabase'
 import { useRouter } from 'next/navigation'
 import { useApp } from '../context/AppContext'
 
-// 아이콘 매핑 (ClientLayout과 동일)
-const IconMap: any = {
-  Truck: () => <span title="지입/정산">🚛</span>,
-  Doc: () => <span title="견적/영업">📄</span>,
-  Car: () => <span title="차량관리">🚗</span>,
-  Setting: () => <span title="설정">⚙️</span>,
-}
+// ============================================
+// 구독/모듈 관리 (god_admin 전용)
+// 회사별 모듈 ON/OFF 제어
+// ============================================
 
 export default function SystemAdminPage() {
   const router = useRouter()
-  const { user, role, loading: appLoading } = useApp()
+  const { role, loading: appLoading } = useApp()
 
   const [loading, setLoading] = useState(true)
   const [companies, setCompanies] = useState<any[]>([])
   const [modules, setModules] = useState<any[]>([])
-  const [matrix, setMatrix] = useState<any>({}) // { companyId_moduleId: true/false }
+  const [matrix, setMatrix] = useState<any>({})
+  const [filter, setFilter] = useState<'active' | 'all'>('active')
 
-  // 초기 로딩
   useEffect(() => {
-    checkPermissionAndLoad()
+    if (!appLoading && role === 'god_admin') loadData()
+    else if (!appLoading && role !== 'god_admin') {
+      alert('접근 권한이 없습니다.')
+      router.replace('/dashboard')
+    }
   }, [appLoading, role])
 
-  const checkPermissionAndLoad = async () => {
-    if (appLoading) return
+  const loadData = async () => {
     setLoading(true)
 
-    // 1. 보안 검사: god_admin만 접근 가능
-    if (role !== 'god_admin') {
-      alert('접근 권한이 없습니다. (시스템 총괄 전용)')
-      router.replace('/dashboard')
-      return
-    }
+    const { data: compData } = await supabase
+      .from('companies').select('*').order('name')
+    const { data: modData } = await supabase
+      .from('system_modules').select('*').order('path')
 
-    // 2. 데이터 로딩 (모든 회사 & 모든 모듈)
-    const { data: compData } = await supabase.from('companies').select('*').order('created_at', { ascending: false })
-    const { data: modData } = await supabase.from('system_modules').select('*').order('path')
-
-    // 3. 현재 설정 상태 로딩 (누가 뭘 쓰고 있나)
-    const { data: activeData } = await supabase.from('company_modules').select('*')
+    // RPC로 읽기 (RLS 우회)
+    const { data: activeData } = await supabase.rpc('get_all_company_modules')
 
     if (compData && modData) {
       setCompanies(compData)
       setModules(modData)
 
-      // 매트릭스 데이터 구성
       const statusMap: any = {}
-      activeData?.forEach((item: any) => {
-        statusMap[`${item.company_id}_${item.module_id}`] = item.is_active
-      })
+      if (activeData) {
+        activeData.forEach((item: any) => {
+          statusMap[`${item.company_id}_${item.module_id}`] = item.is_active
+        })
+      }
       setMatrix(statusMap)
     }
     setLoading(false)
   }
 
-  // 기능 ON/OFF 토글 함수
+  // 단일 모듈 토글 (RPC 사용 - RLS 우회)
   const toggleModule = async (companyId: string, moduleId: string, currentStatus: boolean) => {
-    // 1. UI 즉시 반영 (Optimistic UI)
     const key = `${companyId}_${moduleId}`
     setMatrix((prev: any) => ({ ...prev, [key]: !currentStatus }))
 
-    // 2. DB 업데이트 (Upsert: 없으면 만들고, 있으면 수정)
-    const { error } = await supabase
-      .from('company_modules')
-      .upsert({
-        company_id: companyId,
-        module_id: moduleId,
-        is_active: !currentStatus
-      }, { onConflict: 'company_id, module_id' })
+    const { data, error } = await supabase.rpc('toggle_company_module', {
+      target_company_id: companyId,
+      target_module_id: moduleId,
+      new_active: !currentStatus,
+    })
 
     if (error) {
       alert('설정 저장 실패: ' + error.message)
-      setMatrix((prev: any) => ({ ...prev, [key]: currentStatus })) // 롤백
+      setMatrix((prev: any) => ({ ...prev, [key]: currentStatus }))
+    } else if (data && !data.success) {
+      alert('설정 저장 실패: ' + (data.error || '알 수 없는 오류'))
+      setMatrix((prev: any) => ({ ...prev, [key]: currentStatus }))
     }
   }
 
-  if (loading) return <div className="p-10 text-center font-bold text-gray-400">시스템 권한 확인 중...🕵️</div>
+  // 전체 ON/OFF (RPC 사용 - RLS 우회)
+  const toggleAllForCompany = async (companyId: string, enable: boolean) => {
+    const newMatrix = { ...matrix }
+    modules.forEach(mod => {
+      newMatrix[`${companyId}_${mod.id}`] = enable
+    })
+    setMatrix(newMatrix)
+
+    const { data, error } = await supabase.rpc('toggle_all_company_modules', {
+      target_company_id: companyId,
+      new_active: enable,
+    })
+
+    if (error) {
+      alert('일괄 설정 실패: ' + error.message)
+      loadData()
+    } else if (data && !data.success) {
+      alert('일괄 설정 실패: ' + (data.error || '알 수 없는 오류'))
+      loadData()
+    }
+  }
+
+  const filteredCompanies = filter === 'active'
+    ? companies.filter(c => c.is_active)
+    : companies
+
+  const getActiveCount = (companyId: string) => {
+    return modules.filter(m => matrix[`${companyId}_${m.id}`]).length
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      </div>
+    )
+  }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-10 animate-fade-in">
+    <div className="min-h-screen bg-slate-50 p-8">
       <div className="max-w-7xl mx-auto">
 
         {/* 헤더 */}
-        <div className="flex justify-between items-end mb-10 border-b border-gray-700 pb-6">
+        <div className="mb-6 flex justify-between items-end">
           <div>
-            <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">
-              GOD MODE ⚡
-            </h1>
-            <p className="text-gray-400 mt-2">전체 고객사(Company)의 서비스 구독 상태를 제어합니다.</p>
+            <h1 className="text-3xl font-extrabold text-slate-900">구독/모듈 관리</h1>
+            <p className="text-slate-500 mt-1">회사별 기능 모듈을 ON/OFF 제어합니다. 모듈을 켜면 해당 회사의 사이드바 메뉴와 대시보드 카드가 활성화됩니다.</p>
           </div>
-          <button onClick={() => router.push('/')} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-bold transition-colors">
-            ← 돌아가기
+          <button onClick={loadData} className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100">
+            새로고침
           </button>
         </div>
 
-        {/* 메인 매트릭스 테이블 */}
-        <div className="bg-gray-800 rounded-2xl shadow-2xl overflow-hidden border border-gray-700">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gray-950 text-gray-400 text-xs uppercase tracking-wider">
-                <th className="p-6 w-1/4">고객사 정보 (Company)</th>
-                {modules.map((mod) => (
-                  <th key={mod.id} className="p-4 text-center border-l border-gray-800">
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="text-2xl">{IconMap[mod.icon_key]?.()}</span>
-                      <span>{mod.name}</span>
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {companies.map((comp) => (
-                <tr key={comp.id} className="hover:bg-gray-750 transition-colors group">
-                  <td className="p-6">
-                    <div className="font-bold text-lg text-white group-hover:text-blue-400 transition-colors">
-                      {comp.name}
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1 font-mono">{comp.id}</div>
-                  </td>
-
-                  {/* 각 모듈별 스위치 */}
-                  {modules.map((mod) => {
-                    const isActive = matrix[`${comp.id}_${mod.id}`]
-                    return (
-                      <td key={mod.id} className="p-4 text-center border-l border-gray-700">
-                        <button
-                          onClick={() => toggleModule(comp.id, mod.id, !!isActive)}
-                          className={`
-                            relative inline-flex h-8 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2  focus-visible:ring-white focus-visible:ring-opacity-75
-                            ${isActive ? 'bg-blue-600' : 'bg-gray-600'}
-                          `}
-                        >
-                          <span className="sr-only">Use setting</span>
-                          <span
-                            aria-hidden="true"
-                            className={`
-                              pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out
-                              ${isActive ? 'translate-x-6' : 'translate-x-0'}
-                            `}
-                          />
-                        </button>
-                        <div className="mt-2 text-[10px] font-bold text-gray-500">
-                          {isActive ? 'ON' : 'OFF'}
-                        </div>
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* 필터 + 통계 */}
+        <div className="flex items-center gap-4 mb-6">
+          <div className="flex gap-2">
+            {[
+              { key: 'active' as const, label: '승인된 회사', count: companies.filter(c => c.is_active).length },
+              { key: 'all' as const, label: '전체', count: companies.length },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setFilter(tab.key)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                  filter === tab.key
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {tab.label} ({tab.count})
+              </button>
+            ))}
+          </div>
+          <div className="flex-1" />
+          <div className="text-xs text-slate-400">
+            총 {modules.length}개 모듈
+          </div>
         </div>
 
-        <div className="mt-8 text-center text-xs text-gray-600">
-          * 이 페이지는 Super Admin(개발자) 계정에서만 접근 가능합니다. <br/>
-          * 스위치를 끄면 해당 회사의 모든 직원에게서 메뉴가 즉시 사라집니다.
+        {/* 회사별 모듈 카드 */}
+        <div className="space-y-4">
+          {filteredCompanies.map(comp => {
+            const activeCount = getActiveCount(comp.id)
+            return (
+              <div key={comp.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
+                !comp.is_active ? 'border-yellow-300 opacity-60' : 'border-slate-200'
+              }`}>
+                {/* 회사 헤더 */}
+                <div className="p-5 flex items-center justify-between border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-black text-sm ${
+                      comp.is_active ? 'bg-indigo-600' : 'bg-yellow-500'
+                    }`}>
+                      {comp.name[0]}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900">{comp.name}</span>
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
+                          comp.plan === 'master' ? 'bg-yellow-100 text-yellow-700' :
+                          comp.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
+                          'bg-slate-100 text-slate-500'
+                        }`}>
+                          {comp.plan?.toUpperCase() || 'FREE'}
+                        </span>
+                        {!comp.is_active && (
+                          <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">
+                            승인 대기
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        활성 모듈: {activeCount}/{modules.length}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => toggleAllForCompany(comp.id, true)}
+                      className="px-3 py-1.5 text-xs font-bold bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors"
+                    >
+                      전체 ON
+                    </button>
+                    <button
+                      onClick={() => toggleAllForCompany(comp.id, false)}
+                      className="px-3 py-1.5 text-xs font-bold bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors"
+                    >
+                      전체 OFF
+                    </button>
+                  </div>
+                </div>
+
+                {/* 모듈 토글 그리드 */}
+                <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {modules.map(mod => {
+                    const isActive = !!matrix[`${comp.id}_${mod.id}`]
+                    return (
+                      <button
+                        key={mod.id}
+                        onClick={() => toggleModule(comp.id, mod.id, isActive)}
+                        className={`relative p-3 rounded-xl border-2 text-left transition-all ${
+                          isActive
+                            ? 'border-blue-400 bg-blue-50'
+                            : 'border-slate-200 bg-slate-50 opacity-50 hover:opacity-80'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-bold text-slate-800 truncate">{mod.name}</span>
+                          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${isActive ? 'bg-blue-500' : 'bg-slate-300'}`} />
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+
+          {filteredCompanies.length === 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+              <p className="text-slate-400 font-bold">해당 조건의 회사가 없습니다</p>
+            </div>
+          )}
+        </div>
+
+        {/* 안내 */}
+        <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
+          <p className="text-xs text-blue-700">
+            <strong>모듈 ON/OFF 연동:</strong> 모듈을 켜면 → 해당 회사 사용자의 사이드바 메뉴에 해당 기능이 나타나고, 대시보드에 관련 KPI 카드가 표시됩니다.
+            모듈을 끄면 → 메뉴와 카드가 즉시 사라집니다. 데이터는 유지됩니다.
+          </p>
         </div>
 
       </div>
