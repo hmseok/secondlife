@@ -72,12 +72,12 @@ const { company, role } = useApp()
   const formatMoney = (amount?: number) => amount?.toLocaleString() || '0'
 
   return (
-    <div className="max-w-7xl mx-auto py-10 px-6 min-h-screen bg-gray-50 animate-fade-in">
+    <div className="max-w-7xl mx-auto py-6 px-4 md:py-10 md:px-6 min-h-screen bg-gray-50 animate-fade-in">
 
       {/* 상단 헤더 영역 */}
-      <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 gap-4">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-6 md:mb-8 gap-3 md:gap-4">
         <div>
-          <h1 className="text-3xl font-black text-gray-900">🚙 차량 관리 대장</h1>
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900">🚙 차량 관리 대장</h1>
           <p className="text-gray-500 mt-2">
             총 보유: <span className="font-bold text-indigo-600">{cars.length}</span>대 /
             검색됨: {filteredCars.length}대
@@ -89,7 +89,7 @@ const { company, role } = useApp()
             <input
                 type="text"
                 placeholder="🔍 차량번호, 모델명 검색..."
-                className="px-4 py-3 border border-gray-300 rounded-xl min-w-[250px] focus:outline-none focus:border-indigo-500 shadow-sm"
+                className="px-4 py-3 border border-gray-300 rounded-xl w-full md:min-w-[250px] md:w-auto focus:outline-none focus:border-indigo-500 shadow-sm"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -125,14 +125,14 @@ const { company, role } = useApp()
       </div>
 
       {/* 📋 리스트형 테이블 */}
-      <div className="bg-white shadow-sm border border-t-0 border-gray-200 rounded-b-xl overflow-hidden">
+      <div className="bg-white shadow-sm border border-t-0 border-gray-200 rounded-b-xl overflow-x-auto">
         {loading ? (
             <div className="p-20 text-center text-gray-400 flex flex-col items-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2"></div>
                 차량 데이터를 불러오는 중...
             </div>
         ) : (
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[700px]">
             <thead className="bg-gray-50 text-gray-500 font-bold text-xs uppercase tracking-wider border-b border-gray-100">
                 <tr>
                     <th className="p-4">차량번호</th>

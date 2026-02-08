@@ -266,12 +266,12 @@ export default function DashboardPage() {
   // 회사 미배정 상태
   if (!company && role !== 'god_admin') {
     return (
-      <div className="max-w-7xl mx-auto py-8 px-6 min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto py-6 px-4 md:py-8 md:px-6 min-h-screen bg-gray-50">
         <div className="mb-8">
           <p className="text-gray-500 text-sm font-medium">
             {currentTime.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
           </p>
-          <h1 className="text-3xl font-black text-gray-900 mt-1">
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 mt-1">
             {getGreeting()}, <span className="text-indigo-600">{user?.email?.split('@')[0]}</span>
           </h1>
         </div>
@@ -288,12 +288,12 @@ export default function DashboardPage() {
   // 회사 승인 대기 상태
   if (company && company.is_active === false && role !== 'god_admin') {
     return (
-      <div className="max-w-7xl mx-auto py-8 px-6 min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto py-6 px-4 md:py-8 md:px-6 min-h-screen bg-gray-50">
         <div className="mb-8">
           <p className="text-gray-500 text-sm font-medium">
             {currentTime.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
           </p>
-          <h1 className="text-3xl font-black text-gray-900 mt-1">
+          <h1 className="text-2xl md:text-3xl font-black text-gray-900 mt-1">
             {getGreeting()}, <span className="text-indigo-600">{company.name}</span>
           </h1>
         </div>
@@ -326,68 +326,68 @@ export default function DashboardPage() {
     ]
 
     return (
-      <div className="max-w-7xl mx-auto py-8 px-6 min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto py-6 px-4 md:py-8 md:px-6 min-h-screen bg-gray-50">
 
         {/* 헤더 */}
-        <div className="mb-8">
-          <div className="flex items-end justify-between">
+        <div className="mb-6 md:mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
             <div>
-              <p className="text-gray-500 text-sm font-medium">
+              <p className="text-gray-500 text-xs sm:text-sm font-medium">
                 {currentTime.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
               </p>
-              <h1 className="text-3xl font-black text-gray-900 mt-1">
+              <h1 className="text-2xl md:text-3xl font-black text-gray-900 mt-1">
                 {getGreeting()}, <span className="text-purple-600">Platform Admin</span>
               </h1>
               <p className="text-gray-400 mt-1 text-sm">플랫폼 전체 현황을 확인하세요</p>
             </div>
-            <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-700">
+            <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-purple-100 text-purple-700 self-start sm:self-auto">
               GOD ADMIN
             </span>
           </div>
         </div>
 
         {/* 플랫폼 KPI 카드 */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-5 text-white shadow-lg">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-purple-200 uppercase">등록 회사</span>
-              <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">🏢</span>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-8">
+          <div className="bg-gradient-to-br from-purple-600 to-indigo-700 rounded-2xl p-4 md:p-5 text-white shadow-lg">
+            <div className="flex items-center justify-between mb-2 md:mb-3">
+              <span className="text-[10px] md:text-xs font-bold text-purple-200 uppercase">등록 회사</span>
+              <span className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">🏢</span>
             </div>
-            <p className="text-3xl font-black">{loading ? '-' : platformStats.totalCompanies}<span className="text-base font-bold text-purple-200 ml-1">개</span></p>
-            <p className="mt-2 text-[11px] text-purple-200">활성 {platformStats.activeCompanies}개</p>
+            <p className="text-2xl md:text-3xl font-black">{loading ? '-' : platformStats.totalCompanies}<span className="text-sm md:text-base font-bold text-purple-200 ml-1">개</span></p>
+            <p className="mt-1 md:mt-2 text-[10px] md:text-[11px] text-purple-200">활성 {platformStats.activeCompanies}개</p>
           </div>
 
-          <div className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-2xl p-5 text-white shadow-lg">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-blue-200 uppercase">전체 사용자</span>
-              <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">👤</span>
+          <div className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-2xl p-4 md:p-5 text-white shadow-lg">
+            <div className="flex items-center justify-between mb-2 md:mb-3">
+              <span className="text-[10px] md:text-xs font-bold text-blue-200 uppercase">전체 사용자</span>
+              <span className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">👤</span>
             </div>
-            <p className="text-3xl font-black">{loading ? '-' : platformStats.totalUsers}<span className="text-base font-bold text-blue-200 ml-1">명</span></p>
-            <p className="mt-2 text-[11px] text-blue-200">가입된 전체 사용자</p>
+            <p className="text-2xl md:text-3xl font-black">{loading ? '-' : platformStats.totalUsers}<span className="text-sm md:text-base font-bold text-blue-200 ml-1">명</span></p>
+            <p className="mt-1 md:mt-2 text-[10px] md:text-[11px] text-blue-200">가입된 전체 사용자</p>
           </div>
 
-          <div className={`rounded-2xl p-5 shadow-lg ${
+          <div className={`rounded-2xl p-4 md:p-5 shadow-lg ${
             platformStats.pendingCompanies > 0
               ? 'bg-gradient-to-br from-yellow-500 to-orange-500 text-white'
               : 'bg-white border border-gray-100 text-gray-900'
           }`}>
-            <div className="flex items-center justify-between mb-3">
-              <span className={`text-xs font-bold uppercase ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>승인 대기</span>
-              <span className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">⏳</span>
+            <div className="flex items-center justify-between mb-2 md:mb-3">
+              <span className={`text-[10px] md:text-xs font-bold uppercase ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>승인 대기</span>
+              <span className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-white/20 flex items-center justify-center text-sm">⏳</span>
             </div>
-            <p className="text-3xl font-black">{loading ? '-' : platformStats.pendingCompanies}<span className={`text-base font-bold ml-1 ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>건</span></p>
-            <p className={`mt-2 text-[11px] ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>
+            <p className="text-2xl md:text-3xl font-black">{loading ? '-' : platformStats.pendingCompanies}<span className={`text-sm md:text-base font-bold ml-1 ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>건</span></p>
+            <p className={`mt-1 md:mt-2 text-[10px] md:text-[11px] ${platformStats.pendingCompanies > 0 ? 'text-yellow-100' : 'text-gray-400'}`}>
               {platformStats.pendingCompanies > 0 ? '처리가 필요합니다' : '대기 없음'}
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-bold text-gray-400 uppercase">활성 모듈</span>
-              <span className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center text-sm">📦</span>
+          <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm">
+            <div className="flex items-center justify-between mb-2 md:mb-3">
+              <span className="text-[10px] md:text-xs font-bold text-gray-400 uppercase">활성 모듈</span>
+              <span className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-green-50 flex items-center justify-center text-sm">📦</span>
             </div>
-            <p className="text-3xl font-black text-gray-900">{loading ? '-' : platformStats.totalActiveModules}<span className="text-base font-bold text-gray-400 ml-1">개</span></p>
-            <p className="mt-2 text-[11px] text-gray-400">전체 회사 활성 모듈</p>
+            <p className="text-2xl md:text-3xl font-black text-gray-900">{loading ? '-' : platformStats.totalActiveModules}<span className="text-sm md:text-base font-bold text-gray-400 ml-1">개</span></p>
+            <p className="mt-1 md:mt-2 text-[10px] md:text-[11px] text-gray-400">전체 회사 활성 모듈</p>
           </div>
         </div>
 
@@ -435,12 +435,12 @@ export default function DashboardPage() {
         {/* 플랫폼 관리 바로가기 */}
         <div className="mb-8">
           <h2 className="text-sm font-bold text-purple-500 uppercase tracking-wider mb-3">플랫폼 관리</h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {adminActions.map(action => (
               <Link
                 key={action.href}
                 href={action.href}
-                className="group bg-gray-900 rounded-xl p-5 hover:bg-gray-800 transition-all hover:scale-[1.02] border border-gray-800"
+                className="group bg-gray-900 rounded-xl p-4 md:p-5 hover:bg-gray-800 transition-all hover:scale-[1.02] border border-gray-800"
               >
                 <span className="text-2xl">{action.icon}</span>
                 <p className="text-white font-bold text-sm mt-2">{action.label}</p>
@@ -459,34 +459,34 @@ export default function DashboardPage() {
                 전체 관리 →
               </Link>
             </div>
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              <table className="w-full text-left">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="w-full text-left min-w-[500px]">
                 <thead className="bg-gray-50 text-gray-400 text-xs font-bold uppercase tracking-wider">
                   <tr>
-                    <th className="p-4">회사명</th>
-                    <th className="p-4 text-center">플랜</th>
-                    <th className="p-4 text-center">활성 모듈</th>
-                    <th className="p-4 text-right">가입일</th>
+                    <th className="p-3 md:p-4">회사명</th>
+                    <th className="p-3 md:p-4 text-center">플랜</th>
+                    <th className="p-3 md:p-4 text-center">활성 모듈</th>
+                    <th className="p-3 md:p-4 text-right">가입일</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {platformStats.companyList.map(c => (
                     <tr key={c.id} className="hover:bg-gray-50 cursor-pointer transition-colors" onClick={() => router.push('/system-admin')}>
-                      <td className="p-4">
-                        <span className="font-bold text-gray-900">{c.name}</span>
+                      <td className="p-3 md:p-4">
+                        <span className="font-bold text-gray-900 text-sm">{c.name}</span>
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="p-3 md:p-4 text-center">
                         <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
                           c.plan === 'master' ? 'bg-yellow-100 text-yellow-700' :
                           c.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
                           'bg-gray-100 text-gray-500'
                         }`}>{c.plan?.toUpperCase() || 'FREE'}</span>
                       </td>
-                      <td className="p-4 text-center">
+                      <td className="p-3 md:p-4 text-center">
                         <span className="text-sm font-bold text-gray-700">{c.moduleCount}</span>
                         <span className="text-xs text-gray-400">/9</span>
                       </td>
-                      <td className="p-4 text-right text-xs text-gray-400">{new Date(c.created_at).toLocaleDateString('ko-KR')}</td>
+                      <td className="p-3 md:p-4 text-right text-xs text-gray-400">{new Date(c.created_at).toLocaleDateString('ko-KR')}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -518,16 +518,16 @@ export default function DashboardPage() {
   const showFinance = hasModule('/finance') || hasModule('/quotes')
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-6 min-h-screen bg-gray-50">
+    <div className="max-w-7xl mx-auto py-6 px-4 md:py-8 md:px-6 min-h-screen bg-gray-50">
 
       {/* 상단 인사 영역 */}
-      <div className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+      <div className="mb-6 md:mb-8">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 md:gap-4">
           <div>
-            <p className="text-gray-500 text-sm font-medium">
+            <p className="text-gray-500 text-xs sm:text-sm font-medium">
               {currentTime.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
             </p>
-            <h1 className="text-3xl font-black text-gray-900 mt-1">
+            <h1 className="text-2xl md:text-3xl font-black text-gray-900 mt-1">
               {getGreeting()}, <span className="text-indigo-600">{company?.name || user?.email?.split('@')[0] || '사용자'}</span>
             </h1>
             <p className="text-gray-400 mt-1 text-sm">오늘의 업무 현황을 확인하세요</p>
@@ -552,15 +552,15 @@ export default function DashboardPage() {
 
       {/* KPI 카드 영역 */}
       {(showCars || showCustomers || showInvest) && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
           {showCars && (
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">보유 차량</span>
-                <span className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-sm">🚗</span>
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <span className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wide">보유 차량</span>
+                <span className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-blue-50 flex items-center justify-center text-sm">🚗</span>
               </div>
-              <p className="text-3xl font-black text-gray-900">{loading ? '-' : stats.totalCars}<span className="text-base font-bold text-gray-400 ml-1">대</span></p>
-              <div className="mt-2 flex gap-2 text-[11px] font-medium">
+              <p className="text-2xl md:text-3xl font-black text-gray-900">{loading ? '-' : stats.totalCars}<span className="text-sm md:text-base font-bold text-gray-400 ml-1">대</span></p>
+              <div className="mt-1 md:mt-2 flex flex-wrap gap-1.5 md:gap-2 text-[10px] md:text-[11px] font-medium">
                 <span className="text-green-600">대기 {stats.availableCars}</span>
                 <span className="text-blue-600">대여 {stats.rentedCars}</span>
                 <span className="text-red-500">정비 {stats.maintenanceCars}</span>
@@ -568,36 +568,36 @@ export default function DashboardPage() {
             </div>
           )}
           {showCustomers && (
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">고객 수</span>
-                <span className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-sm">👥</span>
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <span className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wide">고객 수</span>
+                <span className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-emerald-50 flex items-center justify-center text-sm">👥</span>
               </div>
-              <p className="text-3xl font-black text-gray-900">{loading ? '-' : stats.totalCustomers}<span className="text-base font-bold text-gray-400 ml-1">명</span></p>
-              <p className="mt-2 text-[11px] text-gray-400">등록된 전체 고객</p>
+              <p className="text-2xl md:text-3xl font-black text-gray-900">{loading ? '-' : stats.totalCustomers}<span className="text-sm md:text-base font-bold text-gray-400 ml-1">명</span></p>
+              <p className="mt-1 md:mt-2 text-[10px] md:text-[11px] text-gray-400">등록된 전체 고객</p>
             </div>
           )}
           {showInvest && (
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">투자 유치</span>
-                <span className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center text-sm">💰</span>
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <span className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wide">투자 유치</span>
+                <span className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-purple-50 flex items-center justify-center text-sm">💰</span>
               </div>
-              <p className="text-3xl font-black text-gray-900">{loading ? '-' : formatMoney(stats.totalInvestAmount)}<span className="text-base font-bold text-gray-400 ml-1">원</span></p>
-              <p className="mt-2 text-[11px] text-gray-400">일반투자 {stats.activeInvestments}건 / 지입 {stats.jiipContracts}건</p>
+              <p className="text-2xl md:text-3xl font-black text-gray-900">{loading ? '-' : formatMoney(stats.totalInvestAmount)}<span className="text-sm md:text-base font-bold text-gray-400 ml-1">원</span></p>
+              <p className="mt-1 md:mt-2 text-[10px] md:text-[11px] text-gray-400">일반투자 {stats.activeInvestments}건 / 지입 {stats.jiipContracts}건</p>
             </div>
           )}
           {showCars && (
-            <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wide">가동률</span>
-                <span className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-sm">📊</span>
+            <div className="bg-white rounded-2xl p-4 md:p-5 border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between mb-2 md:mb-3">
+                <span className="text-[10px] md:text-xs font-bold text-gray-400 uppercase tracking-wide">가동률</span>
+                <span className="w-7 h-7 md:w-8 md:h-8 rounded-lg bg-amber-50 flex items-center justify-center text-sm">📊</span>
               </div>
-              <p className="text-3xl font-black text-gray-900">
+              <p className="text-2xl md:text-3xl font-black text-gray-900">
                 {loading || stats.totalCars === 0 ? '-' : Math.round((stats.rentedCars / stats.totalCars) * 100)}
-                <span className="text-base font-bold text-gray-400 ml-1">%</span>
+                <span className="text-sm md:text-base font-bold text-gray-400 ml-1">%</span>
               </p>
-              <p className="mt-2 text-[11px] text-gray-400">대여 중 / 전체 차량 비율</p>
+              <p className="mt-1 md:mt-2 text-[10px] md:text-[11px] text-gray-400">대여 중 / 전체 차량 비율</p>
             </div>
           )}
         </div>
@@ -664,7 +664,7 @@ export default function DashboardPage() {
               <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider">최근 등록 차량</h2>
               <Link href="/cars" className="text-xs text-indigo-500 hover:text-indigo-700 font-bold">전체 보기 →</Link>
             </div>
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
               {loading ? (
                 <div className="p-12 text-center text-gray-400">
                   <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto mb-2"></div>

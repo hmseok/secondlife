@@ -54,8 +54,8 @@ const [customers, setCustomers] = useState<any[]>([])
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-10 px-6 animate-fade-in">
-      <h1 className="text-3xl font-black text-gray-900 mb-8">👥 고객 관리 (CRM)</h1>
+    <div className="max-w-5xl mx-auto py-6 px-4 md:py-10 md:px-6 animate-fade-in">
+      <h1 className="text-2xl md:text-3xl font-black text-gray-900 mb-6 md:mb-8">👥 고객 관리 (CRM)</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
 

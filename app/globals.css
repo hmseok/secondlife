@@ -95,3 +95,44 @@ body {
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
+
+/* ===== Mobile Responsive ===== */
+
+/* 모바일: 불필요한 애니메이션 비활성화 (성능) */
+@media (max-width: 768px) {
+  .animate-fade-in-up,
+  .animate-fade-in-down,
+  .animate-slide-in-right {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* 모바일: 기본 터치 최적화 */
+@media (max-width: 768px) {
+  button, a, input, textarea, select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 테이블 가로 스크롤 래퍼 */
+  .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* 사이드바 오버레이 */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 15;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.sidebar-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}

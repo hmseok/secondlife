@@ -112,14 +112,14 @@ export default function SystemAdminPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-8">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
 
         {/* 헤더 */}
         <div className="mb-6 flex justify-between items-end">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900">구독/모듈 관리</h1>
-            <p className="text-slate-500 mt-1">회사별 기능 모듈을 ON/OFF 제어합니다. 모듈을 켜면 해당 회사의 사이드바 메뉴와 대시보드 카드가 활성화됩니다.</p>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">구독/모듈 관리</h1>
+            <p className="text-slate-500 mt-1 text-sm md:text-base">회사별 기능 모듈을 ON/OFF 제어합니다. 모듈을 켜면 해당 회사의 사이드바 메뉴와 대시보드 카드가 활성화됩니다.</p>
           </div>
           <button onClick={loadData} className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100">
             새로고침
@@ -206,7 +206,7 @@ export default function SystemAdminPage() {
                 </div>
 
                 {/* 모듈 토글 그리드 */}
-                <div className="p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                <div className="p-3 md:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
                   {modules.map(mod => {
                     const isActive = !!matrix[`${comp.id}_${mod.id}`]
                     return (
