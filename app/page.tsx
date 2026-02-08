@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from './utils/supabase'
 
@@ -29,6 +29,64 @@ function AuthPage() {
     email: false, password: false, passwordConfirm: false,
     phone: false, companyName: false,
   })
+
+  // 중복 체크 상태 (null=미확인, true=사용가능, false=중복)
+  const [dupCheck, setDupCheck] = useState<{
+    email: null | boolean
+    phone: null | boolean
+    companyName: null | boolean
+    businessNumber: null | boolean
+  }>({ email: null, phone: null, companyName: null, businessNumber: null })
+
+  // 중복 체크 로딩 상태
+  const [dupLoading, setDupLoading] = useState<{
+    email: boolean; phone: boolean; companyName: boolean; businessNumber: boolean
+  }>({ email: false, phone: false, companyName: false, businessNumber: false })
+
+  // 디바운스 타이머
+  const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({})
+
+  // 디바운스 중복 체크 함수
+  const debouncedCheck = useCallback((field: string, value: string, checkFn: () => Promise<void>) => {
+    if (debounceTimers.current[field]) clearTimeout(debounceTimers.current[field])
+    setDupCheck(prev => ({ ...prev, [field]: null }))
+    setDupLoading(prev => ({ ...prev, [field]: false }))
+
+    if (!value || value.trim() === '') return
+
+    debounceTimers.current[field] = setTimeout(async () => {
+      setDupLoading(prev => ({ ...prev, [field]: true }))
+      await checkFn()
+      setDupLoading(prev => ({ ...prev, [field]: false }))
+    }, 800)
+  }, [])
+
+  // 개별 중복 체크 함수들
+  const checkEmailDup = async (email: string) => {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return
+    const { data } = await supabase.rpc('check_email_exists', { check_email: email })
+    setDupCheck(prev => ({ ...prev, email: data === true ? false : true }))
+  }
+
+  const checkPhoneDup = async (phone: string) => {
+    const clean = phone.replace(/[^0-9]/g, '')
+    if (clean.length < 10) return
+    const { data } = await supabase.rpc('check_phone_exists', { check_phone: phone })
+    setDupCheck(prev => ({ ...prev, phone: data === true ? false : true }))
+  }
+
+  const checkCompanyNameDup = async (name: string) => {
+    if (name.trim().length < 2) return
+    const { data } = await supabase.rpc('check_company_name_exists', { check_name: name })
+    setDupCheck(prev => ({ ...prev, companyName: data === true ? false : true }))
+  }
+
+  const checkBusinessNumberDup = async (bn: string) => {
+    const clean = bn.replace(/[^0-9]/g, '')
+    if (clean.length < 10) return
+    const { data } = await supabase.rpc('check_business_number_exists', { check_bn: bn })
+    setDupCheck(prev => ({ ...prev, businessNumber: data === true ? false : true }))
+  }
 
   // 이미 로그인된 사용자 → 바로 이동
   useEffect(() => {
@@ -86,11 +144,13 @@ function AuthPage() {
     if (name === 'email') {
       const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
       setValidity(prev => ({ ...prev, email: ok }))
+      if (view === 'signup' && ok) {
+        debouncedCheck('email', value, () => checkEmailDup(value))
+      }
     }
     if (name === 'password') {
       const ok = /^(?=.*[a-zA-Z])(?=.*\d).{8,}$/.test(value)
       setValidity(prev => ({ ...prev, password: ok }))
-      // 비밀번호 변경 시 확인 필드도 재검증
       if (formData.passwordConfirm) {
         setValidity(prev => ({ ...prev, passwordConfirm: formData.passwordConfirm === value }))
       }
@@ -99,10 +159,23 @@ function AuthPage() {
       setValidity(prev => ({ ...prev, passwordConfirm: value === formData.password && value.length > 0 }))
     }
     if (name === 'phone') {
-      setValidity(prev => ({ ...prev, phone: value.replace(/[^0-9]/g, '').length >= 10 }))
+      const clean = value.replace(/[^0-9]/g, '')
+      setValidity(prev => ({ ...prev, phone: clean.length >= 10 }))
+      if (view === 'signup' && clean.length >= 10) {
+        debouncedCheck('phone', value, () => checkPhoneDup(value))
+      }
     }
     if (name === 'companyName') {
       setValidity(prev => ({ ...prev, companyName: value.trim().length > 1 }))
+      if (view === 'signup' && roleType === 'founder' && value.trim().length > 1) {
+        debouncedCheck('companyName', value, () => checkCompanyNameDup(value))
+      }
+    }
+    if (name === 'businessNumber') {
+      const clean = value.replace(/[^0-9-]/g, '')
+      if (view === 'signup' && roleType === 'founder' && clean.replace(/[^0-9]/g, '').length >= 10) {
+        debouncedCheck('businessNumber', value, () => checkBusinessNumberDup(value))
+      }
     }
   }
 
@@ -129,14 +202,81 @@ function AuthPage() {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    // 1. 기본 유효성 검증
     if (!validity.email || !validity.password || !validity.passwordConfirm || !validity.companyName) {
       setMessage({ text: '모든 항목을 올바르게 입력해주세요.', type: 'error' })
       return
     }
 
+    if (!formData.name.trim()) {
+      setMessage({ text: '이름을 입력해주세요.', type: 'error' })
+      return
+    }
+
+    if (!validity.phone) {
+      setMessage({ text: '올바른 전화번호를 입력해주세요. (10자리 이상)', type: 'error' })
+      return
+    }
+
+    // 2. 비밀번호 추가 검증 (특수문자 포함 권장)
+    if (formData.password.length < 8) {
+      setMessage({ text: '비밀번호는 최소 8자 이상이어야 합니다.', type: 'error' })
+      return
+    }
+
+    // 3. 클라이언트 중복 체크 결과 확인
+    if (dupCheck.email === false) {
+      setMessage({ text: '이미 사용 중인 이메일입니다.', type: 'error' })
+      return
+    }
+    if (dupCheck.phone === false) {
+      setMessage({ text: '이미 등록된 전화번호입니다.', type: 'error' })
+      return
+    }
+    if (roleType === 'founder') {
+      if (dupCheck.companyName === false) {
+        setMessage({ text: '이미 등록된 회사명입니다.', type: 'error' })
+        return
+      }
+      if (dupCheck.businessNumber === false) {
+        setMessage({ text: '이미 등록된 사업자번호입니다.', type: 'error' })
+        return
+      }
+    }
+
     setLoading(true)
     setMessage(null)
 
+    // 4. 서버사이드 통합 검증 (최종 확인)
+    try {
+      const { data: validation, error: valError } = await supabase.rpc('validate_signup', {
+        p_email: formData.email,
+        p_phone: formData.phone,
+        p_company_name: roleType === 'founder' ? formData.companyName : null,
+        p_business_number: roleType === 'founder' ? formData.businessNumber : null,
+      })
+
+      if (valError) {
+        console.error('Validation RPC error:', valError)
+        // RPC 실패 시에도 가입은 시도 (함수가 아직 미설치일 수 있음)
+      } else if (validation && !validation.valid) {
+        const errors = validation.errors as string[]
+        const errorMsgs: Record<string, string> = {
+          email_exists: '이미 사용 중인 이메일입니다.',
+          phone_exists: '이미 등록된 전화번호입니다.',
+          company_exists: '이미 등록된 회사명입니다.',
+          business_number_exists: '이미 등록된 사업자번호입니다.',
+        }
+        const firstError = errors[0]
+        setMessage({ text: errorMsgs[firstError] || '입력 정보가 중복됩니다.', type: 'error' })
+        setLoading(false)
+        return
+      }
+    } catch (err) {
+      console.error('Validation error:', err)
+    }
+
+    // 5. Supabase 회원가입 실행
     const { error } = await supabase.auth.signUp({
       email: formData.email,
       password: formData.password,
@@ -251,6 +391,18 @@ function AuthPage() {
       </svg>
     ) : null
   )
+
+  // 중복 체크 상태 표시
+  const DupStatus = ({ field, label }: { field: keyof typeof dupCheck; label: string }) => {
+    if (view !== 'signup') return null
+    const isLoading = dupLoading[field]
+    const result = dupCheck[field]
+
+    if (isLoading) return <span className="text-[10px] text-blue-500 font-medium flex items-center gap-1"><svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" className="opacity-75"/></svg>확인 중</span>
+    if (result === true) return <span className="text-[10px] text-emerald-500 font-bold">사용 가능</span>
+    if (result === false) return <span className="text-[10px] text-red-500 font-bold">이미 등록됨</span>
+    return null
+  }
 
   // ==================================
   // RENDER
@@ -551,12 +703,17 @@ function AuthPage() {
 
                 {/* 이메일 */}
                 <div>
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Email Address</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Email Address</label>
+                    <DupStatus field="email" label="이메일" />
+                  </div>
                   <div className="relative">
                     <input
                       name="email" type="email" value={formData.email} onChange={handleChange}
                       placeholder="name@company.com"
                       className={`w-full px-4 py-3.5 bg-slate-50 border-2 rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 transition-all focus:bg-white ${
+                        formData.email && validity.email && dupCheck.email === true ? 'border-emerald-300 focus:border-emerald-400' :
+                        formData.email && validity.email && dupCheck.email === false ? 'border-red-300 focus:border-red-400' :
                         formData.email && validity.email ? 'border-emerald-300 focus:border-emerald-400' :
                         formData.email && !validity.email ? 'border-red-200 focus:border-red-300' :
                         'border-transparent focus:border-slate-300'
@@ -627,7 +784,10 @@ function AuthPage() {
                           className="w-full px-4 py-3.5 bg-slate-50 border-2 border-transparent rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 focus:bg-white focus:border-slate-300 transition-all"/>
                       </div>
                       <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Phone</label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phone</label>
+                          <DupStatus field="phone" label="전화번호" />
+                        </div>
                         <div className="relative">
                           <input name="phone" type="tel" value={formData.phone} onChange={handleChange} placeholder="01012345678"
                             className={`w-full px-4 py-3.5 bg-slate-50 border-2 rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 focus:bg-white transition-all ${
@@ -643,9 +803,12 @@ function AuthPage() {
 
                     {/* 회사명 */}
                     <div>
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                        {roleType === 'founder' ? 'Corporate Name' : 'Company Name'}
-                      </label>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          {roleType === 'founder' ? 'Corporate Name' : 'Company Name'}
+                        </label>
+                        {roleType === 'founder' && <DupStatus field="companyName" label="회사명" />}
+                      </div>
                       <div className="relative">
                         <input name="companyName" type="text" value={formData.companyName} onChange={handleChange}
                           placeholder={roleType === 'founder' ? '(주)법인명 또는 상호명' : '재직 중인 회사명'}
@@ -662,7 +825,10 @@ function AuthPage() {
                     {/* 사업자번호 (대표만) */}
                     {roleType === 'founder' && (
                       <div className="animate-fade-in-down">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Business Registration No.</label>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Business Registration No.</label>
+                          <DupStatus field="businessNumber" label="사업자번호" />
+                        </div>
                         <input name="businessNumber" type="text" value={formData.businessNumber} onChange={handleChange}
                           placeholder="000-00-00000 (선택사항)"
                           className="w-full px-4 py-3.5 bg-slate-50 border-2 border-transparent rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 focus:bg-white focus:border-slate-300 transition-all"/>
@@ -715,6 +881,7 @@ function AuthPage() {
                     setMessage(null)
                     setFormData({ email: '', password: '', passwordConfirm: '', name: '', phone: '', companyName: '', businessNumber: '' })
                     setValidity({ email: false, password: false, passwordConfirm: false, phone: false, companyName: false })
+                    setDupCheck({ email: null, phone: null, companyName: null, businessNumber: null })
                   }}
                   className="ml-2 text-sm font-bold text-blue-600 hover:text-blue-800 transition-colors"
                 >
