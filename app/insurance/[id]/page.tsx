@@ -1,6 +1,6 @@
 'use client'
 import { supabase } from '../../utils/supabase'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 const Icons = {
   Back: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>,
@@ -28,6 +28,21 @@ export default function InsuranceDetailPage() {
   // 확대 보기 모달 상태
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [previewTitle, setPreviewTitle] = useState('')
+  const appFileRef = useRef<HTMLInputElement>(null)
+  const certFileRef = useRef<HTMLInputElement>(null)
+
+  // PDF 여부 판별
+  const isPdfUrl = (url: string) => url?.toLowerCase().includes('.pdf')
+
+  // ESC 키로 모달 닫기
+  useEffect(() => {
+    if (!previewUrl) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewUrl(null)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [previewUrl])
 
   const [ins, setIns] = useState<any>({
     company: '', product_name: '', contractor: '',
@@ -315,71 +330,156 @@ export default function InsuranceDetailPage() {
             {/* 3. 우측: Sticky 파일 뷰어 섹션 */}
             <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-6 h-fit">
 
-                {['application', 'certificate'].map(type => (
-                    <div key={type} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                {/* 청약서 */}
+                {(() => {
+                  const url = ins.application_form_url
+                  const isPdf = url && isPdfUrl(url)
+                  return (
+                    <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
                         <div className="flex justify-between items-center mb-3">
                             <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${type==='application'?'bg-blue-500':'bg-green-500'}`}></span>
-                                {type === 'application' ? '📄 청약서' : '🎖️ 가입증명서'}
+                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                📄 청약서
                             </h3>
-                            {ins[`${type}_form_url`] || ins[`${type}_url`] ? <Icons.Check /> : null}
+                            <div className="flex items-center gap-2">
+                                {url && <Icons.Check />}
+                                <button onClick={() => appFileRef.current?.click()} className="text-xs text-steel-600 bg-steel-50 px-2.5 py-1 rounded-lg font-bold hover:bg-steel-100 transition-colors">
+                                    {url ? '재업로드' : '업로드'}
+                                </button>
+                                <input ref={appFileRef} type="file" className="hidden" accept=".pdf,image/*" onChange={e => handleFileUpload(e, 'application')} />
+                            </div>
                         </div>
-
-                        <div onClick={() => openPreview(ins[`${type}_form_url`] || ins[`${type}_url`], type === 'application' ? '청약서 상세' : '가입증명서 상세')}
-                             className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl relative hover:border-steel-400 transition-colors h-64 flex flex-col items-center justify-center overflow-hidden group cursor-pointer">
-
-                            {ins[`${type}_form_url`] || ins[`${type}_url`] ? (
-                                <>
-                                    <iframe src={ins[`${type}_form_url`] || ins[`${type}_url`]} className="w-full h-full object-contain pointer-events-none" />
-                                    <div className="absolute inset-0 bg-black/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <button className="bg-white text-gray-800 px-4 py-2 rounded-full font-bold shadow-lg flex items-center gap-2 transform translate-y-2 group-hover:translate-y-0 transition-transform">
-                                            🔍 크게 보기
-                                        </button>
-                                    </div>
-                                </>
+                        <div
+                            onClick={() => url && openPreview(url, '청약서 상세')}
+                            className={`aspect-[1/1.4] bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden ${url ? 'cursor-pointer group hover:border-steel-400' : ''} transition-colors relative`}
+                        >
+                            {url ? (
+                                isPdf ? (
+                                    <>
+                                        <div className="flex flex-col items-center text-gray-500">
+                                            <Icons.File />
+                                            <p className="text-xs font-bold mt-2">PDF 문서</p>
+                                            <p className="text-xs text-gray-400 mt-1">클릭하여 보기</p>
+                                        </div>
+                                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <span className="bg-white text-gray-800 px-4 py-2 rounded-full font-bold shadow-lg text-sm">🔍 크게 보기</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <img src={url} className="w-full h-full object-contain" alt="청약서" />
+                                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <span className="bg-white text-gray-800 px-4 py-2 rounded-full font-bold shadow-lg text-sm">🔍 크게 보기</span>
+                                        </div>
+                                    </>
+                                )
                             ) : (
-                                <div className="text-gray-400 flex flex-col items-center">
+                                <div className="text-gray-400 flex flex-col items-center cursor-pointer" onClick={() => appFileRef.current?.click()}>
                                     <Icons.Upload />
                                     <p className="text-xs mt-2 font-medium">클릭하여 파일 업로드</p>
                                 </div>
                             )}
-                            {!(ins[`${type}_form_url`] || ins[`${type}_url`]) && (
-                                <input type="file" className="absolute inset-0 cursor-pointer opacity-0" accept=".pdf,image/*" onChange={(e)=>handleFileUpload(e, type as any)}/>
+                        </div>
+                    </div>
+                  )
+                })()}
+
+                {/* 가입증명서 */}
+                {(() => {
+                  const url = ins.certificate_url
+                  const isPdf = url && isPdfUrl(url)
+                  return (
+                    <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                        <div className="flex justify-between items-center mb-3">
+                            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                                🎖️ 가입증명서
+                            </h3>
+                            <div className="flex items-center gap-2">
+                                {url && <Icons.Check />}
+                                <button onClick={() => certFileRef.current?.click()} className="text-xs text-steel-600 bg-steel-50 px-2.5 py-1 rounded-lg font-bold hover:bg-steel-100 transition-colors">
+                                    {url ? '재업로드' : '업로드'}
+                                </button>
+                                <input ref={certFileRef} type="file" className="hidden" accept=".pdf,image/*" onChange={e => handleFileUpload(e, 'certificate')} />
+                            </div>
+                        </div>
+                        <div
+                            onClick={() => url && openPreview(url, '가입증명서 상세')}
+                            className={`aspect-[1/1.4] bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden ${url ? 'cursor-pointer group hover:border-steel-400' : ''} transition-colors relative`}
+                        >
+                            {url ? (
+                                isPdf ? (
+                                    <>
+                                        <div className="flex flex-col items-center text-gray-500">
+                                            <Icons.File />
+                                            <p className="text-xs font-bold mt-2">PDF 문서</p>
+                                            <p className="text-xs text-gray-400 mt-1">클릭하여 보기</p>
+                                        </div>
+                                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <span className="bg-white text-gray-800 px-4 py-2 rounded-full font-bold shadow-lg text-sm">🔍 크게 보기</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <img src={url} className="w-full h-full object-contain" alt="가입증명서" />
+                                        <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <span className="bg-white text-gray-800 px-4 py-2 rounded-full font-bold shadow-lg text-sm">🔍 크게 보기</span>
+                                        </div>
+                                    </>
+                                )
+                            ) : (
+                                <div className="text-gray-400 flex flex-col items-center cursor-pointer" onClick={() => certFileRef.current?.click()}>
+                                    <Icons.Upload />
+                                    <p className="text-xs mt-2 font-medium">클릭하여 파일 업로드</p>
+                                </div>
                             )}
                         </div>
                     </div>
-                ))}
+                  )
+                })()}
 
             </div>
         </div>
       </div>
 
-      {/* 확대 보기 모달 */}
+      {/* 확대 보기 모달 — 이미지: 풀스크린 검은 배경 / PDF: 흰색 프레임 */}
       {previewUrl && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setPreviewUrl(null)}>
-              <div className="bg-white w-full max-w-6xl h-[90vh] rounded-2xl overflow-hidden relative shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-                  <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
-                      <h3 className="font-bold text-xl text-gray-900 flex items-center gap-2">📄 {previewTitle}</h3>
-                      <div className="flex items-center gap-3">
-                          <a href={previewUrl} target="_blank" className="flex items-center gap-1 text-sm font-bold text-steel-600 bg-steel-50 px-3 py-2 rounded-lg hover:bg-steel-100 transition-colors">
-                              <Icons.External /> 새 창으로 열기
-                          </a>
-                          <button onClick={() => setPreviewUrl(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
-                              <Icons.Close />
-                          </button>
+          isPdfUrl(previewUrl) ? (
+              /* PDF 모달 — 흰색 프레임 + iframe */
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4" onClick={() => setPreviewUrl(null)}>
+                  <div className="bg-white w-full max-w-6xl h-[90vh] rounded-2xl overflow-hidden relative shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+                      <div className="flex justify-between items-center px-6 py-4 border-b bg-white shrink-0">
+                          <h3 className="font-bold text-xl text-gray-900 flex items-center gap-2">📄 {previewTitle}</h3>
+                          <div className="flex items-center gap-3">
+                              <a href={previewUrl} target="_blank" className="flex items-center gap-1 text-sm font-bold text-steel-600 bg-steel-50 px-3 py-2 rounded-lg hover:bg-steel-100 transition-colors">
+                                  <Icons.External /> 새 창으로 열기
+                              </a>
+                              <button onClick={() => setPreviewUrl(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
+                                  <Icons.Close />
+                              </button>
+                          </div>
+                      </div>
+                      <div className="flex-1 bg-gray-100 relative overflow-hidden">
+                          <iframe src={previewUrl} className="w-full h-full border-none" />
                       </div>
                   </div>
-                  <div className="flex-1 bg-gray-100 p-0 relative overflow-hidden">
-                      {previewUrl.toLowerCase().includes('.pdf') ? (
-                          <iframe src={previewUrl} className="w-full h-full border-none" />
-                      ) : (
-                          <div className="w-full h-full flex items-center justify-center overflow-auto">
-                              <img src={previewUrl} className="max-w-full max-h-full object-contain shadow-lg" />
-                          </div>
-                      )}
-                  </div>
               </div>
-          </div>
+          ) : (
+              /* 이미지 모달 — 등록증과 동일한 풀스크린 검은 배경 */
+              <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4" onClick={() => setPreviewUrl(null)}>
+                  <div className="absolute top-4 right-4 flex items-center gap-3 z-10" onClick={e => e.stopPropagation()}>
+                      <a href={previewUrl} target="_blank" className="flex items-center gap-1 text-sm font-bold text-white/80 bg-white/10 px-3 py-2 rounded-lg hover:bg-white/20 transition-colors backdrop-blur-sm">
+                          <Icons.External /> 새 창
+                      </a>
+                      <button onClick={() => setPreviewUrl(null)} className="p-2 text-white/80 hover:text-white bg-white/10 rounded-full hover:bg-white/20 transition-colors backdrop-blur-sm">
+                          <Icons.Close />
+                      </button>
+                  </div>
+                  <p className="text-white/60 text-sm font-bold mb-3">{previewTitle}</p>
+                  <img src={previewUrl} className="max-w-full max-h-[90vh] rounded-lg shadow-2xl" alt={previewTitle} />
+                  <p className="text-white/40 text-xs mt-3">ESC 또는 바깥 영역 클릭으로 닫기</p>
+              </div>
+          )
       )}
     </div>
   )

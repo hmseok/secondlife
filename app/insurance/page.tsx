@@ -59,6 +59,15 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
   const [allCars, setAllCars] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
 
+  // VIN 매칭 실패 재시도 관련
+  const [failedItems, setFailedItems] = useState<any[]>([])
+  const [retryModalOpen, setRetryModalOpen] = useState(false)
+  const [currentRetryIdx, setCurrentRetryIdx] = useState(0)
+  const [retryVin, setRetryVin] = useState('')
+  const [retryProcessing, setRetryProcessing] = useState(false)
+  const [retryCarSearch, setRetryCarSearch] = useState('')
+  const [retryCars, setRetryCars] = useState<any[]>([])  // DB 전체 차량 (VIN 포함)
+
   useEffect(() => { fetchList() }, [company, role, adminSelectedCompanyId])
 
   const fetchList = async () => {
@@ -111,6 +120,7 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
       setBulkProcessing(true)
       setProgress({ current: 0, total: files.length, success: 0, fail: 0, skipped: 0 })
       setLogs([])
+      const newFailedItems: any[] = []
 
       for (let i = 0; i < files.length; i++) {
           const originalFile = files[i]
@@ -147,79 +157,35 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                   if (candidate.length > 10) detectedVin = candidate;
               }
               detectedVin = detectedVin?.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-              if (!detectedVin || detectedVin.length < 10) throw new Error(`차대번호(VIN) 식별 실패`);
+
+              // VIN 식별 실패 또는 DB 매칭 실패 → failedItems에 수집
+              if (!detectedVin || detectedVin.length < 10) {
+                  newFailedItems.push({
+                    fileName: originalFile.name, detectedVin: detectedVin || '',
+                    ocrResult: result, uploadedUrl: urlData.publicUrl,
+                    isCertificate: result.doc_type === 'certificate',
+                    errorMsg: '차대번호(VIN) 식별 실패'
+                  })
+                  setProgress(prev => ({ ...prev, fail: prev.fail + 1 }))
+                  setLogs(prev => [`⚠️ [VIN 미식별] ${originalFile.name} → 후처리 대기`, ...prev])
+                  continue
+              }
 
               // DB 차량 매칭
               const { data: carData } = await supabase.from('cars').select('id, number, brand').ilike('vin', `%${detectedVin.slice(-6)}`).maybeSingle();
-              if (!carData) throw new Error(`미등록 차대번호: ${detectedVin}`);
-
-              // 브랜드 업데이트
-              if (result.brand && result.brand !== '기타' && (!carData.brand || carData.brand === '기타')) {
-                  await supabase.from('cars').update({ brand: result.brand }).eq('id', carData.id);
+              if (!carData) {
+                  newFailedItems.push({
+                    fileName: originalFile.name, detectedVin,
+                    ocrResult: result, uploadedUrl: urlData.publicUrl,
+                    isCertificate: result.doc_type === 'certificate',
+                    errorMsg: `미등록 차대번호: ${detectedVin}`
+                  })
+                  setProgress(prev => ({ ...prev, fail: prev.fail + 1 }))
+                  setLogs(prev => [`⚠️ [매칭실패] ${originalFile.name}: ${detectedVin} → 후처리 대기`, ...prev])
+                  continue
               }
 
-              const isCertificate = result.doc_type === 'certificate';
-
-              // 🔥 Payload 구성 (기본 데이터)
-              const payload: any = {
-                  car_id: carData.id,
-                  company: result.company || '기타',
-                  product_name: result.product_name || '',
-                  start_date: cleanDate(result.start_date),
-                  end_date: cleanDate(result.end_date),
-                  premium: cleanNumber(result.premium),
-                  initial_premium: cleanNumber(result.initial_premium),
-                  car_value: cleanNumber(result.car_value),
-                  accessory_value: cleanNumber(result.accessory_value),
-                  contractor: result.contractor,
-                  policy_number: result.policy_number,
-                  coverage_bi1: result.coverage_bi1,
-                  coverage_bi2: result.coverage_bi2,
-                  coverage_pd: result.coverage_pd,
-                  coverage_self_injury: result.coverage_self_injury,
-                  coverage_uninsured: result.coverage_uninsured,
-                  coverage_own_damage: result.coverage_own_damage,
-                  coverage_emergency: result.coverage_emergency,
-                  driver_range: result.driver_range,
-                  age_limit: result.age_limit,
-                  installments: result.installments || [],
-                  payment_account: result.payment_account,
-                  status: 'active'
-              }
-
-              // 파일 URL 설정
-              if (isCertificate) {
-                  payload.certificate_url = urlData.publicUrl;
-              } else {
-                  payload.application_form_url = urlData.publicUrl;
-              }
-
-              // 🔥 [핵심 로직] 기존 계약 존재 여부 확인 (Update vs Insert)
-              // 해당 차량의 최신 'active' 계약을 찾음
-              const { data: existingContract } = await supabase
-                  .from('insurance_contracts')
-                  .select('id')
-                  .eq('car_id', carData.id)
-                  .eq('status', 'active')
-                  .order('created_at', { ascending: false })
-                  .limit(1)
-                  .maybeSingle();
-
-              if (existingContract) {
-                  // ✅ 기존 계약이 있으면 -> Update (병합)
-                  // 주의: 이미 있는 파일 URL은 덮어쓰지 않도록, payload에서 없는 쪽 URL은 제외해야 함
-                  // 하지만 위에서 payload 생성 시, 한쪽 URL만 넣었으므로 그대로 update하면
-                  // Supabase는 명시된 컬럼만 업데이트하므로 안전함.
-
-                  await supabase.from('insurance_contracts').update(payload).eq('id', existingContract.id);
-                  setLogs(prev => [`✨ [업데이트] ${carData.number} 기존 내역에 파일 추가됨`, ...prev])
-              } else {
-                  // ✅ 기존 계약이 없으면 -> Insert (신규)
-                  const { error: insertError } = await supabase.from('insurance_contracts').insert([payload]);
-                  if (insertError) throw insertError;
-                  setLogs(prev => [`✅ [신규등록] ${carData.number} (${isCertificate?'증명서':'청약서'})`, ...prev])
-              }
-
+              await saveInsuranceContract(result, carData, urlData.publicUrl)
               setProgress(prev => ({ ...prev, success: prev.success + 1 }))
 
           } catch (error: any) {
@@ -228,6 +194,131 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
           }
       }
       setBulkProcessing(false)
+      fetchList()
+
+      // 실패 항목이 있으면 재시도 모달 오픈
+      if (newFailedItems.length > 0) {
+          setFailedItems(newFailedItems)
+          setCurrentRetryIdx(0)
+          setRetryVin(newFailedItems[0].detectedVin)
+          setRetryCarSearch('')
+          // DB 차량 목록 (VIN 포함) 로드
+          const { data: cars } = await supabase.from('cars').select('id, number, model, brand, vin').order('number')
+          setRetryCars(cars || [])
+          setRetryModalOpen(true)
+      }
+  }
+
+  // 보험 계약 저장 (공통 로직 — processFiles, retryMatch에서 공유)
+  const saveInsuranceContract = async (ocrResult: any, carData: any, uploadedUrl: string) => {
+      // 브랜드 업데이트
+      if (ocrResult.brand && ocrResult.brand !== '기타' && (!carData.brand || carData.brand === '기타')) {
+          await supabase.from('cars').update({ brand: ocrResult.brand }).eq('id', carData.id);
+      }
+
+      const isCertificate = ocrResult.doc_type === 'certificate';
+
+      const payload: any = {
+          car_id: carData.id,
+          company: ocrResult.company || '기타',
+          product_name: ocrResult.product_name || '',
+          start_date: cleanDate(ocrResult.start_date),
+          end_date: cleanDate(ocrResult.end_date),
+          premium: cleanNumber(ocrResult.premium),
+          initial_premium: cleanNumber(ocrResult.initial_premium),
+          car_value: cleanNumber(ocrResult.car_value),
+          accessory_value: cleanNumber(ocrResult.accessory_value),
+          contractor: ocrResult.contractor,
+          policy_number: ocrResult.policy_number,
+          coverage_bi1: ocrResult.coverage_bi1,
+          coverage_bi2: ocrResult.coverage_bi2,
+          coverage_pd: ocrResult.coverage_pd,
+          coverage_self_injury: ocrResult.coverage_self_injury,
+          coverage_uninsured: ocrResult.coverage_uninsured,
+          coverage_own_damage: ocrResult.coverage_own_damage,
+          coverage_emergency: ocrResult.coverage_emergency,
+          driver_range: ocrResult.driver_range,
+          age_limit: ocrResult.age_limit,
+          installments: ocrResult.installments || [],
+          payment_account: ocrResult.payment_account,
+          status: 'active'
+      }
+
+      if (isCertificate) {
+          payload.certificate_url = uploadedUrl;
+      } else {
+          payload.application_form_url = uploadedUrl;
+      }
+
+      const { data: existingContract } = await supabase
+          .from('insurance_contracts')
+          .select('id')
+          .eq('car_id', carData.id)
+          .eq('status', 'active')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+      if (existingContract) {
+          await supabase.from('insurance_contracts').update(payload).eq('id', existingContract.id);
+          setLogs(prev => [`✨ [업데이트] ${carData.number} 기존 내역에 파일 추가됨`, ...prev])
+      } else {
+          const { error: insertError } = await supabase.from('insurance_contracts').insert([payload]);
+          if (insertError) throw insertError;
+          setLogs(prev => [`✅ [신규등록] ${carData.number} (${isCertificate?'증명서':'청약서'})`, ...prev])
+      }
+  }
+
+  // 재시도: 수정된 VIN으로 재매칭
+  const retryWithEditedVin = async () => {
+      const item = failedItems[currentRetryIdx]
+      if (!retryVin || retryVin.length < 6) { alert('차대번호를 6자 이상 입력해주세요.'); return }
+      setRetryProcessing(true)
+      try {
+          const cleanVin = retryVin.replace(/[^a-zA-Z0-9]/g, '').toUpperCase()
+          const { data: carData } = await supabase.from('cars').select('id, number, brand').ilike('vin', `%${cleanVin.slice(-6)}`).maybeSingle()
+          if (!carData) { alert(`매칭 실패: "${cleanVin}" 끝 6자리와 일치하는 차량이 없습니다.`); setRetryProcessing(false); return }
+          await saveInsuranceContract(item.ocrResult, carData, item.uploadedUrl)
+          alert(`${carData.number} 차량에 등록 완료!`)
+          goToNextRetry()
+      } catch (err: any) {
+          alert('저장 실패: ' + err.message)
+      }
+      setRetryProcessing(false)
+  }
+
+  // 재시도: 차량 직접 선택
+  const retryWithCarSelect = async (car: any) => {
+      const item = failedItems[currentRetryIdx]
+      setRetryProcessing(true)
+      try {
+          await saveInsuranceContract(item.ocrResult, car, item.uploadedUrl)
+          alert(`${car.number} 차량에 등록 완료!`)
+          goToNextRetry()
+      } catch (err: any) {
+          alert('저장 실패: ' + err.message)
+      }
+      setRetryProcessing(false)
+  }
+
+  // 다음 실패 항목으로 이동
+  const goToNextRetry = () => {
+      const nextIdx = currentRetryIdx + 1
+      if (nextIdx < failedItems.length) {
+          setCurrentRetryIdx(nextIdx)
+          setRetryVin(failedItems[nextIdx].detectedVin)
+          setRetryCarSearch('')
+      } else {
+          setRetryModalOpen(false)
+          setFailedItems([])
+          fetchList()
+      }
+  }
+
+  // 재시도 모달 닫기 (남은 건 모두 건너뛰기)
+  const closeRetryModal = () => {
+      setRetryModalOpen(false)
+      setFailedItems([])
       fetchList()
   }
 
@@ -434,6 +525,112 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                   <div className="text-gray-300 font-bold text-xl group-hover:text-blue-600 transition-colors">→</div>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* VIN 매칭 실패 재시도 모달 */}
+      {retryModalOpen && failedItems.length > 0 && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={closeRetryModal}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] flex flex-col shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            {/* 헤더 */}
+            <div className="px-5 py-4 border-b bg-amber-50 flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-lg font-black text-amber-800">⚠️ VIN 매칭 실패 — 수동 보정</h2>
+                <p className="text-xs text-amber-600 mt-0.5">{currentRetryIdx + 1} / {failedItems.length}건</p>
+              </div>
+              <button onClick={closeRetryModal} className="text-2xl font-light text-gray-400 hover:text-black">&times;</button>
+            </div>
+
+            {/* 본문 */}
+            <div className="flex-1 overflow-y-auto">
+              {(() => {
+                const item = failedItems[currentRetryIdx]
+                const filteredRetryCars = retryCars.filter(c =>
+                  c.number.includes(retryCarSearch) ||
+                  (c.vin && c.vin.toUpperCase().includes(retryCarSearch.toUpperCase())) ||
+                  (c.brand && c.brand.includes(retryCarSearch))
+                )
+                return (
+                  <div>
+                    {/* 실패 파일 정보 */}
+                    <div className="p-5 bg-white border-b">
+                      <div className="text-xs text-gray-500 font-bold mb-1">파일명</div>
+                      <div className="font-bold text-gray-900 text-sm mb-4">{item.fileName}</div>
+
+                      <div className="text-xs text-gray-500 font-bold mb-1">OCR 인식 차대번호</div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          value={retryVin}
+                          onChange={e => setRetryVin(e.target.value.toUpperCase())}
+                          className="flex-1 p-3 border rounded-xl font-mono text-sm font-bold tracking-wider focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-amber-50"
+                          placeholder="차대번호 입력/수정"
+                        />
+                        <button
+                          onClick={retryWithEditedVin}
+                          disabled={retryProcessing}
+                          className="px-4 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+                        >
+                          {retryProcessing ? '...' : '재매칭'}
+                        </button>
+                      </div>
+                      {item.detectedVin && (
+                        <p className="text-xs text-gray-400 mt-2">원본 인식: <span className="font-mono">{item.detectedVin}</span></p>
+                      )}
+                    </div>
+
+                    {/* 구분선 */}
+                    <div className="px-5 py-3 bg-gray-50 border-b">
+                      <p className="text-xs text-gray-500 font-bold">또는 아래 등록 차량에서 직접 선택</p>
+                      <input
+                        value={retryCarSearch}
+                        onChange={e => setRetryCarSearch(e.target.value)}
+                        className="w-full mt-2 p-2.5 border rounded-lg text-sm focus:border-blue-500 outline-none"
+                        placeholder="차량번호, VIN, 브랜드로 검색"
+                      />
+                    </div>
+
+                    {/* DB 차량 목록 (기준 데이터) */}
+                    <div className="max-h-[280px] overflow-y-auto divide-y divide-gray-100">
+                      {filteredRetryCars.map(car => (
+                        <div
+                          key={car.id}
+                          onClick={() => !retryProcessing && retryWithCarSelect(car)}
+                          className="px-5 py-3 hover:bg-blue-50 cursor-pointer transition-colors group"
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <span className="font-bold text-gray-900 group-hover:text-blue-700">{car.number}</span>
+                              <span className="text-xs text-gray-400 ml-2">{car.brand} {car.model}</span>
+                            </div>
+                            <span className="text-xs text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">선택</span>
+                          </div>
+                          <div className="text-xs text-gray-500 font-mono mt-1">
+                            VIN: {car.vin || '미등록'}
+                          </div>
+                        </div>
+                      ))}
+                      {filteredRetryCars.length === 0 && (
+                        <div className="p-8 text-center text-gray-400 text-sm">검색 결과 없음</div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* 푸터 */}
+            <div className="px-5 py-3 border-t bg-gray-50 flex justify-between items-center shrink-0">
+              <button onClick={closeRetryModal} className="text-sm text-gray-500 hover:text-gray-700 font-medium">
+                나머지 모두 건너뛰기
+              </button>
+              <button
+                onClick={goToNextRetry}
+                className="px-4 py-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg font-bold hover:bg-gray-50 transition-colors"
+              >
+                이 건 건너뛰기 →
+              </button>
             </div>
           </div>
         </div>
