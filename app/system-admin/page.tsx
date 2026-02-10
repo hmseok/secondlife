@@ -6,14 +6,14 @@ import { useApp } from '../context/AppContext'
 
 // ============================================
 // 구독/모듈 관리 (god_admin 전용)
-// 플랜 그룹 설정 + 회사별 모듈 ON/OFF
+// 전체 모듈 풀 + 플랜별 배분 + 회사별 ON/OFF
 // ============================================
 
 const PLANS = [
-  { key: 'free', label: '무료', color: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', headerBg: 'bg-slate-50 border-slate-200', headerText: 'text-slate-700' },
-  { key: 'basic', label: '베이직', color: 'bg-green-100 text-green-700 border-green-200', dot: 'bg-green-500', headerBg: 'bg-green-50 border-green-200', headerText: 'text-green-800' },
-  { key: 'pro', label: '프로', color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500', headerBg: 'bg-blue-50 border-blue-200', headerText: 'text-blue-800' },
-  { key: 'max', label: '맥스', color: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500', headerBg: 'bg-amber-50 border-amber-200', headerText: 'text-amber-800' },
+  { key: 'free', label: '무료', color: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', headerBg: 'bg-slate-50 border-slate-200', headerText: 'text-slate-700', selectBg: 'bg-slate-100' },
+  { key: 'basic', label: '베이직', color: 'bg-green-100 text-green-700 border-green-200', dot: 'bg-green-500', headerBg: 'bg-green-50 border-green-200', headerText: 'text-green-800', selectBg: 'bg-green-100' },
+  { key: 'pro', label: '프로', color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500', headerBg: 'bg-blue-50 border-blue-200', headerText: 'text-blue-800', selectBg: 'bg-blue-100' },
+  { key: 'max', label: '맥스', color: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500', headerBg: 'bg-amber-50 border-amber-200', headerText: 'text-amber-800', selectBg: 'bg-amber-100' },
 ]
 
 const PLAN_KEYS = PLANS.map(p => p.key)
@@ -27,6 +27,8 @@ function getPlanIndex(plan: string) {
   return idx >= 0 ? idx : 0
 }
 
+const ICON_OPTIONS = ['Doc', 'Car', 'Truck', 'Shield', 'Money', 'Clipboard', 'Building', 'Chart', 'Wrench', 'Database', 'Users']
+
 export default function SystemAdminPage() {
   const router = useRouter()
   const { role, loading: appLoading, triggerMenuRefresh } = useApp()
@@ -37,10 +39,8 @@ export default function SystemAdminPage() {
   const [matrix, setMatrix] = useState<any>({})
   const [filter, setFilter] = useState<'active' | 'all'>('active')
   const [tab, setTab] = useState<'plans' | 'companies'>('plans')
-  const [showAddModule, setShowAddModule] = useState(false)
   const [editingModule, setEditingModule] = useState<any>(null)
   const [moduleForm, setModuleForm] = useState({ name: '', path: '', icon_key: 'Doc', description: '', plan_group: 'free' })
-  const [addingToPlan, setAddingToPlan] = useState<string | null>(null) // 어떤 플랜 카드에 추가 중인지
 
   useEffect(() => {
     if (!appLoading && role === 'god_admin') loadData()
@@ -70,19 +70,6 @@ export default function SystemAdminPage() {
     setLoading(false)
   }
 
-  // 모듈 추가
-  const addModule = async () => {
-    if (!moduleForm.name || !moduleForm.path) { alert('이름과 경로를 입력하세요.'); return }
-    const { error } = await supabase.from('system_modules').insert({
-      name: moduleForm.name, path: moduleForm.path, icon_key: moduleForm.icon_key,
-      description: moduleForm.description || null, plan_group: moduleForm.plan_group,
-    })
-    if (error) { alert('추가 실패: ' + error.message); return }
-    setShowAddModule(false)
-    setModuleForm({ name: '', path: '', icon_key: 'Doc', description: '', plan_group: 'free' })
-    loadData()
-  }
-
   // 모듈 수정
   const saveEditModule = async () => {
     if (!editingModule) return
@@ -98,42 +85,13 @@ export default function SystemAdminPage() {
     loadData()
   }
 
-  // 모듈 삭제
-  const deleteModule = async (moduleId: string, moduleName: string) => {
-    if (!confirm(`"${moduleName}" 모듈을 삭제하시겠습니까?\n모든 회사에서 이 모듈이 제거됩니다.`)) return
-    await supabase.from('company_modules').delete().eq('module_id', moduleId)
-    const { error } = await supabase.from('system_modules').delete().eq('id', moduleId)
-    if (error) { alert('삭제 실패: ' + error.message); return }
-    loadData()
-  }
-
   // 모듈 편집 시작
   const startEditModule = (mod: any) => {
     setEditingModule(mod)
     setModuleForm({ name: mod.name, path: mod.path, icon_key: mod.icon_key || 'Doc', description: mod.description || '', plan_group: mod.plan_group || 'free' })
   }
 
-  // 플랜 카드 내 모듈 추가 (다른 플랜에서 이동)
-  const moveModuleToPlan = async (moduleId: string, targetPlan: string, sourcePlan: string) => {
-    // 상위플랜 규제: 이동 후 source 플랜에 고유 모듈이 0개가 되면 차단
-    const sourceOwnCount = modules.filter(m => (m.plan_group || 'free') === sourcePlan).length
-    if (sourceOwnCount <= 1) {
-      alert(`"${getPlanInfo(sourcePlan).label}" 플랜에 고유 모듈이 1개뿐이라 이동할 수 없습니다.\n각 플랜에는 최소 1개의 고유 모듈이 필요합니다.`)
-      return
-    }
-    // 하위 플랜으로 이동하는 경우 경고
-    const targetIdx = getPlanIndex(targetPlan)
-    const sourceIdx = getPlanIndex(sourcePlan)
-    if (targetIdx < sourceIdx) {
-      if (!confirm(`이 모듈을 "${getPlanInfo(sourcePlan).label}" → "${getPlanInfo(targetPlan).label}"로 하위 플랜 이동합니다.\n더 많은 사용자가 이 모듈을 이용할 수 있게 됩니다. 계속하시겠습니까?`)) return
-    }
-    await updateModulePlan(moduleId, targetPlan)
-    setAddingToPlan(null)
-  }
-
-  const ICON_OPTIONS = ['Doc', 'Car', 'Truck', 'Shield', 'Money', 'Clipboard', 'Building', 'Chart', 'Wrench', 'Database', 'Users']
-
-  // 모듈 플랜 그룹 변경
+  // 모듈 플랜 그룹 변경 (전체 모듈 카드에서 드롭다운으로)
   const updateModulePlan = async (moduleId: string, newPlan: string) => {
     setModules(prev => prev.map(m => m.id === moduleId ? { ...m, plan_group: newPlan } : m))
     const { data, error } = await supabase.rpc('update_module_plan_group', {
@@ -217,7 +175,7 @@ export default function SystemAdminPage() {
         {/* 헤더 */}
         <div className="mb-5 md:mb-6">
           <h1 className="text-xl md:text-3xl font-extrabold text-slate-900">구독/모듈 관리</h1>
-          <p className="text-slate-500 mt-1 text-xs md:text-sm">플랜별 모듈 그룹 설정 및 회사별 모듈을 관리합니다.</p>
+          <p className="text-slate-500 mt-1 text-xs md:text-sm">전체 모듈 풀에서 플랜별로 배분하고, 회사별 모듈을 관리합니다.</p>
         </div>
 
         {/* 탭 */}
@@ -241,27 +199,77 @@ export default function SystemAdminPage() {
         {/* ========== 탭 1: 플랜/모듈 설정 ========== */}
         {tab === 'plans' && (
           <div>
-            {/* 안내 + 모듈 추가 버튼 */}
-            <div className="mb-5 flex flex-col sm:flex-row gap-3">
-              <div className="flex-1 p-3 bg-steel-50 rounded-xl border border-steel-100">
-                <p className="text-[11px] md:text-xs text-steel-700">
-                  <strong>플랜 계층 구조:</strong> 상위 플랜은 하위 플랜의 모듈을 모두 포함합니다.
-                  무료 → 베이직 → 프로 → 맥스 순으로, 맥스는 모든 모듈을 이용할 수 있습니다.
-                </p>
-              </div>
-              <button
-                onClick={() => { setShowAddModule(true); setEditingModule(null); setModuleForm({ name: '', path: '', icon_key: 'Doc', description: '', plan_group: 'free' }) }}
-                className="px-4 py-2 bg-steel-600 text-white rounded-xl text-sm font-bold hover:bg-steel-700 transition-all flex-shrink-0 self-start"
-              >
-                + 새 모듈 개발
-              </button>
+            {/* 안내 */}
+            <div className="mb-5 p-3 bg-steel-50 rounded-xl border border-steel-100">
+              <p className="text-[11px] md:text-xs text-steel-700">
+                <strong>플랜 계층 구조:</strong> 상위 플랜은 하위 플랜의 모듈을 모두 포함합니다.
+                무료 → 베이직 → 프로 → 맥스 순으로, 맥스는 모든 모듈을 이용할 수 있습니다.
+              </p>
             </div>
 
-            {/* 모듈 추가/수정 모달 */}
-            {(showAddModule || editingModule) && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { setShowAddModule(false); setEditingModule(null) }}>
+            {/* ★ 전체 모듈 카드 (모듈 풀) */}
+            <div className="mb-5 bg-white rounded-2xl border-2 border-slate-200 overflow-hidden">
+              <div className="p-4 border-b-2 border-slate-200 bg-slate-50">
+                <div className="flex items-center gap-2">
+                  <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+                  </svg>
+                  <span className="text-lg font-black text-slate-800">전체 모듈</span>
+                  <span className="text-xs text-slate-400 ml-1">({modules.length}개)</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">개발된 모듈이 자동으로 여기에 표시됩니다. 각 모듈의 플랜을 선택해 배분하세요.</p>
+              </div>
+              <div className="p-3 md:p-4">
+                {modules.length === 0 ? (
+                  <p className="text-sm text-slate-400 py-6 text-center">등록된 모듈이 없습니다.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
+                    {modules.map(mod => {
+                      const modPlan = getPlanInfo(mod.plan_group || 'free')
+                      return (
+                        <div key={mod.id} className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-all group">
+                          {/* 아이콘 */}
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${modPlan.color}`}>
+                            <span className="text-[11px] font-black">{mod.icon_key?.slice(0, 2) || '?'}</span>
+                          </div>
+                          {/* 정보 */}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-bold text-slate-800 truncate">{mod.name}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
+                          </div>
+                          {/* 플랜 드롭다운 */}
+                          <select
+                            value={mod.plan_group || 'free'}
+                            onChange={(e) => updateModulePlan(mod.id, e.target.value)}
+                            className={`text-[10px] font-black px-2 py-1 rounded-lg border cursor-pointer focus:outline-none focus:ring-1 focus:ring-steel-400 ${modPlan.color}`}
+                          >
+                            {PLANS.map(p => (
+                              <option key={p.key} value={p.key}>{p.label}</option>
+                            ))}
+                          </select>
+                          {/* 수정 버튼 */}
+                          <button
+                            onClick={() => startEditModule(mod)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-all"
+                            title="모듈 수정"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                            </svg>
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 모듈 수정 모달 */}
+            {editingModule && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setEditingModule(null)}>
                 <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
-                  <h3 className="text-lg font-black text-slate-900 mb-4">{editingModule ? '모듈 수정' : '새 모듈 추가'}</h3>
+                  <h3 className="text-lg font-black text-slate-900 mb-4">모듈 수정</h3>
                   <div className="space-y-3">
                     <div>
                       <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">모듈 이름</label>
@@ -296,92 +304,34 @@ export default function SystemAdminPage() {
                     </div>
                   </div>
                   <div className="flex gap-2 mt-5">
-                    <button onClick={() => { setShowAddModule(false); setEditingModule(null) }}
+                    <button onClick={() => setEditingModule(null)}
                       className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200">취소</button>
-                    <button onClick={editingModule ? saveEditModule : addModule}
-                      className="flex-1 px-4 py-2.5 bg-steel-600 text-white rounded-xl text-sm font-bold hover:bg-steel-700">{editingModule ? '저장' : '추가'}</button>
+                    <button onClick={saveEditModule}
+                      className="flex-1 px-4 py-2.5 bg-steel-600 text-white rounded-xl text-sm font-bold hover:bg-steel-700">저장</button>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* 플랜별 모듈 그리드 — 바깥 클릭 시 드롭다운 닫기 */}
-            {addingToPlan && (
-              <div className="fixed inset-0 z-40" onClick={() => setAddingToPlan(null)} />
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 relative z-41">
+            {/* ★ 플랜별 배분 결과 카드 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {PLANS.map(plan => {
                 const planModules = modules.filter(m => (m.plan_group || 'free') === plan.key)
                 const planIdx = getPlanIndex(plan.key)
+                const cumulativeCount = modules.filter(m => getPlanIndex(m.plan_group || 'free') <= planIdx).length
 
                 return (
                   <div key={plan.key} className={`rounded-2xl border-2 overflow-hidden ${plan.headerBg}`}>
                     {/* 플랜 헤더 */}
                     <div className={`p-4 border-b-2 ${plan.headerBg}`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-3 h-3 rounded-full ${plan.dot}`}></span>
-                          <span className={`text-lg font-black ${plan.headerText}`}>{plan.label}</span>
-                        </div>
-                        {/* 카드 내 추가 버튼 */}
-                        <div className="relative">
-                          <button
-                            onClick={() => setAddingToPlan(addingToPlan === plan.key ? null : plan.key)}
-                            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${
-                              addingToPlan === plan.key
-                                ? 'bg-steel-600 text-white'
-                                : 'bg-white/80 text-slate-500 hover:text-slate-700 hover:bg-white border border-slate-200'
-                            }`}
-                          >
-                            {addingToPlan === plan.key ? '닫기' : '+ 추가'}
-                          </button>
-
-                          {/* 모듈 선택 드롭다운 */}
-                          {addingToPlan === plan.key && (() => {
-                            const otherModules = modules.filter(m => (m.plan_group || 'free') !== plan.key)
-                            return otherModules.length > 0 ? (
-                              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-64 overflow-y-auto">
-                                <div className="p-2 border-b border-slate-100">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase">다른 플랜의 모듈 선택</span>
-                                </div>
-                                {otherModules.map(mod => {
-                                  const modPlanInfo = getPlanInfo(mod.plan_group || 'free')
-                                  const sourceOwnCount = modules.filter(m => (m.plan_group || 'free') === (mod.plan_group || 'free')).length
-                                  const isBlocked = sourceOwnCount <= 1
-                                  return (
-                                    <button
-                                      key={mod.id}
-                                      onClick={() => !isBlocked && moveModuleToPlan(mod.id, plan.key, mod.plan_group || 'free')}
-                                      className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${
-                                        isBlocked
-                                          ? 'opacity-30 cursor-not-allowed bg-slate-50'
-                                          : 'hover:bg-slate-50 cursor-pointer'
-                                      }`}
-                                      title={isBlocked ? `${modPlanInfo.label} 플랜의 마지막 모듈이라 이동 불가` : `${plan.label} 플랜으로 이동`}
-                                    >
-                                      <div className="flex-1 min-w-0">
-                                        <div className="text-xs font-bold text-slate-700 truncate">{mod.name}</div>
-                                        <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
-                                      </div>
-                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${modPlanInfo.color}`}>
-                                        {modPlanInfo.label}
-                                      </span>
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            ) : (
-                              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-4 text-center">
-                                <p className="text-xs text-slate-400">모든 모듈이 이 플랜에 있습니다</p>
-                              </div>
-                            )
-                          })()}
-                        </div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`w-3 h-3 rounded-full ${plan.dot}`}></span>
+                        <span className={`text-lg font-black ${plan.headerText}`}>{plan.label}</span>
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        이 플랜 고유: <strong>{planModules.length}개</strong>
+                        고유: <strong>{planModules.length}개</strong>
                         {planIdx > 0 && (
-                          <span className="ml-2">누적: <strong>{modules.filter(m => getPlanIndex(m.plan_group || 'free') <= planIdx).length}개</strong></span>
+                          <span className="ml-2">누적: <strong>{cumulativeCount}개</strong></span>
                         )}
                       </div>
                     </div>
@@ -389,7 +339,7 @@ export default function SystemAdminPage() {
                     {/* 이 플랜 고유 모듈 */}
                     <div className="p-3 bg-white/80">
                       {planModules.length === 0 ? (
-                        <p className="text-xs text-slate-400 py-4 text-center">모듈 없음</p>
+                        <p className="text-xs text-slate-400 py-4 text-center">배분된 모듈 없음</p>
                       ) : (
                         <div className="space-y-2">
                           {planModules.map(mod => (
@@ -398,38 +348,32 @@ export default function SystemAdminPage() {
                                 <div className="text-xs font-bold text-slate-800 truncate">{mod.name}</div>
                                 <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
                               </div>
-                              {/* 수정/삭제 버튼 */}
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => startEditModule(mod)}
-                                  className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 hover:bg-slate-200" title="수정">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
-                                </button>
-                                <button onClick={() => deleteModule(mod.id, mod.name)}
-                                  className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-400 hover:bg-red-100" title="삭제">
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                                </button>
-                              </div>
+                              {/* 수정 버튼 */}
+                              <button onClick={() => startEditModule(mod)}
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition-opacity" title="수정">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                              </button>
                             </div>
                           ))}
                         </div>
                       )}
 
                       {/* 하위 플랜에서 상속받는 모듈 */}
-                      {planIdx > 0 && (
-                        <div className="mt-3 pt-3 border-t border-slate-100">
-                          <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">하위 플랜 포함</div>
-                          <div className="flex flex-wrap gap-1">
-                            {modules
-                              .filter(m => getPlanIndex(m.plan_group || 'free') < planIdx)
-                              .map(mod => (
+                      {planIdx > 0 && (() => {
+                        const inherited = modules.filter(m => getPlanIndex(m.plan_group || 'free') < planIdx)
+                        return inherited.length > 0 ? (
+                          <div className="mt-3 pt-3 border-t border-slate-100">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">하위 플랜 포함</div>
+                            <div className="flex flex-wrap gap-1">
+                              {inherited.map(mod => (
                                 <span key={mod.id} className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-medium">
                                   {mod.name}
                                 </span>
-                              ))
-                            }
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        ) : null
+                      })()}
                     </div>
                   </div>
                 )
