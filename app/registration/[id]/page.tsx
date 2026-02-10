@@ -1,6 +1,6 @@
 'use client'
 import { supabase } from '../../utils/supabase'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useDaumPostcodePopup } from 'react-daum-postcode'
 
@@ -9,8 +9,14 @@ const Icons = {
   Back: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>,
   Save: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>,
   Refresh: () => <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>,
-  Car: () => <svg className="w-5 h-5 text-steel-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 13l-7 7-7-7m14-8l-7 7-7-7" /></svg>
+  Car: () => <svg className="w-5 h-5 text-steel-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 13l-7 7-7-7m14-8l-7 7-7-7" /></svg>,
+  Upload: () => <svg className="w-8 h-8 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>,
+  File: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>,
+  Check: () => <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>,
 }
+
+// PDF 여부 판별
+const isPdfUrl = (url: string) => url?.toLowerCase().includes('.pdf')
 
 // 유틸리티
 const cleanDate = (dateStr: any) => {
@@ -30,6 +36,23 @@ export default function RegistrationDetailPage() {
   const [loading, setLoading] = useState(true)
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [isImageModalOpen, setIsImageModalOpen] = useState(false)
+  const regFileRef = useRef<HTMLInputElement>(null)
+
+  // 파일 업로드 핸들러
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length) return
+    const file = e.target.files[0]
+    const fileExt = file.name.split('.').pop()
+    const fileName = `registration/${carId}_${Date.now()}.${fileExt}`
+
+    const { error } = await supabase.storage.from('car_docs').upload(fileName, file)
+    if (error) return alert('업로드 실패: ' + error.message)
+
+    const { data } = supabase.storage.from('car_docs').getPublicUrl(fileName)
+    setCar((prev: any) => ({ ...prev, registration_image_url: data.publicUrl }))
+    if (carId) await supabase.from('cars').update({ registration_image_url: data.publicUrl }).eq('id', carId)
+    alert('업로드 완료')
+  }
 
   // ESC 키로 이미지 모달 닫기
   useEffect(() => {
@@ -259,24 +282,24 @@ export default function RegistrationDetailPage() {
       <div className="max-w-7xl mx-auto">
 
         {/* 헤더 */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
             <div className="flex items-center gap-4">
-                <button onClick={() => router.push('/registration')} className="bg-white p-2.5 rounded-xl border border-gray-200 text-gray-500 hover:text-gray-900 hover:border-gray-400 transition-all shadow-sm">
+                <button onClick={() => router.push('/registration')} className="bg-gray-100 p-3 rounded-xl text-gray-500 hover:text-black hover:bg-gray-200 transition-all">
                     <Icons.Back />
                 </button>
                 <div>
                     <h1 className="text-3xl font-black text-gray-900 tracking-tight">{car.number}</h1>
-                    <p className="text-gray-500 font-medium">{baseModelName || car.model}</p>
+                    <p className="text-gray-500 font-medium mt-1">{baseModelName || car.model}</p>
                 </div>
             </div>
-            <button onClick={handleSave} className="flex items-center gap-2 bg-steel-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-steel-700 shadow-lg hover:shadow-steel-500/30 transition-all transform hover:-translate-y-0.5">
+            <button onClick={handleSave} className="flex items-center gap-2 bg-steel-700 text-white px-8 py-4 rounded-xl font-bold hover:bg-steel-800 shadow-lg hover:shadow-xl transition-all">
                 <Icons.Save /> <span>저장하기</span>
             </button>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* 좌측 폼 영역 */}
-            <div className="flex-1 space-y-6">
+            <div className="lg:col-span-7 space-y-6">
                 {/* 트림 선택 */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 relative overflow-hidden">
                     {isAnalyzing && (
@@ -285,8 +308,8 @@ export default function RegistrationDetailPage() {
                             <span className="text-steel-600 font-bold animate-pulse">AI 분석 중...</span>
                         </div>
                     )}
-                    <div className="flex justify-between items-center mb-5">
-                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><span className="w-1.5 h-6 bg-steel-600 rounded-full"></span>차종 및 트림 정보</h2>
+                    <div className="flex justify-between items-center mb-4">
+                        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2 border-b pb-2 w-full"><span className="w-1 h-5 bg-steel-600 rounded-full"></span>차종 및 트림 정보</h2>
                         <button onClick={handleReanalyze} className="flex items-center gap-1.5 text-xs bg-steel-50 text-steel-700 px-3 py-1.5 rounded-lg font-bold hover:bg-steel-100 transition-colors"><Icons.Refresh /> AI 정보 갱신</button>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -297,7 +320,7 @@ export default function RegistrationDetailPage() {
                         <div>
                             <label className="block text-xs font-bold text-steel-600 mb-1.5 uppercase">상세 트림 선택</label>
                             <select
-                                className="w-full p-4 bg-white border-2 border-steel-100 rounded-xl font-bold text-gray-800 focus:border-steel-500 outline-none transition-all cursor-pointer"
+                                className="w-full p-4 bg-white border border-gray-200 rounded-xl font-bold text-gray-800 focus:border-steel-500 outline-none transition-all cursor-pointer"
                                 value={selectedTrimId}
                                 onChange={(e) => setSelectedTrimId(e.target.value)}
                             >
@@ -312,7 +335,7 @@ export default function RegistrationDetailPage() {
 
                 {/* 기본 정보 */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                    <h2 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2"><span className="w-1.5 h-6 bg-gray-800 rounded-full"></span> 기본 정보</h2>
+                    <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2"><span className="w-1 h-5 bg-steel-600 rounded-full"></span> 기본 정보</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div><label className="label">차량번호</label><input className="input" value={car.number || ''} onChange={e=>handleChange('number', e.target.value)} /></div>
                         <div><label className="label">소유자</label><input className="input" value={car.owner_name || ''} onChange={e=>handleChange('owner_name', e.target.value)} /></div>
@@ -372,8 +395,8 @@ export default function RegistrationDetailPage() {
                 </div>
 
                 {/* 제원 */}
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-red-100">
-                    <h2 className="text-lg font-bold text-gray-800 mb-5 flex items-center gap-2"><span className="w-1.5 h-6 bg-red-500 rounded-full"></span> 제원 및 유효기간</h2>
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                    <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2"><span className="w-1 h-5 bg-steel-600 rounded-full"></span> 제원 및 유효기간</h2>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
                         <div><label className="label text-red-500">검사유효기간 만료일</label><input type="date" className="input border-red-100 text-red-600 bg-red-50/50" value={car.inspection_end_date || ''} onChange={e=>handleChange('inspection_end_date', e.target.value)} /></div>
                         <div><label className="label text-red-500">차령 만료일</label><input type="date" className="input border-red-100 text-red-600 bg-red-50/50" value={car.vehicle_age_expiry || ''} onChange={e=>handleChange('vehicle_age_expiry', e.target.value)} /></div>
@@ -393,16 +416,61 @@ export default function RegistrationDetailPage() {
                 </div>
             </div>
 
-            {/* 우측 이미지 */}
-            <div className="w-full lg:w-[420px]">
-                <div className="sticky top-8">
-                    <div className="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
-                        <h3 className="font-bold text-gray-800 mb-4">등록증 이미지</h3>
-                        <div className="aspect-[1/1.4] bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden cursor-pointer" onClick={() => car.registration_image_url && setIsImageModalOpen(true)}>
-                            {car.registration_image_url ? <img src={car.registration_image_url} className="w-full h-full object-contain" /> : <span className="text-gray-400">이미지 없음</span>}
+            {/* 우측: Sticky 파일 뷰어 섹션 */}
+            <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-6 h-fit">
+                    {/* 등록증 이미지 */}
+                    {(() => {
+                      const url = car.registration_image_url
+                      const isPdf = url && isPdfUrl(url)
+                      return (
+                        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+                            <div className="flex justify-between items-center mb-3">
+                                <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-steel-500"></span>
+                                    🚗 등록증
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                    {url && <Icons.Check />}
+                                    <button onClick={() => regFileRef.current?.click()} className="text-xs text-steel-600 bg-steel-50 px-2.5 py-1 rounded-lg font-bold hover:bg-steel-100 transition-colors">
+                                        {url ? '재업로드' : '업로드'}
+                                    </button>
+                                    <input ref={regFileRef} type="file" className="hidden" accept=".pdf,image/*" onChange={handleFileUpload} />
+                                </div>
+                            </div>
+                            <div
+                                onClick={() => url && setIsImageModalOpen(true)}
+                                className={`aspect-[1/1.4] bg-gray-100 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center overflow-hidden ${url ? 'cursor-pointer group hover:border-steel-400' : ''} transition-colors relative`}
+                            >
+                                {url ? (
+                                    isPdf ? (
+                                        <>
+                                            <div className="flex flex-col items-center text-gray-500">
+                                                <Icons.File />
+                                                <p className="text-xs font-bold mt-2">PDF 문서</p>
+                                                <p className="text-xs text-gray-400 mt-1">클릭하여 보기</p>
+                                            </div>
+                                            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <span className="bg-white text-gray-800 px-4 py-2 rounded-full font-bold shadow-lg text-sm">🔍 크게 보기</span>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <img src={url} className="w-full h-full object-contain" alt="등록증" />
+                                            <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                                <span className="bg-white text-gray-800 px-4 py-2 rounded-full font-bold shadow-lg text-sm">🔍 크게 보기</span>
+                                            </div>
+                                        </>
+                                    )
+                                ) : (
+                                    <div className="text-gray-400 flex flex-col items-center cursor-pointer" onClick={() => regFileRef.current?.click()}>
+                                        <Icons.Upload />
+                                        <p className="text-xs mt-2 font-medium">클릭하여 파일 업로드</p>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                </div>
+                      )
+                    })()}
             </div>
         </div>
       </div>

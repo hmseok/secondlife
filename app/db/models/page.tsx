@@ -118,7 +118,7 @@ const [list, setList] = useState<any[]>([])
                 <td className="p-4 text-center">
                     <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">{item.year}년식</span>
                 </td>
-                <td className="p-4 text-right font-black text-blue-600 text-lg">
+                <td className="p-4 text-right font-black text-steel-600 text-lg">
                     {f(item.standard_price)}원
                 </td>
                 <td className="p-4 text-center">
@@ -169,7 +169,7 @@ const [list, setList] = useState<any[]>([])
                 <div>
                     <label className="block text-xs font-bold text-gray-500 mb-1">기준 시세 (신차가)</label>
                     <div className="relative">
-                        <input type="text" className="w-full p-3 border rounded-xl font-bold text-right pr-8 text-blue-600"
+                        <input type="text" className="w-full p-3 border rounded-xl font-bold text-right pr-8 text-steel-600"
                             value={f(newItem.standard_price)}
                             onChange={e => setNewItem({...newItem, standard_price: Number(e.target.value.replace(/,/g, ''))})}
                         />

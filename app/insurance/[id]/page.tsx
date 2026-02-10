@@ -161,7 +161,7 @@ export default function InsuranceDetailPage() {
                     <p className="text-gray-500 font-medium mt-1">{carInfo?.brand} {carInfo?.model} <span className="text-gray-300 mx-2">|</span> {carInfo?.year}년식</p>
                 </div>
             </div>
-            <button onClick={handleSave} className="flex items-center gap-2 bg-steel-700 text-white px-8 py-4 rounded-xl font-bold hover:bg-steel-800 shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5">
+            <button onClick={handleSave} className="flex items-center gap-2 bg-steel-700 text-white px-8 py-4 rounded-xl font-bold hover:bg-steel-800 shadow-lg hover:shadow-xl transition-all">
                 <Icons.Save /> <span>저장하기</span>
             </button>
         </div>
@@ -200,17 +200,17 @@ export default function InsuranceDetailPage() {
                     <div className="grid grid-cols-2 gap-5">
                         <div className="col-span-2">
                             <label className="block text-xs font-bold text-gray-400 mb-1">보험/공제 상품명</label>
-                            <input className="w-full font-bold text-gray-800 text-lg border-b border-gray-200 focus:border-steel-500 outline-none pb-1 transition-colors"
+                            <input className="w-full font-bold text-gray-800 text-lg border border-gray-200 rounded-xl bg-gray-50 p-3 focus:border-steel-500 outline-none transition-colors"
                                    value={ins.product_name || ''} onChange={e=>handleChange('product_name', e.target.value)}/>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-400 mb-1">계약자</label>
-                            <input className="w-full font-bold text-gray-800 border-b border-gray-200 focus:border-steel-500 outline-none pb-1"
+                            <input className="w-full font-bold text-gray-800 border border-gray-200 rounded-xl bg-gray-50 p-3 focus:border-steel-500 outline-none transition-colors"
                                    value={ins.contractor || ''} onChange={e=>handleChange('contractor', e.target.value)}/>
                         </div>
                         <div>
                             <label className="block text-xs font-bold text-gray-400 mb-1">보험사</label>
-                            <input className="w-full font-bold text-gray-800 border-b border-gray-200 focus:border-steel-500 outline-none pb-1"
+                            <input className="w-full font-bold text-gray-800 border border-gray-200 rounded-xl bg-gray-50 p-3 focus:border-steel-500 outline-none transition-colors"
                                    value={ins.company || ''} onChange={e=>handleChange('company', e.target.value)}/>
                         </div>
                         <div className="col-span-2 bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-center justify-between">
@@ -257,7 +257,7 @@ export default function InsuranceDetailPage() {
                                     <tr key={row.key} className="hover:bg-steel-50/50 transition-colors group">
                                         <td className={`p-3 font-bold ${row.highlight ? 'text-steel-600' : 'text-gray-600'}`}>{row.label}</td>
                                         <td className="p-2">
-                                            <input className={`w-full p-1 bg-transparent outline-none border-b border-transparent group-hover:border-steel-200 ${row.highlight ? 'font-bold text-steel-700' : ''}`}
+                                            <input className={`w-full p-2 bg-gray-50 rounded-lg outline-none border border-transparent group-hover:border-steel-300 focus:border-steel-500 transition-colors ${row.highlight ? 'font-bold text-steel-700' : ''}`}
                                                    value={ins[row.key] || ''} onChange={e=>handleChange(row.key, e.target.value)}/>
                                         </td>
                                     </tr>
@@ -338,7 +338,7 @@ export default function InsuranceDetailPage() {
                     <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
                         <div className="flex justify-between items-center mb-3">
                             <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                                <span className="w-2 h-2 rounded-full bg-steel-500"></span>
                                 📄 청약서
                             </h3>
                             <div className="flex items-center gap-2">

@@ -346,7 +346,7 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
             <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={bulkProcessing}
-                className={`cursor-pointer group flex items-center gap-2 bg-blue-600 text-white px-3 py-2 text-sm md:px-5 md:py-3 md:text-base rounded-xl font-bold hover:bg-blue-700 hover:shadow-lg transition-all transform hover:-translate-y-0.5 ${bulkProcessing ? 'opacity-50 pointer-events-none' : ''}`}
+                className={`cursor-pointer group flex items-center gap-2 bg-steel-600 text-white px-3 py-2 text-sm md:px-5 md:py-3 md:text-base rounded-xl font-bold hover:bg-steel-700 hover:shadow-lg transition-all ${bulkProcessing ? 'opacity-50 pointer-events-none' : ''}`}
             >
                 <Icons.Upload />
                 <span>{bulkProcessing ? '분석 및 병합 중...' : '증권 업로드'}</span>
@@ -358,12 +358,12 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
       </div>
 
       {bulkProcessing && (
-         <div className="mb-10 bg-gray-900 rounded-2xl p-6 shadow-2xl ring-4 ring-blue-500/10 overflow-hidden relative">
+         <div className="mb-10 bg-gray-900 rounded-2xl p-6 shadow-2xl ring-4 ring-steel-500/10 overflow-hidden relative">
             <div className="flex justify-between items-end mb-4 relative z-10 text-white">
                 <div className="flex items-center gap-3"><span className="animate-spin text-xl">⚙️</span><span className="font-bold">AI 문서 분석 중...</span></div>
                 <span className="font-mono font-bold">{progress.current} / {progress.total}</span>
             </div>
-            <div className="w-full bg-gray-700 rounded-full h-2 mb-4"><div className="bg-gradient-to-r from-blue-500 to-cyan-400 h-2 rounded-full transition-all" style={{ width: `${(progress.current / progress.total) * 100}%` }}></div></div>
+            <div className="w-full bg-gray-700 rounded-full h-2 mb-4"><div className="bg-gradient-to-r from-steel-500 to-steel-400 h-2 rounded-full transition-all" style={{ width: `${(progress.current / progress.total) * 100}%` }}></div></div>
             <div className="h-32 overflow-y-auto font-mono text-xs text-gray-300 border-t border-gray-700 pt-2 scrollbar-hide">{logs.map((log, i) => <div key={i}>{log}</div>)}</div>
          </div>
        )}
@@ -377,8 +377,8 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
           onClick={() => fileInputRef.current?.click()}
           className={`mb-6 border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all ${
             isDragging
-              ? 'border-blue-500 bg-blue-50 scale-[1.01]'
-              : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'
+              ? 'border-steel-500 bg-steel-50 scale-[1.01]'
+              : 'border-gray-300 bg-white hover:border-steel-400 hover:bg-steel-50/30'
           }`}
         >
           <input
@@ -419,7 +419,7 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {list.map((item) => (
-                      <tr key={item.id} onClick={() => router.push(`/insurance/${item.id}`)} className="hover:bg-blue-50/30 cursor-pointer transition-colors group">
+                      <tr key={item.id} onClick={() => router.push(`/insurance/${item.id}`)} className="hover:bg-steel-50/30 cursor-pointer transition-colors group">
                         <td className="p-3 md:p-5 pl-4 md:pl-8 font-black text-lg text-gray-900">{item.number}</td>
                         <td className="p-3 md:p-5">
                              <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded font-mono text-xs font-bold border border-gray-200 select-all">
@@ -427,12 +427,12 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                              </span>
                         </td>
                         <td className="p-3 md:p-5 text-gray-700 font-medium">
-                            <span className="text-blue-600 font-bold mr-1">{item.brand}</span>
+                            <span className="text-steel-600 font-bold mr-1">{item.brand}</span>
                             {item.model}
                         </td>
                         <td className="p-3 md:p-5 font-bold text-gray-700">{item.insurance?.company || '-'}</td>
                         <td className="p-3 md:p-5 font-mono text-gray-600">{item.insurance?.end_date || '-'}</td>
-                        <td className="p-3 md:p-5 text-right font-medium text-blue-600">{item.insurance?.premium ? `${f(item.insurance.premium)}원` : '-'}</td>
+                        <td className="p-3 md:p-5 text-right font-medium text-steel-600">{item.insurance?.premium ? `${f(item.insurance.premium)}원` : '-'}</td>
                         <td className="p-3 md:p-5 text-center">
                           {item.insurance ? (
                               new Date(item.insurance.end_date) < new Date() ?
@@ -462,11 +462,11 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
               {/* Mobile Card View */}
               <div className="md:hidden divide-y divide-gray-100">
                 {list.map((item) => (
-                  <div key={item.id} onClick={() => router.push(`/insurance/${item.id}`)} className="p-4 hover:bg-blue-50/30 transition-colors cursor-pointer">
+                  <div key={item.id} onClick={() => router.push(`/insurance/${item.id}`)} className="p-4 hover:bg-steel-50/30 transition-colors cursor-pointer">
                     <div className="flex justify-between items-start mb-3">
                       <div>
                         <div className="font-black text-lg text-gray-900">{item.number}</div>
-                        <div className="text-xs text-gray-500 mt-1"><span className="text-blue-600 font-bold">{item.brand}</span> {item.model}</div>
+                        <div className="text-xs text-gray-500 mt-1"><span className="text-steel-600 font-bold">{item.brand}</span> {item.model}</div>
                       </div>
                       {item.insurance && (
                           <button
@@ -489,7 +489,7 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                     </div>
                     <div className="mb-3">
                       <div className="text-xs text-gray-600 font-bold mb-1">보험료</div>
-                      <div className="text-lg font-black text-blue-600">{item.insurance?.premium ? `${f(item.insurance.premium)}원` : '-'}</div>
+                      <div className="text-lg font-black text-steel-600">{item.insurance?.premium ? `${f(item.insurance.premium)}원` : '-'}</div>
                     </div>
                     <div className="flex justify-between items-center">
                       <div>
@@ -521,13 +521,13 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
               <button onClick={() => setIsModalOpen(false)} className="text-2xl font-light text-gray-400 hover:text-black">&times;</button>
             </div>
             <div className="p-4 bg-white">
-                <input autoFocus className="w-full p-4 border-2 border-gray-100 rounded-xl bg-gray-50 font-bold focus:bg-white focus:border-blue-500 outline-none transition-colors" placeholder="차량번호 검색" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <input autoFocus className="w-full p-4 border-2 border-gray-100 rounded-xl bg-gray-50 font-bold focus:bg-white focus:border-steel-500 outline-none transition-colors" placeholder="차량번호 검색" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50/50">
               {filteredCars.map(car => (
-                <div key={car.id} onClick={() => router.push(`/insurance/${car.id}`)} className="p-4 bg-white border border-gray-100 rounded-xl hover:border-blue-500 hover:shadow-md cursor-pointer flex justify-between items-center group transition-all">
-                  <div><div className="font-bold text-lg text-gray-800 group-hover:text-blue-700">{car.number}</div><div className="text-xs text-gray-400 font-medium">{car.brand} {car.model}</div></div>
-                  <div className="text-gray-300 font-bold text-xl group-hover:text-blue-600 transition-colors">→</div>
+                <div key={car.id} onClick={() => router.push(`/insurance/${car.id}`)} className="p-4 bg-white border border-gray-100 rounded-xl hover:border-steel-500 hover:shadow-md cursor-pointer flex justify-between items-center group transition-all">
+                  <div><div className="font-bold text-lg text-gray-800 group-hover:text-steel-700">{car.number}</div><div className="text-xs text-gray-400 font-medium">{car.brand} {car.model}</div></div>
+                  <div className="text-gray-300 font-bold text-xl group-hover:text-steel-600 transition-colors">→</div>
                 </div>
               ))}
             </div>
@@ -569,13 +569,13 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                         <input
                           value={retryVin}
                           onChange={e => setRetryVin(e.target.value.toUpperCase())}
-                          className="flex-1 p-3 border rounded-xl font-mono text-sm font-bold tracking-wider focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none bg-amber-50"
+                          className="flex-1 p-3 border rounded-xl font-mono text-sm font-bold tracking-wider focus:border-steel-500 focus:ring-1 focus:ring-steel-500 outline-none bg-amber-50"
                           placeholder="차대번호 입력/수정"
                         />
                         <button
                           onClick={retryWithEditedVin}
                           disabled={retryProcessing}
-                          className="px-4 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+                          className="px-4 py-3 bg-steel-600 text-white rounded-xl font-bold text-sm hover:bg-steel-700 transition-colors disabled:opacity-50 whitespace-nowrap"
                         >
                           {retryProcessing ? '...' : '재매칭'}
                         </button>
@@ -591,7 +591,7 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                       <input
                         value={retryCarSearch}
                         onChange={e => setRetryCarSearch(e.target.value)}
-                        className="w-full mt-2 p-2.5 border rounded-lg text-sm focus:border-blue-500 outline-none"
+                        className="w-full mt-2 p-2.5 border rounded-lg text-sm focus:border-steel-500 outline-none"
                         placeholder="차량번호, VIN, 브랜드로 검색"
                       />
                     </div>
@@ -602,14 +602,14 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                         <div
                           key={car.id}
                           onClick={() => !retryProcessing && retryWithCarSelect(car)}
-                          className="px-5 py-3 hover:bg-blue-50 cursor-pointer transition-colors group"
+                          className="px-5 py-3 hover:bg-steel-50 cursor-pointer transition-colors group"
                         >
                           <div className="flex justify-between items-center">
                             <div>
-                              <span className="font-bold text-gray-900 group-hover:text-blue-700">{car.number}</span>
+                              <span className="font-bold text-gray-900 group-hover:text-steel-700">{car.number}</span>
                               <span className="text-xs text-gray-400 ml-2">{car.brand} {car.model}</span>
                             </div>
-                            <span className="text-xs text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">선택</span>
+                            <span className="text-xs text-steel-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">선택</span>
                           </div>
                           <div className="text-xs text-gray-500 font-mono mt-1">
                             VIN: {car.vin || '미등록'}

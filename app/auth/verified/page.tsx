@@ -58,7 +58,7 @@ export default function VerifiedPage() {
             <div className="absolute -top-2 -right-2 w-5 h-5 text-amber-400 animate-pulse-slow" style={{ animationDelay: '0.2s' }}>
               <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l1.5 5.5L17 9l-5.5 1.5L10 16l-1.5-5.5L3 9l5.5-1.5L10 2z"/></svg>
             </div>
-            <div className="absolute -bottom-1 -left-1 w-4 h-4 text-blue-400 animate-pulse-slow" style={{ animationDelay: '0.5s' }}>
+            <div className="absolute -bottom-1 -left-1 w-4 h-4 text-steel-400 animate-pulse-slow" style={{ animationDelay: '0.5s' }}>
               <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2l1.5 5.5L17 9l-5.5 1.5L10 16l-1.5-5.5L3 9l5.5-1.5L10 2z"/></svg>
             </div>
           </div>

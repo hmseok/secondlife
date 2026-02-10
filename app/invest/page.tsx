@@ -109,9 +109,9 @@ const router = useRouter()
           </div>
 
           {/* 카드 3 */}
-          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-blue-100">
+          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-steel-100">
               <p className="text-xs font-bold text-gray-400 mb-1 uppercase">평균 연 수익률 (Avg Rate)</p>
-              <h3 className="text-xl md:text-3xl font-black text-blue-600">{stats.avgInterestRate.toFixed(1)}%</h3>
+              <h3 className="text-xl md:text-3xl font-black text-steel-600">{stats.avgInterestRate.toFixed(1)}%</h3>
               <p className="text-xs text-gray-500 mt-2">투자자 약정 평균 금리</p>
           </div>
 
@@ -158,7 +158,7 @@ const router = useRouter()
                                           {f(item.invest_amount)}원
                                       </td>
                                       <td className="p-4 text-center">
-                                          <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded font-bold">{Number(item.interest_rate).toFixed(1)}%</span>
+                                          <span className="bg-steel-50 text-steel-700 px-2 py-1 rounded font-bold">{Number(item.interest_rate).toFixed(1)}%</span>
                                       </td>
                                       <td className="p-4 text-center font-bold text-gray-600">
                                           매월 <span className="text-black">{item.payment_day}일</span>
@@ -192,7 +192,7 @@ const router = useRouter()
                               </div>
                               <div className="mb-3 pb-3 border-b border-gray-200">
                                   <div className="text-sm text-gray-600 mb-1">투자 원금</div>
-                                  <div className="text-2xl font-black text-blue-600">{f(item.invest_amount)}원</div>
+                                  <div className="text-2xl font-black text-steel-600">{f(item.invest_amount)}원</div>
                               </div>
                               <div className="grid grid-cols-2 gap-3">
                                   <div>

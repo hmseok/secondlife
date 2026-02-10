@@ -114,12 +114,12 @@ export default function VehicleCodeManager() {
               <React.Fragment key={m.id}>
                 <tr
                     onClick={() => setExpandedRow(expandedRow === m.id ? null : m.id)}
-                    className={`cursor-pointer transition-colors ${expandedRow === m.id ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                    className={`cursor-pointer transition-colors ${expandedRow === m.id ? 'bg-steel-50' : 'hover:bg-gray-50'}`}
                 >
                     <td className="p-4 text-gray-400">{expandedRow === m.id ? <ChevronUp/> : <ChevronDown/>}</td>
                     <td className="p-4 font-bold text-gray-500">{m.brand}</td>
                     <td className="p-4 font-bold text-lg text-gray-800">{m.model_name}</td>
-                    <td className="p-4 font-mono text-blue-600">{m.year}년</td>
+                    <td className="p-4 font-mono text-steel-600">{m.year}년</td>
                     <td className="p-4"><span className="bg-gray-200 text-gray-700 px-2 py-1 rounded text-xs font-bold">{m.vehicle_trims?.length || 0}개</span></td>
                     <td className="p-4 text-center" onClick={e=>e.stopPropagation()}>
                         <button onClick={() => handleDeleteModel(m.id)} className="text-red-400 hover:text-red-600 underline text-xs">삭제</button>
@@ -134,7 +134,7 @@ export default function VehicleCodeManager() {
                                 <h4 className="font-bold text-sm text-gray-600">└ {m.model_name} 상세 트림 목록</h4>
                                 <button
                                     onClick={() => { setTargetModelId(m.id); setIsTrimModalOpen(true); }}
-                                    className="text-xs bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-200"
+                                    className="text-xs bg-steel-100 text-steel-600 px-3 py-1.5 rounded-lg font-bold hover:bg-steel-200"
                                 >
                                     + 트림 추가
                                 </button>
@@ -151,7 +151,7 @@ export default function VehicleCodeManager() {
                                                 <div className="text-xs text-gray-400">{t.fuel_type}</div>
                                             </div>
                                             <div className="text-right">
-                                                <div className="font-bold text-blue-600 text-sm">{f(t.price)}원</div>
+                                                <div className="font-bold text-steel-600 text-sm">{f(t.price)}원</div>
                                                 <button onClick={()=>handleDeleteTrim(t.id)} className="text-xs text-red-300 hover:text-red-500">삭제</button>
                                             </div>
                                         </div>
@@ -198,7 +198,7 @@ export default function VehicleCodeManager() {
                     <option value="LPG">LPG</option>
                 </select>
                 <div className="flex gap-2">
-                    <button onClick={handleCreateTrim} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold">추가</button>
+                    <button onClick={handleCreateTrim} className="flex-1 bg-steel-600 text-white py-2 rounded-lg font-bold">추가</button>
                     <button onClick={()=>setIsTrimModalOpen(false)} className="flex-1 bg-gray-100 py-2 rounded-lg">취소</button>
                 </div>
             </div>

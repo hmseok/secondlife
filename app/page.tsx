@@ -639,12 +639,12 @@ function AuthPage() {
       'gmail.com': { name: 'Gmail', url: 'https://mail.google.com', color: 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' },
       'googlemail.com': { name: 'Gmail', url: 'https://mail.google.com', color: 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100' },
       'naver.com': { name: 'Naver 메일', url: 'https://mail.naver.com', color: 'bg-green-50 text-green-600 border-green-100 hover:bg-green-100' },
-      'daum.net': { name: 'Daum 메일', url: 'https://mail.daum.net', color: 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100' },
-      'hanmail.net': { name: 'Daum 메일', url: 'https://mail.daum.net', color: 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100' },
+      'daum.net': { name: 'Daum 메일', url: 'https://mail.daum.net', color: 'bg-steel-50 text-steel-600 border-steel-100 hover:bg-steel-100' },
+      'hanmail.net': { name: 'Daum 메일', url: 'https://mail.daum.net', color: 'bg-steel-50 text-steel-600 border-steel-100 hover:bg-steel-100' },
       'kakao.com': { name: 'Kakao 메일', url: 'https://mail.kakao.com', color: 'bg-yellow-50 text-yellow-700 border-yellow-100 hover:bg-yellow-100' },
-      'outlook.com': { name: 'Outlook', url: 'https://outlook.live.com', color: 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100' },
-      'hotmail.com': { name: 'Outlook', url: 'https://outlook.live.com', color: 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100' },
-      'live.com': { name: 'Outlook', url: 'https://outlook.live.com', color: 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100' },
+      'outlook.com': { name: 'Outlook', url: 'https://outlook.live.com', color: 'bg-steel-50 text-steel-600 border-steel-100 hover:bg-steel-100' },
+      'hotmail.com': { name: 'Outlook', url: 'https://outlook.live.com', color: 'bg-steel-50 text-steel-600 border-steel-100 hover:bg-steel-100' },
+      'live.com': { name: 'Outlook', url: 'https://outlook.live.com', color: 'bg-steel-50 text-steel-600 border-steel-100 hover:bg-steel-100' },
       'yahoo.com': { name: 'Yahoo Mail', url: 'https://mail.yahoo.com', color: 'bg-sky-50 text-sky-600 border-sky-100 hover:bg-sky-100' },
       'yahoo.co.kr': { name: 'Yahoo Mail', url: 'https://mail.yahoo.com', color: 'bg-sky-50 text-sky-600 border-sky-100 hover:bg-sky-100' },
     }
@@ -713,7 +713,7 @@ function AuthPage() {
     const isLoading = dupLoading[field]
     const result = dupCheck[field]
 
-    if (isLoading) return <span className="text-[10px] text-blue-500 font-medium flex items-center gap-1"><svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" className="opacity-75"/></svg>확인 중</span>
+    if (isLoading) return <span className="text-[10px] text-steel-500 font-medium flex items-center gap-1"><svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" className="opacity-75"/></svg>확인 중</span>
     if (result === true) return <span className="text-[10px] text-emerald-500 font-bold">사용 가능</span>
     if (result === false) return <span className="text-[10px] text-red-500 font-bold">이미 등록됨</span>
     return null
@@ -1256,7 +1256,7 @@ function AuthPage() {
                             <div className={`bg-slate-50 border-2 rounded-xl p-3 flex items-center gap-3 ${
                               (bizNumberVerified === true && bizNameVerified === true) ? 'border-emerald-200' :
                               (bizNumberVerified === false || bizNameVerified === false) ? 'border-red-200' :
-                              bizOcrLoading ? 'border-blue-200' :
+                              bizOcrLoading ? 'border-steel-200' :
                               'border-steel-200'
                             }`}>
                               {/* 미리보기 */}
@@ -1275,7 +1275,7 @@ function AuthPage() {
                                 <p className="text-sm font-bold text-slate-700 truncate">{bizFile.name}</p>
                                 <p className="text-[10px] text-slate-400">{(bizFile.size / 1024 / 1024).toFixed(1)}MB</p>
                                 {bizOcrLoading && (
-                                  <p className="text-[10px] text-blue-500 font-medium flex items-center gap-1 mt-0.5">
+                                  <p className="text-[10px] text-steel-500 font-medium flex items-center gap-1 mt-0.5">
                                     <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" className="opacity-75"/></svg>
                                     사업자번호 인식 중...
                                   </p>
@@ -1301,7 +1301,7 @@ function AuthPage() {
                               <div className={`rounded-xl p-3 text-xs space-y-2 border ${
                                 allOk ? 'bg-emerald-50 border-emerald-100' :
                                 anyFail ? 'bg-red-50 border-red-100' :
-                                'bg-blue-50 border-blue-100'
+                                'bg-steel-50 border-steel-100'
                               }`}>
                                 {/* 헤더 */}
                                 <div className="flex items-center gap-2 font-bold">
@@ -1310,7 +1310,7 @@ function AuthPage() {
                                   ) : anyFail ? (
                                     <><svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg><span className="text-red-700">입력 정보가 문서와 다릅니다</span></>
                                   ) : (
-                                    <><svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/></svg><span className="text-blue-700">문서 인식 완료 — 정보를 입력해주세요</span></>
+                                    <><svg className="w-4 h-4 text-steel-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/></svg><span className="text-steel-700">문서 인식 완료 — 정보를 입력해주세요</span></>
                                   )}
                                 </div>
 
@@ -1324,9 +1324,9 @@ function AuthPage() {
                                       ) : bizNumberVerified === false ? (
                                         <svg className="w-3.5 h-3.5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
                                       ) : (
-                                        <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
+                                        <svg className="w-3.5 h-3.5 text-steel-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
                                       )}
-                                      <span className={bizNumberVerified === true ? 'text-emerald-600' : bizNumberVerified === false ? 'text-red-600' : 'text-blue-600'}>
+                                      <span className={bizNumberVerified === true ? 'text-emerald-600' : bizNumberVerified === false ? 'text-red-600' : 'text-steel-600'}>
                                         사업자번호: <span className="font-bold">{bizOcrResult.business_number}</span>
                                         {bizNumberVerified === true && ' — 일치'}
                                         {bizNumberVerified === false && ' — 불일치'}
@@ -1342,9 +1342,9 @@ function AuthPage() {
                                       ) : bizNameVerified === false ? (
                                         <svg className="w-3.5 h-3.5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
                                       ) : (
-                                        <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
+                                        <svg className="w-3.5 h-3.5 text-steel-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
                                       )}
-                                      <span className={bizNameVerified === true ? 'text-emerald-600' : bizNameVerified === false ? 'text-red-600' : 'text-blue-600'}>
+                                      <span className={bizNameVerified === true ? 'text-emerald-600' : bizNameVerified === false ? 'text-red-600' : 'text-steel-600'}>
                                         상호: <span className="font-bold">{bizOcrResult.company_name_full || bizOcrResult.company_name}</span>
                                         {bizNameVerified === true && ' — 일치'}
                                         {bizNameVerified === false && ' — 불일치'}

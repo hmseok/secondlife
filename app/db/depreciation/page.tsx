@@ -56,9 +56,9 @@ export default function DepreciationPage() {
           <thead className="bg-gray-50 text-gray-500 font-bold border-b">
             <tr>
               <th className="p-4 text-left">차종 분류</th>
-              <th className="p-4 text-blue-600">1년후 잔가</th>
-              <th className="p-4 text-blue-600">2년후 잔가</th>
-              <th className="p-4 text-blue-600">3년후 잔가</th>
+              <th className="p-4 text-steel-600">1년후 잔가</th>
+              <th className="p-4 text-steel-600">2년후 잔가</th>
+              <th className="p-4 text-steel-600">3년후 잔가</th>
               <th className="p-4">4년후 잔가</th>
               <th className="p-4">5년후 잔가</th>
               <th className="p-4">관리</th>
@@ -68,9 +68,9 @@ export default function DepreciationPage() {
             {list.map((item) => (
               <tr key={item.id} className="hover:bg-gray-50">
                 <td className="p-4 text-left font-bold text-lg">{item.category}</td>
-                <td className="p-4 font-bold bg-blue-50/30">{item.rate_1yr}%</td>
-                <td className="p-4 font-bold bg-blue-50/30">{item.rate_2yr}%</td>
-                <td className="p-4 font-bold bg-blue-50/30 text-blue-600">{item.rate_3yr}%</td>
+                <td className="p-4 font-bold bg-steel-50/30">{item.rate_1yr}%</td>
+                <td className="p-4 font-bold bg-steel-50/30">{item.rate_2yr}%</td>
+                <td className="p-4 font-bold bg-steel-50/30 text-steel-600">{item.rate_3yr}%</td>
                 <td className="p-4 text-gray-500">{item.rate_4yr}%</td>
                 <td className="p-4 text-gray-500">{item.rate_5yr}%</td>
                 <td className="p-4"><button onClick={() => handleDelete(item.id)} className="text-red-400 font-bold text-xs hover:underline">삭제</button></td>

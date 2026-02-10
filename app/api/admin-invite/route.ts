@@ -4,8 +4,10 @@ import { Resend } from 'resend'
 
 // ============================================
 // Super God Admin 초대 코드 API
-// GET  → 초대 코드 목록 조회
-// POST → 초대 코드 발급 + Resend 이메일 발송
+// GET    → 초대 코드 목록 조회
+// POST   → 초대 코드 발급 + Resend 이메일 발송
+// PATCH  → 초대 코드 즉시 만료 처리
+// DELETE → 초대 코드 삭제
 // ============================================
 
 // ★ 빌드 타임이 아닌 런타임에 클라이언트 생성 (Docker 빌드 호환)
@@ -147,4 +149,45 @@ export async function POST(request: NextRequest) {
     emailSent,
     emailError: emailError || undefined,
   })
+}
+
+// PATCH: 초대 코드 즉시 만료 처리
+export async function PATCH(request: NextRequest) {
+  const user = await verifyPlatformAdmin(request)
+  if (!user) return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+
+  const body = await request.json()
+  const codeId = body.id
+
+  if (!codeId) return NextResponse.json({ error: '코드 ID가 필요합니다.' }, { status: 400 })
+
+  // 이미 사용된 코드도 만료 처리 가능 (expires_at = NOW)
+  const { data, error } = await getSupabaseAdmin()
+    .from('admin_invite_codes')
+    .update({ expires_at: new Date().toISOString() })
+    .eq('id', codeId)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true, data })
+}
+
+// DELETE: 초대 코드 삭제
+export async function DELETE(request: NextRequest) {
+  const user = await verifyPlatformAdmin(request)
+  if (!user) return NextResponse.json({ error: '권한 없음' }, { status: 403 })
+
+  const { searchParams } = new URL(request.url)
+  const codeId = searchParams.get('id')
+
+  if (!codeId) return NextResponse.json({ error: '코드 ID가 필요합니다.' }, { status: 400 })
+
+  const { error } = await getSupabaseAdmin()
+    .from('admin_invite_codes')
+    .delete()
+    .eq('id', codeId)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ success: true })
 }

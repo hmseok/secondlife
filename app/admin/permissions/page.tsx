@@ -246,7 +246,7 @@ export default function PermissionsPage() {
             <button
               onClick={saveAll}
               disabled={saving}
-              className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold text-sm hover:bg-blue-700 disabled:bg-slate-300 transition-colors shadow-lg"
+              className="px-8 py-3 bg-steel-600 text-white rounded-xl font-bold text-sm hover:bg-steel-700 disabled:bg-slate-300 transition-colors shadow-lg"
             >
               {saving ? '저장 중...' : '변경사항 저장'}
             </button>
@@ -316,7 +316,7 @@ export default function PermissionsPage() {
                         const key = `${posId}_${page.path}`
                         const perm = matrix[key] || { can_view: false, can_create: false, can_edit: false, can_delete: false, data_scope: 'all' }
                         return (
-                          <tr key={page.path} className="border-b border-slate-50 hover:bg-blue-50/30">
+                          <tr key={page.path} className="border-b border-slate-50 hover:bg-steel-50/30">
                             <td className="p-4 sticky left-0 bg-white">
                               <div className="font-bold text-sm text-slate-800">{page.name}</div>
                               <div className="text-[10px] text-slate-400 font-mono">{page.path}</div>
@@ -327,7 +327,7 @@ export default function PermissionsPage() {
                                   type="checkbox"
                                   checked={(perm as any)[field]}
                                   onChange={() => togglePerm(posId, page.path, field)}
-                                  className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  className="w-5 h-5 rounded border-slate-300 text-steel-600 focus:ring-steel-500 cursor-pointer"
                                 />
                               </td>
                             ))}
@@ -354,8 +354,8 @@ export default function PermissionsPage() {
         )}
 
         {/* 안내 */}
-        <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-          <p className="text-sm text-blue-800">
+        <div className="mt-6 p-4 bg-steel-50 rounded-xl border border-steel-200">
+          <p className="text-sm text-steel-800">
             <strong>권한 체계 안내:</strong> god_admin과 master(대표) 역할은 이 설정과 무관하게 항상 전체 접근 권한을 가집니다.
             이 설정은 일반 직원(user 역할)의 직급에 따른 세부 권한을 제어합니다.
           </p>

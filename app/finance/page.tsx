@@ -196,7 +196,7 @@ const router = useRouter()
               <div className="flex items-center gap-3 mb-2">
                   <h1 className="text-2xl md:text-3xl font-black text-gray-900">💰 자금 관리</h1>
                   <input type="month" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
-                         className="border-2 border-gray-200 rounded-lg px-3 py-1 font-bold text-lg bg-gray-50 hover:bg-white focus:border-steel-500 transition-colors cursor-pointer text-gray-700" />
+                         className="border border-gray-200 rounded-lg px-3 py-1 font-bold text-lg bg-gray-50 hover:bg-white focus:border-steel-500 transition-colors cursor-pointer text-gray-700" />
               </div>
               <p className="text-gray-500 text-sm">회사의 모든 자금 흐름을 기록하고 예측합니다.</p>
           </div>
@@ -215,7 +215,7 @@ const router = useRouter()
       {/* 2. 대시보드 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center">
-              <div><p className="text-gray-500 text-xs font-bold mb-1">총 수입 (+)</p><h3 className="text-xl md:text-2xl font-black text-blue-600">{nf(summary.income)}</h3></div>
+              <div><p className="text-gray-500 text-xs font-bold mb-1">총 수입 (+)</p><h3 className="text-xl md:text-2xl font-black text-steel-600">{nf(summary.income)}</h3></div>
               <div className="w-10 h-10 rounded-full bg-steel-50 flex items-center justify-center text-xl">🔵</div>
           </div>
           <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm flex justify-between items-center">

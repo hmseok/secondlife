@@ -62,7 +62,7 @@ const [list, setList] = useState<any[]>([])
                 <td className="p-4 font-bold text-lg">{item.item_name}</td>
                 <td className="p-4 text-right">{f(item.unit_price)}원</td>
                 <td className="p-4 text-right">{f(item.labor_cost)}원</td>
-                <td className="p-4 text-right font-black text-blue-600">{f(item.unit_price + item.labor_cost)}원</td>
+                <td className="p-4 text-right font-black text-steel-600">{f(item.unit_price + item.labor_cost)}원</td>
                 <td className="p-4 text-center">
                     <span className="bg-gray-100 px-2 py-1 rounded text-xs font-bold text-gray-600">
                         {f(item.cycle_km)}km / {item.cycle_month}개월

@@ -249,44 +249,111 @@ export default function SystemAdminPage() {
                 {modules.length === 0 ? (
                   <p className="text-sm text-slate-400 py-6 text-center">등록된 모듈이 없습니다.</p>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5">
-                    {modules.map(mod => {
-                      const modPlan = getPlanInfo(mod.plan_group || 'free')
-                      return (
-                        <div key={mod.id} className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-all group">
-                          {/* 아이콘 */}
-                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${modPlan.color}`}>
-                            <span className="text-[11px] font-black">{mod.icon_key?.slice(0, 2) || '?'}</span>
+                  <>
+                    {/* Desktop: 테이블 형태 */}
+                    <div className="hidden md:block overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-slate-200">
+                            <th className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase w-12">아이콘</th>
+                            <th className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase">모듈명</th>
+                            <th className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase">경로</th>
+                            <th className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase">설명</th>
+                            <th className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase w-24 text-center">플랜</th>
+                            <th className="px-3 py-2.5 text-[10px] font-bold text-slate-400 uppercase w-12"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {modules.map(mod => {
+                            const modPlan = getPlanInfo(mod.plan_group || 'free')
+                            return (
+                              <tr key={mod.id} className="border-b border-slate-50 hover:bg-slate-50/50 group">
+                                <td className="px-3 py-2.5">
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${modPlan.color}`}>
+                                    <span className="text-[10px] font-black">{mod.icon_key?.slice(0, 2) || '?'}</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span className="text-sm font-bold text-slate-800">{mod.name}</span>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span className="text-xs text-slate-400 font-mono">{mod.path}</span>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <span className="text-xs text-slate-400">{mod.description || '-'}</span>
+                                </td>
+                                <td className="px-3 py-2.5 text-center">
+                                  <select
+                                    value={mod.plan_group || 'free'}
+                                    onChange={(e) => updateModulePlan(mod.id, e.target.value)}
+                                    className={`text-[10px] font-black px-2.5 py-1 rounded-lg border cursor-pointer focus:outline-none focus:ring-1 focus:ring-steel-400 ${modPlan.color}`}
+                                  >
+                                    {PLANS.map(p => (
+                                      <option key={p.key} value={p.key}>{p.label}</option>
+                                    ))}
+                                  </select>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <button
+                                    onClick={() => startEditModule(mod)}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-all"
+                                    title="모듈 수정"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                    </svg>
+                                  </button>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile: 카드 형태 */}
+                    <div className="md:hidden space-y-2">
+                      {modules.map(mod => {
+                        const modPlan = getPlanInfo(mod.plan_group || 'free')
+                        return (
+                          <div key={mod.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100">
+                            <div className="flex items-center gap-3 mb-2">
+                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${modPlan.color}`}>
+                                <span className="text-[11px] font-black">{mod.icon_key?.slice(0, 2) || '?'}</span>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-sm font-bold text-slate-800">{mod.name}</div>
+                                <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
+                              </div>
+                              <button
+                                onClick={() => startEditModule(mod)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-600 flex-shrink-0"
+                                title="모듈 수정"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                                </svg>
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              {mod.description && (
+                                <span className="text-[11px] text-slate-400 flex-1 mr-2">{mod.description}</span>
+                              )}
+                              <select
+                                value={mod.plan_group || 'free'}
+                                onChange={(e) => updateModulePlan(mod.id, e.target.value)}
+                                className={`text-[10px] font-black px-2.5 py-1.5 rounded-lg border cursor-pointer focus:outline-none ${modPlan.color} flex-shrink-0`}
+                              >
+                                {PLANS.map(p => (
+                                  <option key={p.key} value={p.key}>{p.label}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
-                          {/* 정보 */}
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-bold text-slate-800 truncate">{mod.name}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
-                          </div>
-                          {/* 플랜 드롭다운 */}
-                          <select
-                            value={mod.plan_group || 'free'}
-                            onChange={(e) => updateModulePlan(mod.id, e.target.value)}
-                            className={`text-[10px] font-black px-2 py-1 rounded-lg border cursor-pointer focus:outline-none focus:ring-1 focus:ring-steel-400 ${modPlan.color}`}
-                          >
-                            {PLANS.map(p => (
-                              <option key={p.key} value={p.key}>{p.label}</option>
-                            ))}
-                          </select>
-                          {/* 수정 버튼 */}
-                          <button
-                            onClick={() => startEditModule(mod)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-all"
-                            title="모듈 수정"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
-                            </svg>
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
+                        )
+                      })}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
@@ -340,7 +407,7 @@ export default function SystemAdminPage() {
             )}
 
             {/* ★ 플랜별 배분 결과 카드 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4">
               {PLANS.map(plan => {
                 const planModules = modules.filter(m => (m.plan_group || 'free') === plan.key)
                 const planIdx = getPlanIndex(plan.key)
@@ -349,34 +416,33 @@ export default function SystemAdminPage() {
                 return (
                   <div key={plan.key} className={`rounded-2xl border-2 overflow-hidden ${plan.headerBg}`}>
                     {/* 플랜 헤더 */}
-                    <div className={`p-4 border-b-2 ${plan.headerBg}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`w-3 h-3 rounded-full ${plan.dot}`}></span>
-                        <span className={`text-lg font-black ${plan.headerText}`}>{plan.label}</span>
+                    <div className={`p-3 md:p-4 border-b-2 ${plan.headerBg}`}>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`w-2.5 h-2.5 md:w-3 md:h-3 rounded-full ${plan.dot}`}></span>
+                        <span className={`text-base md:text-lg font-black ${plan.headerText}`}>{plan.label}</span>
                       </div>
-                      <div className="text-[11px] text-slate-500">
-                        고유: <strong>{planModules.length}개</strong>
+                      <div className="text-[10px] md:text-[11px] text-slate-500">
+                        고유 <strong>{planModules.length}개</strong>
                         {planIdx > 0 && (
-                          <span className="ml-2">누적: <strong>{cumulativeCount}개</strong></span>
+                          <span className="ml-1.5">/ 누적 <strong>{cumulativeCount}개</strong></span>
                         )}
                       </div>
                     </div>
 
                     {/* 이 플랜 고유 모듈 */}
-                    <div className="p-3 bg-white/80">
+                    <div className="p-2 md:p-3 bg-white/80">
                       {planModules.length === 0 ? (
-                        <p className="text-xs text-slate-400 py-4 text-center">배분된 모듈 없음</p>
+                        <p className="text-[11px] text-slate-400 py-3 text-center">배분된 모듈 없음</p>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {planModules.map(mod => (
-                            <div key={mod.id} className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-100 hover:border-slate-200 transition-all group">
+                            <div key={mod.id} className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white border border-slate-100 hover:border-slate-200 transition-all group">
                               <div className="flex-1 min-w-0">
-                                <div className="text-xs font-bold text-slate-800 truncate">{mod.name}</div>
-                                <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
+                                <div className="text-[11px] md:text-xs font-bold text-slate-800 leading-snug">{mod.name}</div>
+                                <div className="text-[9px] md:text-[10px] text-slate-400 font-mono leading-tight">{mod.path}</div>
                               </div>
-                              {/* 수정 버튼 */}
                               <button onClick={() => startEditModule(mod)}
-                                className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 hover:bg-slate-200 opacity-0 group-hover:opacity-100 transition-opacity" title="수정">
+                                className="p-1 rounded text-slate-400 hover:bg-slate-200 hover:text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" title="수정">
                                 <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
                               </button>
                             </div>
@@ -388,11 +454,11 @@ export default function SystemAdminPage() {
                       {planIdx > 0 && (() => {
                         const inherited = modules.filter(m => getPlanIndex(m.plan_group || 'free') < planIdx)
                         return inherited.length > 0 ? (
-                          <div className="mt-3 pt-3 border-t border-slate-100">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">하위 플랜 포함</div>
+                          <div className="mt-2 pt-2 border-t border-slate-100">
+                            <div className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase mb-1.5">하위 플랜 포함</div>
                             <div className="flex flex-wrap gap-1">
                               {inherited.map(mod => (
-                                <span key={mod.id} className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-medium">
+                                <span key={mod.id} className="text-[9px] md:text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-medium leading-tight">
                                   {mod.name}
                                 </span>
                               ))}
@@ -486,7 +552,7 @@ export default function SystemAdminPage() {
                     </div>
 
                     {/* 모듈 그리드 (플랜 뱃지 포함) */}
-                    <div className="p-2 md:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
+                    <div className="p-2 md:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
                       {modules.map(mod => {
                         const isActive = !!matrix[`${comp.id}_${mod.id}`]
                         const modPlan = getPlanInfo(mod.plan_group || 'free')
@@ -494,21 +560,21 @@ export default function SystemAdminPage() {
                           <button
                             key={mod.id}
                             onClick={() => toggleModule(comp.id, mod.id, isActive)}
-                            className={`relative p-3 rounded-xl border-2 text-left transition-all active:scale-95 ${
+                            className={`relative p-2.5 md:p-3 rounded-xl border-2 text-left transition-all active:scale-95 ${
                               isActive
                                 ? 'border-steel-400 bg-steel-50'
                                 : 'border-slate-200 bg-slate-50 opacity-50 hover:opacity-80'
                             }`}
                           >
-                            <div className="flex items-center justify-between mb-1 gap-1">
-                              <span className="text-xs md:text-sm font-bold text-slate-800 truncate">{mod.name}</span>
-                              <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center ${isActive ? 'bg-steel-500' : 'bg-slate-300'}`}>
+                            <div className="flex items-start justify-between gap-1.5 mb-1.5">
+                              <span className="text-[11px] md:text-sm font-bold text-slate-800 leading-tight break-keep">{mod.name}</span>
+                              <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5 ${isActive ? 'bg-steel-500' : 'bg-slate-300'}`}>
                                 {isActive && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
                               </div>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] md:text-[11px] text-slate-400 font-mono">{mod.path}</span>
-                              <span className={`text-[8px] font-black px-1 py-0.5 rounded ${modPlan.color}`}>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] md:text-[10px] text-slate-400 font-mono">{mod.path}</span>
+                              <span className={`text-[8px] md:text-[9px] font-black px-1 py-0.5 rounded ${modPlan.color}`}>
                                 {modPlan.label}
                               </span>
                             </div>
@@ -670,6 +736,7 @@ export default function SystemAdminPage() {
                   invites.map((inv: any) => {
                     const isUsed = !!inv.used_at
                     const isExpired = !isUsed && new Date(inv.expires_at) < new Date()
+                    const isActive = !isUsed && !isExpired
                     return (
                       <div key={inv.id} className={`p-4 flex items-center gap-4 ${isUsed ? 'bg-slate-50 opacity-60' : isExpired ? 'bg-red-50/50 opacity-60' : ''}`}>
                         <div className="font-mono text-lg font-black tracking-wider text-slate-700 flex-shrink-0">
@@ -680,9 +747,10 @@ export default function SystemAdminPage() {
                           <div className="text-[10px] text-slate-400 mt-0.5">
                             발급: {new Date(inv.created_at).toLocaleString('ko-KR')}
                             {' · '}만료: {new Date(inv.expires_at).toLocaleString('ko-KR')}
+                            {isUsed && inv.used_at && <> · 사용: {new Date(inv.used_at).toLocaleString('ko-KR')}</>}
                           </div>
                         </div>
-                        <div className="flex-shrink-0">
+                        <div className="flex-shrink-0 flex items-center gap-2">
                           {isUsed ? (
                             <span className="text-[10px] font-bold px-2 py-1 rounded bg-slate-200 text-slate-500">
                               사용됨 ({inv.consumer?.employee_name || '알 수 없음'})
@@ -690,7 +758,35 @@ export default function SystemAdminPage() {
                           ) : isExpired ? (
                             <span className="text-[10px] font-bold px-2 py-1 rounded bg-red-100 text-red-500">만료됨</span>
                           ) : (
-                            <span className="text-[10px] font-bold px-2 py-1 rounded bg-green-100 text-green-600">사용 가능</span>
+                            <>
+                              <span className="text-[10px] font-bold px-2 py-1 rounded bg-green-100 text-green-600">사용 가능</span>
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`"${inv.code}" 코드를 즉시 만료 처리하시겠습니까?`)) return
+                                  try {
+                                    const session = await supabase.auth.getSession()
+                                    const token = session.data.session?.access_token
+                                    const res = await fetch('/api/admin-invite', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                      body: JSON.stringify({ id: inv.id }),
+                                    })
+                                    const result = await res.json()
+                                    if (result.success) {
+                                      // 목록 새로고침
+                                      const listRes = await fetch('/api/admin-invite', { headers: { 'Authorization': `Bearer ${token}` } })
+                                      setInvites(await listRes.json())
+                                    } else {
+                                      alert('만료 처리 실패: ' + result.error)
+                                    }
+                                  } catch (err: any) { alert('오류: ' + err.message) }
+                                }}
+                                className="text-[10px] font-bold px-2 py-1 rounded bg-red-50 text-red-500 hover:bg-red-100 transition-colors"
+                                title="이 초대 코드를 즉시 만료 처리합니다"
+                              >
+                                즉시 만료
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>

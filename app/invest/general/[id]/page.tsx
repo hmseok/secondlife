@@ -278,10 +278,10 @@ export default function GeneralInvestDetail() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-6 rounded-2xl border border-gray-200">
                                 {/* 왼쪽: 약정금 (목표) - [수정됨] "원" 위치 조정 */}
                                 <div>
-                                    <label className="block text-xs font-bold text-blue-600 mb-1">📝 투자 약정금 (Target)</label>
+                                    <label className="block text-xs font-bold text-steel-600 mb-1">📝 투자 약정금 (Target)</label>
                                     <div className="relative">
                                         <input
-                                            className="w-full border-2 border-blue-100 p-3 pr-10 rounded-xl text-right font-black text-xl text-gray-900 focus:border-blue-500 outline-none"
+                                            className="w-full border border-steel-100 p-3 pr-10 rounded-xl text-right font-black text-xl text-gray-900 focus:border-steel-500 outline-none"
                                             value={item.invest_amount ? Number(item.invest_amount).toLocaleString() : ''}
                                             onChange={e => handleMoneyChange(e.target.value)}
                                             placeholder="0"

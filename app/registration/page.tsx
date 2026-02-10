@@ -388,7 +388,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
                                  <td className="p-3 md:p-5">
                                      <div className="font-black text-gray-900 text-lg">{car.number}</div>
                                      <div className="text-gray-500 text-sm font-medium">
-                                         <span className="text-blue-600 font-bold mr-1">{car.brand}</span>
+                                         <span className="text-steel-600 font-bold mr-1">{car.brand}</span>
                                          {car.model}
                                      </div>
                                  </td>
@@ -401,7 +401,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
                                  <td className="p-3 md:p-5">
                                      <div className="flex flex-wrap gap-1">
                                          <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs font-bold">{car.year}년식</span>
-                                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.fuel_type === '전기' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>{car.fuel_type || '기타'}</span>
+                                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.fuel_type === '전기' ? 'bg-steel-100 text-steel-600' : 'bg-green-100 text-green-600'}`}>{car.fuel_type || '기타'}</span>
                                      </div>
                                  </td>
                                  <td className="p-3 md:p-5 text-right font-bold text-gray-700">{f(car.purchase_price)}원</td>
@@ -431,11 +431,11 @@ const { company, role, adminSelectedCompanyId } = useApp()
                    <div className="flex-1 min-w-0 cursor-pointer" onClick={() => router.push(`/registration/${car.id}`)}>
                      <div className="font-black text-gray-900">{car.number}</div>
                      <div className="text-xs text-gray-500 truncate">
-                       <span className="text-blue-600 font-bold">{car.brand}</span> {car.model}
+                       <span className="text-steel-600 font-bold">{car.brand}</span> {car.model}
                      </div>
                      <div className="flex gap-1 mt-1">
                        {car.year && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-bold">{car.year}년</span>}
-                       {car.fuel_type && <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.fuel_type === '전기' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>{car.fuel_type}</span>}
+                       {car.fuel_type && <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.fuel_type === '전기' ? 'bg-steel-100 text-steel-600' : 'bg-green-100 text-green-600'}`}>{car.fuel_type}</span>}
                      </div>
                    </div>
                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
@@ -453,11 +453,11 @@ const { company, role, adminSelectedCompanyId } = useApp()
        {showResultModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowResultModal(false)}>
             <div className="bg-white rounded-2xl p-8 max-w-sm w-full shadow-2xl text-center" onClick={e => e.stopPropagation()}>
-                <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎉</div>
+                <div className="w-16 h-16 bg-steel-100 text-steel-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">🎉</div>
                 <h2 className="text-xl font-black text-gray-900 mb-2">분석 완료</h2>
                 <div className="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-100">
                     <div className="flex justify-between py-1 border-b border-gray-200"><span className="text-gray-500">총 파일</span><span className="font-bold">{progress.total}건</span></div>
-                    <div className="flex justify-between py-1 border-b border-gray-200 mt-2"><span className="text-blue-600 font-bold">신규 등록</span><span className="font-bold text-blue-600">{progress.success}건</span></div>
+                    <div className="flex justify-between py-1 border-b border-gray-200 mt-2"><span className="text-steel-600 font-bold">신규 등록</span><span className="font-bold text-steel-600">{progress.success}건</span></div>
                     <div className="flex justify-between py-1 border-b border-gray-200 mt-2"><span className="text-yellow-600 font-bold">중복 제외</span><span className="font-bold text-yellow-600">{progress.skipped}건</span></div>
                     <div className="flex justify-between py-1 mt-2"><span className="text-red-500">실패</span><span className="font-bold text-red-500">{progress.fail}건</span></div>
                 </div>

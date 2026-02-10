@@ -26,21 +26,12 @@ type DashboardStats = {
   netProfit: number
 }
 
-type GodAdminUser = {
-  id: string
-  email: string
-  employee_name: string | null
-  role: string
-  created_at: string
-}
-
 type PlatformStats = {
   totalCompanies: number
   activeCompanies: number
   pendingCompanies: number
   totalUsers: number
   totalActiveModules: number
-  godAdmins: GodAdminUser[]
   pendingList: { id: string; name: string; business_number: string; business_registration_url: string | null; plan: string; created_at: string }[]
   companyList: { id: string; name: string; plan: string; is_active: boolean; created_at: string; moduleCount: number; business_registration_url: string | null }[]
 }
@@ -55,7 +46,7 @@ export default function DashboardPage() {
   })
   const [platformStats, setPlatformStats] = useState<PlatformStats>({
     totalCompanies: 0, activeCompanies: 0, pendingCompanies: 0,
-    totalUsers: 0, totalActiveModules: 0, godAdmins: [],
+    totalUsers: 0, totalActiveModules: 0,
     pendingList: [], companyList: [],
   })
   const [activeModules, setActiveModules] = useState<Set<string>>(new Set())
@@ -123,13 +114,6 @@ export default function DashboardPage() {
           .eq('is_active', true)
           .order('created_at', { ascending: false })
 
-        // god_admin 사용자 목록
-        const { data: godAdminData } = await supabase
-          .from('profiles')
-          .select('id, email, employee_name, role, created_at')
-          .eq('role', 'god_admin')
-          .order('created_at', { ascending: true })
-
         // 회사별 활성 모듈 수 계산
         const companyModuleCounts: Record<string, number> = {}
         if (moduleData) {
@@ -146,7 +130,6 @@ export default function DashboardPage() {
           pendingCompanies: pendingCount || 0,
           totalUsers: userCount || 0,
           totalActiveModules: activeModuleCount,
-          godAdmins: godAdminData || [],
           pendingList: pendingData || [],
           companyList: (allCompanies || []).map(c => ({
             ...c,
@@ -457,36 +440,6 @@ export default function DashboardPage() {
                         거부
                       </button>
                     </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Super God Admin 목록 */}
-        {platformStats.godAdmins.length > 0 && (
-          <div className="mb-8">
-            <h2 className="text-sm font-bold text-yellow-500 uppercase tracking-wider mb-3">
-              Super God Admin ({platformStats.godAdmins.length})
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {platformStats.godAdmins.map(admin => (
-                <div key={admin.id} className="bg-gray-900 rounded-xl p-4 border border-gray-800">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
-                      {(admin.employee_name || admin.email)?.[0]?.toUpperCase() || '?'}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-white font-bold text-sm truncate">{admin.employee_name || '이름 미설정'}</p>
-                      <p className="text-gray-500 text-xs truncate">{admin.email}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-800">
-                    <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-yellow-900/50 text-yellow-400 uppercase">God Admin</span>
-                    <span className="text-[10px] text-gray-600">
-                      {admin.id === user?.id ? '(나)' : ''} {new Date(admin.created_at).toLocaleDateString('ko-KR')}
-                    </span>
                   </div>
                 </div>
               ))}

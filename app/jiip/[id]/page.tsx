@@ -304,11 +304,11 @@ const router = useRouter()
 
       {/* 정보 입력 섹션 */}
       <div className="space-y-8 bg-white p-8 rounded-3xl shadow-sm border border-gray-200 mb-8">
-            <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
-                <h3 className="font-bold text-lg text-blue-900 mb-4">1. 지급 및 세금 유형</h3>
+            <div className="bg-steel-50 p-6 rounded-2xl border border-steel-100">
+                <h3 className="font-bold text-lg text-steel-900 mb-4">1. 지급 및 세금 유형</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {['세금계산서', '사업소득(3.3%)', '이자소득(27.5%)'].map(type => (
-                        <label key={type} className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer ${item.tax_type === type ? 'bg-white border-blue-500 shadow-md ring-2 ring-blue-200' : 'bg-blue-50/50 border-blue-200'}`}>
+                        <label key={type} className={`flex items-center gap-3 p-4 rounded-xl border cursor-pointer ${item.tax_type === type ? 'bg-white border-steel-500 shadow-md ring-2 ring-steel-200' : 'bg-steel-50/50 border-steel-200'}`}>
                             <input type="radio" name="tax" value={type} checked={item.tax_type === type} onChange={e => setItem({...item, tax_type: e.target.value})} className="w-5 h-5" />
                             <span className="font-bold text-gray-900">{type}</span>
                         </label>
@@ -345,7 +345,7 @@ const router = useRouter()
 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">은행</label><select className="w-full border p-3 rounded-xl bg-white" value={item.bank_name} onChange={e => setItem({...item, bank_name: e.target.value})}>{KOREAN_BANKS.map(b => <option key={b} value={b}>{b}</option>)}</select></div>
-                    <div className="col-span-2"><label className="block text-xs font-bold text-gray-500 mb-1">계좌번호</label><input className="w-full border p-3 rounded-xl font-bold text-blue-600" value={item.account_number} onChange={e => setItem({...item, account_number: formatBankAccount(item.bank_name, e.target.value)})} /></div>
+                    <div className="col-span-2"><label className="block text-xs font-bold text-gray-500 mb-1">계좌번호</label><input className="w-full border p-3 rounded-xl font-bold text-steel-600" value={item.account_number} onChange={e => setItem({...item, account_number: formatBankAccount(item.bank_name, e.target.value)})} /></div>
                     <div className="col-span-1"><label className="block text-xs font-bold text-gray-500 mb-1">예금주</label><input className="w-full border p-3 rounded-xl" value={item.account_holder} onChange={e => setItem({...item, account_holder: e.target.value})} /></div>
                 </div>
             </div>
@@ -411,7 +411,7 @@ const router = useRouter()
 
                 <div className="bg-green-50 p-6 rounded-2xl border border-green-100 grid grid-cols-3 gap-6">
                     <div><label className="block text-xs font-bold text-green-800 mb-1">관리비</label><input type="text" className="w-full border border-green-200 p-2 rounded-lg text-right font-bold bg-white text-green-800" value={item.admin_fee.toLocaleString()} onChange={e => handleMoneyChange('admin_fee', e.target.value)} /></div>
-                    <div><label className="block text-xs font-bold text-blue-800 mb-1">배분율(%)</label><input type="number" className="w-full border border-blue-200 p-2 rounded-lg text-right font-bold bg-white text-blue-800" value={item.share_ratio} onChange={e => setItem({...item, share_ratio: Number(e.target.value)})} /></div>
+                    <div><label className="block text-xs font-bold text-steel-800 mb-1">배분율(%)</label><input type="number" className="w-full border border-steel-200 p-2 rounded-lg text-right font-bold bg-white text-steel-800" value={item.share_ratio} onChange={e => setItem({...item, share_ratio: Number(e.target.value)})} /></div>
                     <div><label className="block text-xs font-bold text-gray-500 mb-1">지급일</label><input type="number" className="w-full border p-2 rounded-lg text-right bg-white" value={item.payout_day} onChange={e => setItem({...item, payout_day: Number(e.target.value)})} /></div>
                 </div>
             </div>

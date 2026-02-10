@@ -1,67 +1,26 @@
 -- =============================================
--- 004. handle_new_user 트리거 수정
+-- 005. 사용된 초대코드 즉시 만료 처리
 -- =============================================
--- 문제: profiles.email 컬럼 누락 → god_admin 초대 가입 시 오류
--- 수정: email 포함 + 방어적 코딩 + 에러 로깅
+-- 문제: 초대코드 사용 시 used_by/used_at만 설정되고 expires_at은 그대로 유지됨
+-- 수정: 사용 시 expires_at = NOW()로 즉시 만료 + 기존 사용된 코드도 일괄 만료
 --
 -- Supabase SQL Editor에서 실행하세요.
 -- =============================================
 
 
 -- =============================================
--- STEP 1: 진단 쿼리 (먼저 실행해서 현재 상태 확인)
+-- STEP 1: 이미 사용된 코드들 일괄 만료 처리
 -- =============================================
 
--- profiles 테이블 컬럼 확인
-SELECT column_name, data_type, is_nullable, column_default
-FROM information_schema.columns
-WHERE table_schema = 'public' AND table_name = 'profiles'
-ORDER BY ordinal_position;
-
--- admin_invite_codes 테이블 존재 확인
-SELECT EXISTS (
-  SELECT 1 FROM information_schema.tables
-  WHERE table_schema = 'public' AND table_name = 'admin_invite_codes'
-) AS admin_invite_codes_exists;
+UPDATE admin_invite_codes
+SET expires_at = used_at
+WHERE used_by IS NOT NULL
+  AND expires_at > NOW();
 
 
 -- =============================================
--- STEP 2: email 컬럼 보장 (없으면 추가, 있으면 스킵)
--- =============================================
-
-DO $$
-BEGIN
-  -- email 컬럼이 없으면 추가
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'email'
-  ) THEN
-    ALTER TABLE public.profiles ADD COLUMN email TEXT;
-    RAISE NOTICE 'email 컬럼 추가됨';
-  ELSE
-    -- email이 NOT NULL이면 NULL 허용으로 변경
-    ALTER TABLE public.profiles ALTER COLUMN email DROP NOT NULL;
-    RAISE NOTICE 'email 컬럼 이미 존재 — NOT NULL 해제';
-  END IF;
-
-  -- company_id NOT NULL 다시 한번 확인/해제
-  ALTER TABLE public.profiles ALTER COLUMN company_id DROP NOT NULL;
-END $$;
-
-
--- =============================================
--- STEP 3: 기존 프로필에 email 채우기 (auth.users에서)
--- =============================================
-
-UPDATE public.profiles p
-SET email = u.email
-FROM auth.users u
-WHERE p.id = u.id
-  AND (p.email IS NULL OR p.email = '');
-
-
--- =============================================
--- STEP 4: handle_new_user() 트리거 함수 재생성
+-- STEP 2: handle_new_user() 트리거 함수 재생성
+--   (초대코드 사용 시 expires_at = NOW() 추가)
 -- =============================================
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -93,7 +52,7 @@ BEGIN
       true  -- 관리자는 즉시 활성
     );
 
-    -- 초대 코드 소비 + 즉시 만료 (테이블 존재 시에만)
+    -- 초대 코드 소비 + 즉시 만료
     BEGIN
       UPDATE admin_invite_codes
       SET used_by = NEW.id, used_at = NOW(), expires_at = NOW()
@@ -170,10 +129,9 @@ CREATE TRIGGER on_auth_user_created
 
 
 -- =============================================
--- STEP 5: 확인
+-- STEP 3: 확인
 -- =============================================
-SELECT '✅ 004_fix_handle_new_user.sql 완료' AS result;
-SELECT '  - email 컬럼 보장' AS detail
-UNION ALL SELECT '  - handle_new_user() email 포함으로 재생성'
-UNION ALL SELECT '  - 초대 코드 소비 에러 방어 추가'
+SELECT '✅ 005_expire_used_invite_codes.sql 완료' AS result;
+SELECT '  - 기존 사용된 코드 일괄 만료 처리' AS detail
+UNION ALL SELECT '  - handle_new_user() 초대코드 사용 시 expires_at=NOW() 추가'
 UNION ALL SELECT '  - 트리거 재생성 완료';

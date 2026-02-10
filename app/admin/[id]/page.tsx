@@ -42,7 +42,7 @@ const [loading, setLoading] = useState(true)
         <div>
           <span className="text-sm font-bold text-slate-400 uppercase tracking-wider">Dashboard</span>
           <h1 className="text-3xl font-extrabold text-slate-900 mt-1">
-            {company?.name || '나의 회사'} <span className="text-blue-600">현황</span>
+            {company?.name || '나의 회사'} <span className="text-steel-600">현황</span>
           </h1>
         </div>
         <div className="text-right">
@@ -60,7 +60,7 @@ const [loading, setLoading] = useState(true)
                <div className={`w-2 h-2 rounded-full ${stat.color}`}></div>
             </div>
             <p className="text-2xl font-extrabold text-slate-900">{stat.value}</p>
-            <p className={`text-xs font-bold mt-2 ${stat.change.includes('+') ? 'text-red-500' : 'text-blue-500'}`}>
+            <p className={`text-xs font-bold mt-2 ${stat.change.includes('+') ? 'text-red-500' : 'text-steel-500'}`}>
               {stat.change}
             </p>
           </div>
@@ -75,15 +75,15 @@ const [loading, setLoading] = useState(true)
           <h3 className="text-lg font-bold text-slate-900 mb-6">🚀 빠른 실행</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
              {['신규 계약 등록', '차량 입출고', '사고 접수', '정비 관리'].map((action) => (
-               <button key={action} className="p-4 rounded-xl bg-slate-50 hover:bg-blue-50 text-slate-600 hover:text-blue-600 font-bold transition-colors border border-slate-100 hover:border-blue-200">
+               <button key={action} className="p-4 rounded-xl bg-slate-50 hover:bg-steel-50 text-slate-600 hover:text-steel-600 font-bold transition-colors border border-slate-100 hover:border-steel-200">
                  {action}
                </button>
              ))}
           </div>
 
-          <div className="mt-8 p-6 bg-blue-50/50 rounded-xl border border-blue-100">
-             <h4 className="font-bold text-blue-800 mb-2">💡 Self-Disruption Tip</h4>
-             <p className="text-sm text-blue-600">이번 달 차량 가동률이 지난달보다 1.2% 떨어졌습니다. 유휴 차량을 프로모션에 활용해보세요.</p>
+          <div className="mt-8 p-6 bg-steel-50/50 rounded-xl border border-steel-100">
+             <h4 className="font-bold text-steel-800 mb-2">💡 Self-Disruption Tip</h4>
+             <p className="text-sm text-steel-600">이번 달 차량 가동률이 지난달보다 1.2% 떨어졌습니다. 유휴 차량을 프로모션에 활용해보세요.</p>
           </div>
         </div>
 
@@ -98,7 +98,7 @@ const [loading, setLoading] = useState(true)
               { text: '1월 매출 마감 보고서', time: '어제', type: 'info' },
             ].map((noti, idx) => (
               <li key={idx} className="flex items-start gap-3 p-3 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer">
-                <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${noti.type === 'warn' ? 'bg-red-500' : noti.type === 'success' ? 'bg-green-500' : 'bg-blue-400'}`}></div>
+                <div className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${noti.type === 'warn' ? 'bg-red-500' : noti.type === 'success' ? 'bg-green-500' : 'bg-steel-400'}`}></div>
                 <div>
                    <p className="text-sm font-bold text-slate-700">{noti.text}</p>
                    <p className="text-xs text-slate-400">{noti.time}</p>

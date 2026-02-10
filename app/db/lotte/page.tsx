@@ -101,7 +101,7 @@ export default function LotteDbPage() {
   const getTypeColor = (type: string) => {
     if (type === 'daily') return 'bg-orange-100 text-orange-700 border-orange-200'
     if (type === 'monthly') return 'bg-green-100 text-green-700 border-green-200'
-    return 'bg-blue-100 text-blue-700 border-blue-200'
+    return 'bg-steel-100 text-steel-700 border-steel-200'
   }
 
   return (
@@ -273,7 +273,7 @@ export default function LotteDbPage() {
                 <div className="flex border-b bg-gray-50">
                     <button onClick={() => setRentalType('daily')} className={`flex-1 py-3 text-xs font-bold transition-all ${rentalType === 'daily' ? 'bg-white text-orange-600 border-b-2 border-orange-500' : 'text-gray-400 hover:text-gray-600'}`}>🌞 단기(일)</button>
                     <button onClick={() => setRentalType('monthly')} className={`flex-1 py-3 text-xs font-bold transition-all ${rentalType === 'monthly' ? 'bg-white text-green-600 border-b-2 border-green-500' : 'text-gray-400 hover:text-gray-600'}`}>📅 중기(월)</button>
-                    <button onClick={() => setRentalType('long')} className={`flex-1 py-3 text-xs font-bold transition-all ${rentalType === 'long' ? 'bg-white text-blue-600 border-b-2 border-blue-500' : 'text-gray-400 hover:text-gray-600'}`}>🏢 장기(년)</button>
+                    <button onClick={() => setRentalType('long')} className={`flex-1 py-3 text-xs font-bold transition-all ${rentalType === 'long' ? 'bg-white text-steel-600 border-b-2 border-steel-500' : 'text-gray-400 hover:text-gray-600'}`}>🏢 장기(년)</button>
                 </div>
 
                 <div className="p-6 space-y-4">

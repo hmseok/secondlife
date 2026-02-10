@@ -7,10 +7,17 @@ import { useApp } from '../context/AppContext'
 import AddCompanyModal from '../components/admin/AddCompanyModal'
 
 // ============================================
-// 관리자 대시보드 + 가입 승인 관리
-// god_admin 회사는 별도 섹션으로 분리
+// 회사/가입 관리 — god_admin + 회사 + 사용자 통합
 // ============================================
 
+type UserProfile = {
+  id: string
+  email: string
+  employee_name: string | null
+  role: string
+  is_active: boolean
+  created_at: string
+}
 
 type CompanyWithUsers = {
   id: string
@@ -20,19 +27,20 @@ type CompanyWithUsers = {
   plan: string
   is_active: boolean
   created_at: string
-  users: { id: string; email: string; employee_name: string | null; role: string; is_active: boolean }[]
+  users: UserProfile[]
 }
-
-
 
 export default function AdminDashboard() {
   const { user, company, role, setAdminSelectedCompanyId } = useApp()
   const router = useRouter()
 
   const [companies, setCompanies] = useState<CompanyWithUsers[]>([])
+  const [godAdmins, setGodAdmins] = useState<UserProfile[]>([])
+  const [unassignedUsers, setUnassignedUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'active'>('all')
+  const [expandedSection, setExpandedSection] = useState<'admins' | null>('admins')
 
   useEffect(() => {
     if (user && (role === 'god_admin' || role === 'master')) fetchData()
@@ -42,24 +50,45 @@ export default function AdminDashboard() {
     setLoading(true)
     try {
       if (role === 'god_admin') {
+        // 1) 회사 목록
         const { data: companiesData } = await supabase
           .from('companies')
           .select('*')
           .order('created_at', { ascending: false })
 
+        // 2) 전체 프로필 (회사 소속)
         const companiesWithUsers: CompanyWithUsers[] = []
         for (const comp of (companiesData || [])) {
           const { data: users } = await supabase
             .from('profiles')
-            .select('id, email, employee_name, role, is_active')
+            .select('id, email, employee_name, role, is_active, created_at')
             .eq('company_id', comp.id)
+            .order('role', { ascending: true })
           companiesWithUsers.push({ ...comp, users: users || [] })
         }
         setCompanies(companiesWithUsers)
+
+        // 3) God Admin 사용자 (회사 없음)
+        const { data: adminData } = await supabase
+          .from('profiles')
+          .select('id, email, employee_name, role, is_active, created_at')
+          .eq('role', 'god_admin')
+          .order('created_at', { ascending: true })
+        setGodAdmins(adminData || [])
+
+        // 4) 미배정 사용자 (회사 없고 god_admin도 아닌)
+        const { data: orphanData } = await supabase
+          .from('profiles')
+          .select('id, email, employee_name, role, is_active, created_at')
+          .is('company_id', null)
+          .neq('role', 'god_admin')
+          .order('created_at', { ascending: false })
+        setUnassignedUsers(orphanData || [])
+
       } else if (company) {
         const { data: users } = await supabase
           .from('profiles')
-          .select('id, email, employee_name, role, is_active')
+          .select('id, email, employee_name, role, is_active, created_at')
           .eq('company_id', company.id)
         setCompanies([{ ...company, users: users || [] }])
       }
@@ -128,12 +157,11 @@ export default function AdminDashboard() {
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' })
 
-  // god_admin은 회사 없이 운영 — god_admin 유저가 있는 회사는 목록에서 제외
+  // 클라이언트 회사 (god_admin 전용 회사 제외)
   const clientCompanies = role === 'god_admin'
     ? companies.filter(c => !c.users.some(u => u.role === 'god_admin'))
     : companies
 
-  // 필터링
   const filteredCompanies = clientCompanies.filter(c => {
     if (activeFilter === 'pending') return !c.is_active
     if (activeFilter === 'active') return c.is_active
@@ -142,12 +170,48 @@ export default function AdminDashboard() {
 
   const pendingCount = clientCompanies.filter(c => !c.is_active).length
   const activeCount = clientCompanies.filter(c => c.is_active).length
+  const totalUsers = clientCompanies.reduce((sum, c) => sum + c.users.length, 0)
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-steel-600"></div>
       </div>
+    )
+  }
+
+  // ===== 역할 배지 렌더러 =====
+  const roleBadge = (r: string) => {
+    if (r === 'god_admin') return <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400 text-white uppercase tracking-wider">GOD ADMIN</span>
+    if (r === 'master') return <span className="text-[9px] font-black px-2 py-0.5 rounded bg-steel-100 text-steel-700">관리자</span>
+    return <span className="text-[9px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-500">직원</span>
+  }
+
+  // ===== 활성 토글 버튼 =====
+  const activeToggle = (u: UserProfile) => {
+    if (role === 'god_admin' && u.role !== 'god_admin') {
+      return (
+        <button
+          onClick={() => toggleUserActive(u.id, u.is_active)}
+          className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
+            u.is_active
+              ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+              : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
+          }`}
+          title={u.is_active ? '클릭하면 서비스 이용을 정지합니다' : '클릭하면 서비스 이용을 허용합니다'}
+        >
+          <span className={`w-2 h-2 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-red-400'}`}></span>
+          {u.is_active ? '허용' : '정지'}
+        </button>
+      )
+    }
+    return (
+      <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded ${
+        u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
+      }`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-red-400'}`}></span>
+        {u.is_active ? '허용' : '정지'}
+      </span>
     )
   }
 
@@ -271,6 +335,7 @@ export default function AdminDashboard() {
                   <th className="px-5 py-2 text-[10px] font-bold text-slate-400 uppercase">이름</th>
                   <th className="px-5 py-2 text-[10px] font-bold text-slate-400 uppercase">이메일</th>
                   <th className="px-5 py-2 text-[10px] font-bold text-slate-400 uppercase">역할</th>
+                  <th className="px-5 py-2 text-[10px] font-bold text-slate-400 uppercase">가입일</th>
                   <th className="px-5 py-2 text-[10px] font-bold text-slate-400 uppercase">서비스 이용</th>
                 </tr>
               </thead>
@@ -279,35 +344,9 @@ export default function AdminDashboard() {
                   <tr key={u.id} className="border-t border-slate-50 hover:bg-slate-50/30">
                     <td className="px-5 py-3 text-sm font-bold text-slate-800">{u.employee_name || '(미설정)'}</td>
                     <td className="px-5 py-3 text-sm text-slate-500">{u.email}</td>
-                    <td className="px-5 py-3">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                        u.role === 'god_admin' ? 'bg-sky-100 text-sky-700' :
-                        u.role === 'master' ? 'bg-steel-100 text-steel-700' : 'bg-slate-100 text-slate-600'
-                      }`}>{u.role === 'god_admin' ? 'GOD ADMIN' : u.role === 'master' ? '관리자' : '직원'}</span>
-                    </td>
-                    <td className="px-5 py-3">
-                      {role === 'god_admin' && u.role !== 'god_admin' ? (
-                        <button
-                          onClick={() => toggleUserActive(u.id, u.is_active)}
-                          className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
-                            u.is_active
-                              ? 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
-                              : 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200'
-                          }`}
-                          title={u.is_active ? '클릭하면 서비스 이용을 정지합니다' : '클릭하면 서비스 이용을 허용합니다'}
-                        >
-                          <span className={`w-2 h-2 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-red-400'}`}></span>
-                          {u.is_active ? '허용' : '정지'}
-                        </button>
-                      ) : (
-                        <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded ${
-                          u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-red-400'}`}></span>
-                          {u.is_active ? '허용' : '정지'}
-                        </span>
-                      )}
-                    </td>
+                    <td className="px-5 py-3">{roleBadge(u.role)}</td>
+                    <td className="px-5 py-3 text-xs text-slate-400">{formatDate(u.created_at)}</td>
+                    <td className="px-5 py-3">{activeToggle(u)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -320,33 +359,11 @@ export default function AdminDashboard() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-sm font-bold text-slate-800">{u.employee_name || '(미설정)'}</span>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                      u.role === 'god_admin' ? 'bg-sky-100 text-sky-700' :
-                      u.role === 'master' ? 'bg-steel-100 text-steel-700' : 'bg-slate-100 text-slate-600'
-                    }`}>{u.role === 'god_admin' ? 'GOD' : u.role === 'master' ? '관리자' : '직원'}</span>
+                    {roleBadge(u.role)}
                   </div>
                   <div className="text-[11px] text-slate-400 truncate mt-0.5">{u.email}</div>
                 </div>
-                {role === 'god_admin' && u.role !== 'god_admin' ? (
-                  <button
-                    onClick={() => toggleUserActive(u.id, u.is_active)}
-                    className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg flex-shrink-0 transition-all ${
-                      u.is_active
-                        ? 'bg-green-50 text-green-700 border border-green-200'
-                        : 'bg-red-50 text-red-600 border border-red-200'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-red-400'}`}></span>
-                    {u.is_active ? '허용' : '정지'}
-                  </button>
-                ) : (
-                  <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                    u.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${u.is_active ? 'bg-green-500' : 'bg-red-400'}`}></span>
-                    {u.is_active ? '허용' : '정지'}
-                  </span>
-                )}
+                {activeToggle(u)}
               </div>
             ))}
           </div>
@@ -364,7 +381,7 @@ export default function AdminDashboard() {
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900">
               {role === 'god_admin' ? '회사/가입 관리' : '회사 관리'}
             </h1>
-            <p className="text-slate-500 mt-1 text-sm">회사 가입 승인 및 사용자 관리</p>
+            <p className="text-slate-500 mt-1 text-sm">회사 가입 승인, 사용자 관리 및 플랫폼 관리자 현황</p>
           </div>
           <div className="flex gap-2">
             {role === 'god_admin' && (
@@ -379,7 +396,13 @@ export default function AdminDashboard() {
         </div>
 
         {/* KPI */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4 mb-6 md:mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 mb-6 md:mb-8">
+          {role === 'god_admin' && (
+            <div className="bg-gradient-to-br from-yellow-50 to-orange-50 p-4 md:p-5 rounded-2xl border border-yellow-200 shadow-sm">
+              <div className="text-[10px] md:text-xs font-bold text-yellow-600 uppercase mb-1">God Admin</div>
+              <div className="text-2xl md:text-3xl font-black text-yellow-700">{godAdmins.length}</div>
+            </div>
+          )}
           <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm">
             <div className="text-[10px] md:text-xs font-bold text-slate-400 uppercase mb-1">가입 회사</div>
             <div className="text-2xl md:text-3xl font-black text-slate-900">{clientCompanies.length}</div>
@@ -392,14 +415,151 @@ export default function AdminDashboard() {
           )}
           <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200 shadow-sm">
             <div className="text-[10px] md:text-xs font-bold text-slate-400 uppercase mb-1">전체 사용자</div>
-            <div className="text-2xl md:text-3xl font-black text-steel-600">{companies.reduce((sum, c) => sum + c.users.length, 0)}</div>
+            <div className="text-2xl md:text-3xl font-black text-steel-600">{totalUsers + godAdmins.length}</div>
           </div>
         </div>
+
+        {/* ===== God Admin 섹션 ===== */}
+        {role === 'god_admin' && godAdmins.length > 0 && (
+          <div className="mb-6 md:mb-8">
+            <button
+              onClick={() => setExpandedSection(expandedSection === 'admins' ? null : 'admins')}
+              className="flex items-center gap-2 mb-3 group"
+            >
+              <svg className={`w-4 h-4 text-yellow-500 transition-transform ${expandedSection === 'admins' ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
+              </svg>
+              <h2 className="text-sm font-bold text-yellow-600 uppercase tracking-wider">
+                Platform Administrators ({godAdmins.length})
+              </h2>
+            </button>
+
+            {expandedSection === 'admins' && (
+              <div className="bg-white rounded-2xl border border-yellow-200 shadow-sm overflow-hidden">
+                {/* Desktop */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-gradient-to-r from-yellow-50 to-orange-50">
+                        <th className="px-5 py-3 text-[10px] font-bold text-yellow-600 uppercase"></th>
+                        <th className="px-5 py-3 text-[10px] font-bold text-yellow-600 uppercase">이름</th>
+                        <th className="px-5 py-3 text-[10px] font-bold text-yellow-600 uppercase">이메일</th>
+                        <th className="px-5 py-3 text-[10px] font-bold text-yellow-600 uppercase">가입일</th>
+                        <th className="px-5 py-3 text-[10px] font-bold text-yellow-600 uppercase">상태</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {godAdmins.map((admin) => (
+                        <tr key={admin.id} className="border-t border-yellow-100 hover:bg-yellow-50/30">
+                          <td className="px-5 py-3">
+                            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
+                              {(admin.employee_name || admin.email)?.[0]?.toUpperCase() || '?'}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-sm text-slate-900">{admin.employee_name || '이름 미설정'}</span>
+                              {admin.id === user?.id && (
+                                <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-100 text-sky-600">(나)</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-5 py-3 text-sm text-slate-500">{admin.email}</td>
+                          <td className="px-5 py-3 text-xs text-slate-400">{formatDate(admin.created_at)}</td>
+                          <td className="px-5 py-3">
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded bg-green-100 text-green-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                              활성
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* Mobile */}
+                <div className="md:hidden divide-y divide-yellow-100">
+                  {godAdmins.map((admin) => (
+                    <div key={admin.id} className="p-4 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
+                        {(admin.employee_name || admin.email)?.[0]?.toUpperCase() || '?'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-sm text-slate-900">{admin.employee_name || '이름 미설정'}</span>
+                          {admin.id === user?.id && (
+                            <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-sky-100 text-sky-600">(나)</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-slate-400 truncate mt-0.5">{admin.email}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{formatDate(admin.created_at)}</div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded bg-green-100 text-green-700 flex-shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        활성
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== 미배정 사용자 ===== */}
+        {role === 'god_admin' && unassignedUsers.length > 0 && (
+          <div className="mb-6 md:mb-8">
+            <h2 className="text-sm font-bold text-red-500 uppercase tracking-wider mb-3">
+              미배정 사용자 ({unassignedUsers.length})
+            </h2>
+            <div className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden">
+              <div className="hidden md:block overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-red-50/50">
+                      <th className="px-5 py-2 text-[10px] font-bold text-red-400 uppercase">이름</th>
+                      <th className="px-5 py-2 text-[10px] font-bold text-red-400 uppercase">이메일</th>
+                      <th className="px-5 py-2 text-[10px] font-bold text-red-400 uppercase">역할</th>
+                      <th className="px-5 py-2 text-[10px] font-bold text-red-400 uppercase">가입일</th>
+                      <th className="px-5 py-2 text-[10px] font-bold text-red-400 uppercase">상태</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {unassignedUsers.map(u => (
+                      <tr key={u.id} className="border-t border-red-50 hover:bg-red-50/30">
+                        <td className="px-5 py-3 text-sm font-bold text-slate-800">{u.employee_name || '(미설정)'}</td>
+                        <td className="px-5 py-3 text-sm text-slate-500">{u.email}</td>
+                        <td className="px-5 py-3">{roleBadge(u.role)}</td>
+                        <td className="px-5 py-3 text-xs text-slate-400">{formatDate(u.created_at)}</td>
+                        <td className="px-5 py-3">{activeToggle(u)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="md:hidden divide-y divide-red-100">
+                {unassignedUsers.map(u => (
+                  <div key={u.id} className="p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-bold text-slate-800">{u.employee_name || '(미설정)'}</span>
+                        {roleBadge(u.role)}
+                      </div>
+                      <div className="text-[11px] text-slate-400 truncate mt-0.5">{u.email}</div>
+                    </div>
+                    {activeToggle(u)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ===== 가입 회사 목록 ===== */}
 
         {/* 필터 탭 */}
-        <div className="flex gap-2 mb-4 md:mb-6 overflow-x-auto">
+        <div className="flex items-center gap-2 mb-4 md:mb-6 overflow-x-auto">
+          <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider mr-2 flex-shrink-0">회사</h2>
           {[
             { key: 'all', label: '전체', count: clientCompanies.length },
             { key: 'pending', label: '승인 대기', count: pendingCount },
