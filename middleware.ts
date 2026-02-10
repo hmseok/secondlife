@@ -9,11 +9,21 @@ const PUBLIC_PATHS = [
   '/auth/verified', // 인증 완료 페이지
 ]
 
+// ★ 리다이렉트 시 Supabase 세션 쿠키를 복사하는 헬퍼
+function redirectWithCookies(url: URL, res: NextResponse): NextResponse {
+  const redirectResponse = NextResponse.redirect(url)
+  // 미들웨어가 갱신한 쿠키를 리다이렉트 응답에 복사
+  res.headers.getSetCookie().forEach(cookie => {
+    redirectResponse.headers.append('Set-Cookie', cookie)
+  })
+  return redirectResponse
+}
+
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
   const supabase = createMiddlewareClient({ req, res })
 
-  // 세션 갱신
+  // 세션 갱신 (쿠키가 res에 설정됨)
   const { data: { session } } = await supabase.auth.getSession()
 
   const pathname = req.nextUrl.pathname
@@ -22,7 +32,8 @@ export async function middleware(req: NextRequest) {
   if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     // 이미 로그인된 상태에서 로그인 페이지 접근 시 대시보드로 리디렉션
     if (pathname === '/' && session) {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
+      // ★ 쿠키를 포함한 리다이렉트 — 이전에는 쿠키가 유실되어 무한루프 발생
+      return redirectWithCookies(new URL('/dashboard', req.url), res)
     }
     return res
   }
@@ -36,7 +47,8 @@ export async function middleware(req: NextRequest) {
   if (!session) {
     const redirectUrl = new URL('/', req.url)
     redirectUrl.searchParams.set('redirect', pathname)
-    return NextResponse.redirect(redirectUrl)
+    // ★ 세션 없을 때도 쿠키 포함 (토큰 클리어 쿠키 등)
+    return redirectWithCookies(redirectUrl, res)
   }
 
   return res
