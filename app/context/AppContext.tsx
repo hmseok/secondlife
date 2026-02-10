@@ -62,7 +62,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [menuRefreshKey, setMenuRefreshKey] = useState(0)
   const triggerMenuRefresh = () => setMenuRefreshKey(prev => prev + 1)
 
-  // ★ 무한루프 방지: fetchSession 중복 호출 차단
+  // ★ 무한루프 방지용 ref
   const isFetchingRef = useRef(false)
 
   // 세션 없을 때 상태 초기화
@@ -78,32 +78,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAdminSelectedCompanyId(null)
   }
 
-  const fetchSession = async () => {
-    // 이미 로딩 중이면 중복 호출 방지
+  // ★ 프로필 데이터만 로드 (getSession 호출 없음 → 무한루프 원천 차단)
+  const loadUserData = async (authUser: any) => {
     if (isFetchingRef.current) return
     isFetchingRef.current = true
     try {
-      // 1. 세션 확인
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      setUser(authUser)
 
-      // Refresh Token 만료/무효 → 강제 로그아웃
-      if (sessionError) {
-        console.warn('⚠️ 세션 에러 (토큰 만료 등):', sessionError.message)
-        await supabase.auth.signOut().catch(() => {})
-        clearState()
-        setLoading(false)
-        return
-      }
-
-      if (!session) {
-        clearState()
-        setLoading(false)
-        return
-      }
-      setUser(session.user)
-
-      // 2. 프로필 + 직급 + 부서 + 회사 한 번에 로드
-      // ★ RLS 정상 동작 — SECURITY DEFINER 함수로 무한재귀 해결됨
+      // 프로필 + 직급 + 부서 + 회사 한 번에 로드
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select(`
@@ -112,7 +94,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           position:positions(*),
           department:departments(*)
         `)
-        .eq('id', session.user.id)
+        .eq('id', authUser.id)
         .maybeSingle()
 
       if (profileError) {
@@ -127,17 +109,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPosition(profileData.position || null)
         setDepartment(profileData.department || null)
 
-        // 3. 페이지 권한 로드 (직급이 있는 경우만)
+        // 페이지 권한 로드 (직급이 있는 경우만)
         if (profileData.position_id && profileData.company_id) {
           const { data: permsData } = await supabase
             .from('page_permissions')
             .select('*')
             .eq('company_id', profileData.company_id)
             .eq('position_id', profileData.position_id)
-
           setPermissions(permsData || [])
         }
-        // god_admin이나 master는 권한 테이블 없어도 전체 허용 (usePermission에서 처리)
 
         // god_admin: 전체 회사 목록 로드
         if (profileData.role === 'god_admin') {
@@ -153,48 +133,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error: any) {
       console.error('AppContext 로딩 에러:', error)
-      // 인증 관련 에러인 경우 강제 로그아웃
-      if (error?.message?.includes('Refresh Token') || error?.message?.includes('JWT') || error?.status === 401) {
-        console.warn('⚠️ 인증 토큰 에러 → 로그아웃 처리')
-        await supabase.auth.signOut().catch(() => {})
-        clearState()
-      }
     } finally {
       setLoading(false)
       isFetchingRef.current = false
     }
   }
 
+  // ★ 초기 로드 전용 (getSession은 여기서만 1번 호출)
+  const fetchSession = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error || !session) {
+        clearState()
+        setLoading(false)
+        return
+      }
+      await loadUserData(session.user)
+    } catch (error: any) {
+      console.error('초기 세션 로드 에러:', error)
+      clearState()
+      setLoading(false)
+    }
+  }
+
   useEffect(() => {
-    // 초기 세션 로드
+    // 초기 세션 로드 (getSession 1회만 호출)
     fetchSession()
 
-    // ✅ 핵심: 로그인/로그아웃 이벤트 감지 → 자동으로 상태 갱신
-    // 초기 SIGNED_IN 이벤트는 fetchSession()에서 이미 처리하므로 무시
-    let initialEventSkipped = false
+    // ★ Auth 이벤트 감지 — 콜백의 session을 직접 사용 (getSession 재호출 안 함)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         console.log('🔄 Auth 상태 변경:', event)
-        if (event === 'SIGNED_IN' && !initialEventSkipped) {
-          // 초기 마운트 시 발생하는 SIGNED_IN은 건너뜀 (fetchSession()이 이미 처리)
-          initialEventSkipped = true
-          return
-        }
-        initialEventSkipped = true
 
-        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          fetchSession()
-        } else if (event === 'SIGNED_OUT') {
-          setLoading(true)
+        if (event === 'SIGNED_OUT') {
           clearState()
           setLoading(false)
+        } else if (event === 'SIGNED_IN' && session?.user) {
+          // ★ 핵심: getSession()을 다시 호출하지 않고 콜백의 session.user 사용
+          loadUserData(session.user)
         }
+        // INITIAL_SESSION, TOKEN_REFRESHED → 무시 (불필요한 재로드 방지)
       }
     )
 
-    return () => {
-      subscription.unsubscribe()
-    }
+    return () => subscription.unsubscribe()
   }, [])
 
   return (
