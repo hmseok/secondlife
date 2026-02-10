@@ -6,17 +6,20 @@ import { createClient } from '@supabase/supabase-js'
 // POST { code: "XXXX-XXXX" } → { valid: true/false }
 // ============================================
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+// ★ 런타임에 생성 (Docker 빌드 호환)
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+}
 
 export async function POST(request: NextRequest) {
   const { code } = await request.json()
   if (!code) return NextResponse.json({ valid: false, error: '코드를 입력하세요.' })
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('admin_invite_codes')
     .select('id, description, expires_at')
     .eq('code', code.trim().toUpperCase())

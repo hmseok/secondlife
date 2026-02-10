@@ -8,11 +8,14 @@ import { Resend } from 'resend'
 // POST → 초대 코드 발급 + Resend 이메일 발송
 // ============================================
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { auth: { autoRefreshToken: false, persistSession: false } }
-)
+// ★ 빌드 타임이 아닌 런타임에 클라이언트 생성 (Docker 빌드 호환)
+function getSupabaseAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+}
 
 // 요청자의 role 확인 (JWT에서)
 async function verifyPlatformAdmin(request: NextRequest) {
@@ -20,10 +23,10 @@ async function verifyPlatformAdmin(request: NextRequest) {
   if (!authHeader?.startsWith('Bearer ')) return null
 
   const token = authHeader.replace('Bearer ', '')
-  const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+  const { data: { user }, error } = await getSupabaseAdmin().auth.getUser(token)
   if (error || !user) return null
 
-  const { data: profile } = await supabaseAdmin
+  const { data: profile } = await getSupabaseAdmin()
     .from('profiles')
     .select('role')
     .eq('id', user.id)
@@ -38,7 +41,7 @@ export async function GET(request: NextRequest) {
   const user = await verifyPlatformAdmin(request)
   if (!user) return NextResponse.json({ error: '권한 없음' }, { status: 403 })
 
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('admin_invite_codes')
     .select(`
       id, code, description, created_at, expires_at, used_at,
@@ -72,7 +75,7 @@ export async function POST(request: NextRequest) {
   const expiresAt = new Date(Date.now() + validHours * 60 * 60 * 1000).toISOString()
 
   // DB에 저장
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await getSupabaseAdmin()
     .from('admin_invite_codes')
     .insert({
       code,
