@@ -62,7 +62,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [menuRefreshKey, setMenuRefreshKey] = useState(0)
   const triggerMenuRefresh = () => setMenuRefreshKey(prev => prev + 1)
 
-  // ★ 무한루프 방지용 ref
+  // ★ 무한루프 완전 차단: 데이터 로드 완료 플래그
+  const isLoadedRef = useRef(false)
   const isFetchingRef = useRef(false)
 
   // 세션 없을 때 상태 초기화
@@ -78,14 +79,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setAdminSelectedCompanyId(null)
   }
 
-  // ★ 프로필 데이터만 로드 (getSession 호출 없음 → 무한루프 원천 차단)
+  // ★ 프로필 데이터 로드 (getSession 호출 없음)
   const loadUserData = async (authUser: any) => {
     if (isFetchingRef.current) return
     isFetchingRef.current = true
     try {
       setUser(authUser)
 
-      // 프로필 + 직급 + 부서 + 회사 한 번에 로드
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select(`
@@ -98,18 +98,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         .maybeSingle()
 
       if (profileError) {
-        console.error('❌ 프로필 로드 에러:', profileError.message)
+        console.error('프로필 로드 에러:', profileError.message)
       }
 
       if (profileData) {
-        console.log('✅ AppContext 로드:', profileData.role, profileData.position?.name)
+        console.log('AppContext 로드 완료:', profileData.role, profileData.position?.name)
         setProfile(profileData as Profile)
         setRole(profileData.role || 'user')
         setCompany(profileData.companies)
         setPosition(profileData.position || null)
         setDepartment(profileData.department || null)
 
-        // 페이지 권한 로드 (직급이 있는 경우만)
         if (profileData.position_id && profileData.company_id) {
           const { data: permsData } = await supabase
             .from('page_permissions')
@@ -119,7 +118,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setPermissions(permsData || [])
         }
 
-        // god_admin: 전체 회사 목록 로드
         if (profileData.role === 'god_admin') {
           const { data: companiesData } = await supabase
             .from('companies')
@@ -131,6 +129,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         setRole('user')
       }
+
+      // ★ 로드 완료 표시 → 이후 SIGNED_IN 이벤트 무시
+      isLoadedRef.current = true
     } catch (error: any) {
       console.error('AppContext 로딩 에러:', error)
     } finally {
@@ -139,40 +140,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // ★ 초기 로드 전용 (getSession은 여기서만 1번 호출)
-  const fetchSession = async () => {
-    try {
-      const { data: { session }, error } = await supabase.auth.getSession()
-      if (error || !session) {
-        clearState()
-        setLoading(false)
-        return
-      }
+  // refreshAuth: 외부에서 강제 새로고침 (설정 변경 등)
+  const refreshAuth = async () => {
+    isLoadedRef.current = false
+    isFetchingRef.current = false
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.user) {
       await loadUserData(session.user)
-    } catch (error: any) {
-      console.error('초기 세션 로드 에러:', error)
-      clearState()
-      setLoading(false)
     }
   }
 
   useEffect(() => {
-    // 초기 세션 로드 (getSession 1회만 호출)
-    fetchSession()
-
-    // ★ Auth 이벤트 감지 — 콜백의 session을 직접 사용 (getSession 재호출 안 함)
+    // ★ onAuthStateChange 하나로 통합 — fetchSession/getSession 별도 호출 안 함
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        console.log('🔄 Auth 상태 변경:', event)
+        console.log('Auth:', event, isLoadedRef.current ? '(loaded, skip)' : '(processing)')
 
         if (event === 'SIGNED_OUT') {
+          isLoadedRef.current = false
+          isFetchingRef.current = false
           clearState()
           setLoading(false)
-        } else if (event === 'SIGNED_IN' && session?.user) {
-          // ★ 핵심: getSession()을 다시 호출하지 않고 콜백의 session.user 사용
-          loadUserData(session.user)
+          return
         }
-        // INITIAL_SESSION, TOKEN_REFRESHED → 무시 (불필요한 재로드 방지)
+
+        // ★ 핵심: 이미 로드 완료 상태면 SIGNED_IN/INITIAL_SESSION 전부 무시
+        if (isLoadedRef.current) return
+
+        if ((event === 'INITIAL_SESSION' || event === 'SIGNED_IN') && session?.user) {
+          loadUserData(session.user)
+        } else if (event === 'INITIAL_SESSION' && !session) {
+          // 세션 없음 → 로그인 페이지 표시
+          clearState()
+          setLoading(false)
+        }
       }
     )
 
@@ -189,7 +190,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       department,
       permissions,
       loading,
-      refreshAuth: fetchSession,
+      refreshAuth,
       allCompanies,
       adminSelectedCompanyId,
       setAdminSelectedCompanyId,
