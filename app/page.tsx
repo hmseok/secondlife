@@ -570,7 +570,17 @@ function AuthPage() {
       })
 
       if (error) {
-        setMessage({ text: error.message, type: 'error' })
+        console.error('회원가입 에러:', error.message, error)
+        // 사용자 친화적 에러 메시지 변환
+        let friendlyMsg = error.message
+        if (error.message.includes('Database error')) {
+          friendlyMsg = '계정 생성 중 데이터베이스 오류가 발생했습니다. 관리자에게 문의하세요.'
+        } else if (error.message.includes('already registered')) {
+          friendlyMsg = '이미 등록된 이메일입니다.'
+        } else if (error.message.includes('valid password')) {
+          friendlyMsg = '비밀번호가 유효하지 않습니다. (최소 8자)'
+        }
+        setMessage({ text: friendlyMsg, type: 'error' })
         setLoading(false)
         return
       }

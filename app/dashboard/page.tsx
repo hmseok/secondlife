@@ -29,10 +29,9 @@ type DashboardStats = {
 type GodAdminUser = {
   id: string
   email: string
-  name: string | null
+  employee_name: string | null
   role: string
   created_at: string
-  last_sign_in_at: string | null
 }
 
 type PlatformStats = {
@@ -127,7 +126,7 @@ export default function DashboardPage() {
         // god_admin 사용자 목록
         const { data: godAdminData } = await supabase
           .from('profiles')
-          .select('id, email, name, role, created_at')
+          .select('id, email, employee_name, role, created_at')
           .eq('role', 'god_admin')
           .order('created_at', { ascending: true })
 
@@ -147,7 +146,7 @@ export default function DashboardPage() {
           pendingCompanies: pendingCount || 0,
           totalUsers: userCount || 0,
           totalActiveModules: activeModuleCount,
-          godAdmins: (godAdminData || []).map(g => ({ ...g, last_sign_in_at: null })),
+          godAdmins: godAdminData || [],
           pendingList: pendingData || [],
           companyList: (allCompanies || []).map(c => ({
             ...c,
@@ -476,10 +475,10 @@ export default function DashboardPage() {
                 <div key={admin.id} className="bg-gray-900 rounded-xl p-4 border border-gray-800">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center text-white font-black text-sm flex-shrink-0">
-                      {(admin.name || admin.email)?.[0]?.toUpperCase() || '?'}
+                      {(admin.employee_name || admin.email)?.[0]?.toUpperCase() || '?'}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-white font-bold text-sm truncate">{admin.name || '이름 미설정'}</p>
+                      <p className="text-white font-bold text-sm truncate">{admin.employee_name || '이름 미설정'}</p>
                       <p className="text-gray-500 text-xs truncate">{admin.email}</p>
                     </div>
                   </div>
