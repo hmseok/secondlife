@@ -35,12 +35,10 @@ export default function AdminDashboard() {
   const router = useRouter()
 
   const [companies, setCompanies] = useState<CompanyWithUsers[]>([])
-  const [godAdmins, setGodAdmins] = useState<UserProfile[]>([])
   const [unassignedUsers, setUnassignedUsers] = useState<UserProfile[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddModal, setShowAddModal] = useState(false)
   const [activeFilter, setActiveFilter] = useState<'all' | 'pending' | 'active'>('all')
-  const [expandedSection, setExpandedSection] = useState<'admins' | null>('admins')
 
   useEffect(() => {
     if (user && (role === 'god_admin' || role === 'master')) fetchData()
@@ -68,15 +66,7 @@ export default function AdminDashboard() {
         }
         setCompanies(companiesWithUsers)
 
-        // 3) God Admin 사용자 (회사 없음)
-        const { data: adminData } = await supabase
-          .from('profiles')
-          .select('id, email, employee_name, role, is_active, created_at')
-          .eq('role', 'god_admin')
-          .order('created_at', { ascending: true })
-        setGodAdmins(adminData || [])
-
-        // 4) 미배정 사용자 (회사 없고 god_admin도 아닌)
+        // 3) 미배정 사용자 (회사 없고 god_admin도 아닌)
         const { data: orphanData } = await supabase
           .from('profiles')
           .select('id, email, employee_name, role, is_active, created_at')
