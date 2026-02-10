@@ -12,7 +12,7 @@ export default function Dashboard() {
           반갑습니다, {user?.user_metadata?.name || '대표'}님! 👋
         </h1>
         <p className="text-gray-500 mt-2">
-          오늘도 <span className="text-indigo-600 font-bold">{currentCompany?.name || 'Sideline'}</span> 관리를 시작해볼까요?
+          오늘도 <span className="text-indigo-600 font-bold">{currentCompany?.name || 'Self-Disruption'}</span> 관리를 시작해볼까요?
         </p>
       </div>
 

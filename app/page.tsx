@@ -1,16 +1,14 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback, Suspense } from 'react'
-import { useRouter } from 'next/navigation'
 import { supabase } from './utils/supabase'
 
 // ============================================
-// Sideline ERP - Enterprise Auth Page
+// Self-Disruption ERP - Enterprise Auth Page
 // Premium Login / Signup / Verification Flow
 // ============================================
 
 function AuthPage() {
-  const router = useRouter()
   const isLocal = process.env.NODE_ENV === 'development'
 
   const [view, setView] = useState<'login' | 'signup' | 'verify' | 'verified'>('login')
@@ -29,6 +27,18 @@ function AuthPage() {
   const [bizFile, setBizFile] = useState<File | null>(null)
   const [bizFilePreview, setBizFilePreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // 사업자등록증 OCR 검증 상태
+  const [bizOcrLoading, setBizOcrLoading] = useState(false)
+  const [bizOcrResult, setBizOcrResult] = useState<{
+    business_number: string
+    company_name: string
+    company_name_full: string
+    representative: string
+    confidence: string
+  } | null>(null)
+  const [bizNumberVerified, setBizNumberVerified] = useState<boolean | null>(null) // null=미확인, true=일치, false=불일치
+  const [bizNameVerified, setBizNameVerified] = useState<boolean | null>(null) // null=미확인, true=일치, false=불일치
 
   const [validity, setValidity] = useState({
     email: false, password: false, passwordConfirm: false,
@@ -93,6 +103,112 @@ function AuthPage() {
     setDupCheck(prev => ({ ...prev, businessNumber: data === true ? false : true }))
   }
 
+  // 사업자명 정규화 (법인형태 제거 후 비교용)
+  const normalizeBizName = (name: string): string => {
+    return name
+      .replace(/주식회사|유한회사|합자회사|합명회사|사단법인|재단법인|사회적협동조합|협동조합/g, '')
+      .replace(/\(주\)|\(유\)|\(합\)|\(사\)|\(재\)/g, '')
+      .replace(/[㈜㈜]/g, '')
+      .replace(/\s+/g, '')
+      .trim()
+  }
+
+  // 사업자번호 + 사업자명 동시 비교
+  const compareBizInfo = (ocrResult: typeof bizOcrResult) => {
+    if (!ocrResult) return
+
+    const ocrNum = (ocrResult.business_number || '').replace(/[^0-9]/g, '')
+    const typedNum = formData.businessNumber.replace(/[^0-9]/g, '')
+    const ocrName = normalizeBizName(ocrResult.company_name || ocrResult.company_name_full || '')
+    const typedName = normalizeBizName(formData.companyName)
+
+    // 사업자번호 비교
+    let numOk: boolean | null = null
+    if (ocrNum && typedNum) {
+      numOk = ocrNum === typedNum
+    }
+    setBizNumberVerified(numOk)
+
+    // 사업자명 비교 (정규화 후 포함 관계로 비교 — 부분 일치 허용)
+    let nameOk: boolean | null = null
+    if (ocrName && typedName) {
+      nameOk = ocrName.includes(typedName) || typedName.includes(ocrName) || ocrName === typedName
+    }
+    setBizNameVerified(nameOk)
+
+    // 메시지 생성
+    if (numOk === true && nameOk === true) {
+      setMessage({ text: '사업자번호와 상호명이 모두 일치합니다.', type: 'success' })
+    } else if (numOk === false && nameOk === false) {
+      setMessage({
+        text: `사업자번호와 상호명이 모두 불일치합니다. 입력값을 확인해주세요.`,
+        type: 'error'
+      })
+    } else if (numOk === false) {
+      setMessage({
+        text: `사업자번호 불일치: 입력 [${formData.businessNumber}] ↔ 문서 [${ocrResult.business_number}]`,
+        type: 'error'
+      })
+    } else if (nameOk === false) {
+      setMessage({
+        text: `상호명 불일치: 입력 [${formData.companyName}] ↔ 문서 [${ocrResult.company_name_full || ocrResult.company_name}]`,
+        type: 'error'
+      })
+    } else if (!typedNum && !typedName) {
+      setMessage({ text: `문서 인식 완료: [${ocrResult.business_number}] ${ocrResult.company_name_full || ocrResult.company_name}. 동일한 정보를 입력해주세요.`, type: 'success' })
+    } else if (!typedNum) {
+      setMessage({ text: `문서에서 사업자번호 [${ocrResult.business_number}]를 인식했습니다. 동일한 번호를 입력해주세요.`, type: 'success' })
+    } else if (!typedName) {
+      setMessage({ text: `문서에서 상호명 [${ocrResult.company_name_full || ocrResult.company_name}]를 인식했습니다. 동일한 상호를 입력해주세요.`, type: 'success' })
+    }
+  }
+
+  // 사업자등록증 OCR 검증 호출
+  const verifyBusinessDoc = async (file: File) => {
+    setBizOcrLoading(true)
+    setBizOcrResult(null)
+    setBizNumberVerified(null)
+    setBizNameVerified(null)
+
+    try {
+      const reader = new FileReader()
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+      const res = await fetch('/api/ocr-business-registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imageBase64: base64,
+          mimeType: file.type,
+        })
+      })
+
+      if (!res.ok) throw new Error('OCR 처리 실패')
+
+      const result = await res.json()
+      setBizOcrResult(result)
+
+      if (result.confidence === 'fail') {
+        setBizNumberVerified(null)
+        setBizNameVerified(null)
+        setMessage({ text: '사업자등록증을 인식할 수 없습니다. 선명한 이미지를 업로드해주세요.', type: 'error' })
+        return
+      }
+
+      // 사업자번호 + 사업자명 동시 비교
+      compareBizInfo(result)
+    } catch (err: any) {
+      console.error('사업자등록증 OCR 에러:', err)
+      setMessage({ text: '사업자등록증 인식에 실패했습니다. 다시 시도해주세요.', type: 'error' })
+    } finally {
+      setBizOcrLoading(false)
+    }
+  }
+
   // 사업자등록증 파일 선택 핸들러
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -112,6 +228,9 @@ function AuthPage() {
     }
 
     setBizFile(file)
+    setBizOcrResult(null)
+    setBizNumberVerified(null)
+    setBizNameVerified(null)
 
     // 이미지 미리보기
     if (file.type.startsWith('image/')) {
@@ -121,37 +240,42 @@ function AuthPage() {
     } else {
       setBizFilePreview(null) // PDF는 미리보기 없이 파일명만 표시
     }
+
+    // 자동 OCR 검증 실행
+    verifyBusinessDoc(file)
   }
 
   const handleFileRemove = () => {
     setBizFile(null)
     setBizFilePreview(null)
+    setBizOcrResult(null)
+    setBizNumberVerified(null)
+    setBizNameVerified(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // 사업자등록증 업로드 (회원가입 후 호출)
+  // 사업자등록증 업로드 (회원가입 후 서버 API를 통해 호출)
   const uploadBusinessDoc = async (userId: string): Promise<string | null> => {
     if (!bizFile) return null
 
     try {
-      const ext = bizFile.name.split('.').pop()?.toLowerCase() || 'file'
-      const filePath = `${userId}/business_registration.${ext}`
+      const formData = new FormData()
+      formData.append('file', bizFile)
+      formData.append('userId', userId)
 
-      const { error: uploadError } = await supabase.storage
-        .from('business-docs')
-        .upload(filePath, bizFile, { upsert: true })
+      const res = await fetch('/api/upload-business-doc', {
+        method: 'POST',
+        body: formData,
+      })
 
-      if (uploadError) {
-        console.error('파일 업로드 실패:', uploadError)
+      if (!res.ok) {
+        const err = await res.json()
+        console.error('파일 업로드 실패:', err.error)
         return null
       }
 
-      // 공개 URL 생성
-      const { data: urlData } = supabase.storage
-        .from('business-docs')
-        .getPublicUrl(filePath)
-
-      return urlData?.publicUrl || null
+      const data = await res.json()
+      return data.url || null
     } catch (err) {
       console.error('업로드 에러:', err)
       return null
@@ -162,18 +286,18 @@ function AuthPage() {
   useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession()
-      if (session) router.replace('/dashboard')
+      if (session) window.location.href = '/dashboard'
     }
     checkSession()
 
     // 로그인 이벤트 감지 → 자동 리다이렉트 (dev login 등 모든 방식 대응)
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
-        router.replace('/dashboard')
+        window.location.href = '/dashboard'
       }
     })
     return () => { subscription.unsubscribe() }
-  }, [router])
+  }, [])
 
   // 인증 대기 화면: 폴링으로 인증 완료 감지 → verified 뷰로 전환
   useEffect(() => {
@@ -248,11 +372,33 @@ function AuthPage() {
       if (view === 'signup' && roleType === 'founder' && value.trim().length > 1) {
         debouncedCheck('companyName', value, () => checkCompanyNameDup(value))
       }
+      // OCR 결과가 있으면 사업자명 실시간 비교
+      if (bizOcrResult && bizOcrResult.confidence !== 'fail') {
+        const ocrName = normalizeBizName(bizOcrResult.company_name || bizOcrResult.company_name_full || '')
+        const typedName = normalizeBizName(value)
+        if (ocrName && typedName) {
+          setBizNameVerified(ocrName.includes(typedName) || typedName.includes(ocrName) || ocrName === typedName)
+        } else {
+          setBizNameVerified(null)
+        }
+      }
     }
     if (name === 'businessNumber') {
       const clean = value.replace(/[^0-9-]/g, '')
       if (view === 'signup' && roleType === 'founder' && clean.replace(/[^0-9]/g, '').length >= 10) {
         debouncedCheck('businessNumber', value, () => checkBusinessNumberDup(value))
+      }
+      // OCR 결과가 있으면 실시간 비교 (사업자번호 + 사업자명)
+      if (bizOcrResult && bizOcrResult.confidence !== 'fail') {
+        // formData는 아직 이전 값이므로 새 값으로 임시 비교
+        const updatedResult = { ...bizOcrResult }
+        const ocrNum = (updatedResult.business_number || '').replace(/[^0-9]/g, '')
+        const typedNum = clean.replace(/[^0-9]/g, '')
+        if (typedNum.length >= 10 && ocrNum) {
+          setBizNumberVerified(ocrNum === typedNum)
+        } else {
+          setBizNumberVerified(null)
+        }
       }
     }
   }
@@ -262,17 +408,20 @@ function AuthPage() {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email: formData.email,
-      password: formData.password,
-    })
-
-    if (error) {
-      setMessage({ text: '이메일 또는 비밀번호를 확인해주세요.', type: 'error' })
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      })
+      if (error) {
+        setMessage({ text: '이메일 또는 비밀번호를 확인해주세요.', type: 'error' })
+        setLoading(false)
+      } else {
+        window.location.href = '/dashboard'
+      }
+    } catch (err: any) {
+      setMessage({ text: '로그인 처리 중 오류가 발생했습니다.', type: 'error' })
       setLoading(false)
-    } else {
-      router.replace('/dashboard')
     }
   }
 
@@ -320,73 +469,100 @@ function AuthPage() {
         setMessage({ text: '이미 등록된 사업자번호입니다.', type: 'error' })
         return
       }
+      // 사업자등록증 필수 체크
+      if (!bizFile) {
+        setMessage({ text: '사업자등록증을 업로드해주세요.', type: 'error' })
+        return
+      }
+      // 사업자번호 필수 체크
+      if (!formData.businessNumber || formData.businessNumber.replace(/[^0-9]/g, '').length < 10) {
+        setMessage({ text: '사업자번호를 정확히 입력해주세요. (10자리)', type: 'error' })
+        return
+      }
+      // OCR 검증 완료 여부 체크
+      if (bizOcrLoading) {
+        setMessage({ text: '사업자등록증 인식 중입니다. 잠시만 기다려주세요.', type: 'error' })
+        return
+      }
+      if (bizNumberVerified !== true || bizNameVerified !== true) {
+        const issues = []
+        if (bizNumberVerified !== true) issues.push('사업자번호')
+        if (bizNameVerified !== true) issues.push('상호명')
+        setMessage({ text: `사업자등록증의 ${issues.join('와 ')}이(가) 입력한 정보와 일치해야 가입할 수 있습니다.`, type: 'error' })
+        return
+      }
     }
 
     setLoading(true)
     setMessage(null)
 
-    // 4. 서버사이드 통합 검증 (최종 확인)
     try {
-      const { data: validation, error: valError } = await supabase.rpc('validate_signup', {
-        p_email: formData.email,
-        p_phone: formData.phone,
-        p_company_name: roleType === 'founder' ? formData.companyName : null,
-        p_business_number: roleType === 'founder' ? formData.businessNumber : null,
+      // 4. 서버사이드 통합 검증 (최종 확인)
+      try {
+        const { data: validation, error: valError } = await supabase.rpc('validate_signup', {
+          p_email: formData.email,
+          p_phone: formData.phone,
+          p_company_name: roleType === 'founder' ? formData.companyName : null,
+          p_business_number: roleType === 'founder' ? formData.businessNumber : null,
+        })
+
+        if (valError) {
+          console.error('Validation RPC error:', valError)
+        } else if (validation && !validation.valid) {
+          const errors = validation.errors as string[]
+          const errorMsgs: Record<string, string> = {
+            email_exists: '이미 사용 중인 이메일입니다.',
+            phone_exists: '이미 등록된 전화번호입니다.',
+            company_exists: '이미 등록된 회사명입니다.',
+            business_number_exists: '이미 등록된 사업자번호입니다.',
+          }
+          const firstError = errors[0]
+          setMessage({ text: errorMsgs[firstError] || '입력 정보가 중복됩니다.', type: 'error' })
+          setLoading(false)
+          return
+        }
+      } catch (err) {
+        console.error('Validation error:', err)
+      }
+
+      // 5. Supabase 회원가입 실행
+      const { data: signUpData, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: {
+            full_name: formData.name,
+            phone: formData.phone,
+            role: roleType === 'founder' ? 'master' : 'user',
+            company_name: formData.companyName,
+            business_number: roleType === 'founder' ? formData.businessNumber : null,
+          }
+        }
       })
 
-      if (valError) {
-        console.error('Validation RPC error:', valError)
-        // RPC 실패 시에도 가입은 시도 (함수가 아직 미설치일 수 있음)
-      } else if (validation && !validation.valid) {
-        const errors = validation.errors as string[]
-        const errorMsgs: Record<string, string> = {
-          email_exists: '이미 사용 중인 이메일입니다.',
-          phone_exists: '이미 등록된 전화번호입니다.',
-          company_exists: '이미 등록된 회사명입니다.',
-          business_number_exists: '이미 등록된 사업자번호입니다.',
-        }
-        const firstError = errors[0]
-        setMessage({ text: errorMsgs[firstError] || '입력 정보가 중복됩니다.', type: 'error' })
+      if (error) {
+        setMessage({ text: error.message, type: 'error' })
         setLoading(false)
         return
       }
-    } catch (err) {
-      console.error('Validation error:', err)
-    }
 
-    // 5. Supabase 회원가입 실행
-    const { data: signUpData, error } = await supabase.auth.signUp({
-      email: formData.email,
-      password: formData.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: {
-          full_name: formData.name,
-          phone: formData.phone,
-          role: roleType === 'founder' ? 'master' : 'user',
-          company_name: formData.companyName,
-          business_number: roleType === 'founder' ? formData.businessNumber : null,
+      // 6. 사업자등록증 업로드 (대표만, 파일이 있을 때) — 서버 API를 통해 처리
+      if (roleType === 'founder' && bizFile && signUpData?.user?.id) {
+        try {
+          await uploadBusinessDoc(signUpData.user.id)
+        } catch (uploadErr) {
+          console.error('업로드 에러 (가입은 정상 완료):', uploadErr)
         }
       }
-    })
 
-    if (error) {
-      setMessage({ text: error.message, type: 'error' })
+      setView('verify')
+    } catch (err: any) {
+      console.error('회원가입 처리 중 오류:', err)
+      setMessage({ text: '회원가입 처리 중 오류가 발생했습니다. 다시 시도해주세요.', type: 'error' })
+    } finally {
       setLoading(false)
-      return
     }
-
-    // 6. 사업자등록증 업로드 (대표만, 파일이 있을 때)
-    if (roleType === 'founder' && bizFile && signUpData?.user?.id) {
-      const docUrl = await uploadBusinessDoc(signUpData.user.id)
-      if (docUrl) {
-        // 회사 레코드에 URL 저장 (RPC)
-        await supabase.rpc('update_company_doc_url', { doc_url: docUrl })
-      }
-    }
-
-    setLoading(false)
-    setView('verify')
   }
 
   // 이메일 재발송
@@ -442,32 +618,46 @@ function AuthPage() {
   const handleVerifiedEnter = async () => {
     setLoading(true)
     setMessage(null)
-    // 이미 세션이 있을 수 있으므로 세션 확인 후 이동
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      router.replace('/dashboard')
-      return
-    }
-    // 세션이 없으면 다시 로그인 시도
-    const { error } = await supabase.auth.signInWithPassword({
-      email: formData.email,
-      password: formData.password,
-    })
-    if (error) {
-      setMessage({ text: '로그인 중 오류가 발생했습니다. 로그인 페이지에서 다시 시도해주세요.', type: 'error' })
+    try {
+      // 이미 세션이 있을 수 있으므로 세션 확인 후 이동
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        window.location.href = '/dashboard'
+        return
+      }
+      // 세션이 없으면 다시 로그인 시도
+      const { error } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      })
+      if (error) {
+        setMessage({ text: '로그인 중 오류가 발생했습니다. 로그인 페이지에서 다시 시도해주세요.', type: 'error' })
+      } else {
+        window.location.href = '/dashboard'
+      }
+    } catch (err: any) {
+      setMessage({ text: '로그인 처리 중 오류가 발생했습니다.', type: 'error' })
+    } finally {
       setLoading(false)
-    } else {
-      router.replace('/dashboard')
     }
   }
 
   // 개발자 로그인
   const handleDevLogin = async () => {
     setLoading(true)
-    const { error } = await supabase.auth.signInWithPassword({
-      email: 'admin@sideline.com', password: 'password1234!!'
-    })
-    if (error) { setMessage({ text: '개발자 계정 로그인 실패', type: 'error' }); setLoading(false) }
+    setMessage(null)
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: 'admin@self-disruption.com', password: 'password1234!!'
+      })
+      if (error) {
+        setMessage({ text: '개발자 계정 로그인 실패', type: 'error' })
+        setLoading(false)
+      }
+    } catch (err: any) {
+      setMessage({ text: '로그인 처리 중 오류가 발생했습니다.', type: 'error' })
+      setLoading(false)
+    }
   }
 
   // 유효성 아이콘
@@ -511,23 +701,23 @@ function AuthPage() {
             <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center">
               <span className="text-slate-900 font-black text-lg">S</span>
             </div>
-            <span className="text-xl font-bold tracking-tight">Sideline</span>
+            <span className="text-xl font-bold tracking-tight">Self-Disruption</span>
           </div>
 
           <div className="space-y-6">
             <div>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-steel-100 rounded-full text-[11px] font-bold tracking-wider uppercase text-steel-700 border border-steel-200">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-steel-100 rounded-full text-[11px] font-bold tracking-wider text-steel-700 border border-steel-200">
                 <span className="w-1.5 h-1.5 bg-steel-600 rounded-full animate-pulse-slow"></span>
-                Enterprise Platform
+                업무 통합 관리 플랫폼
               </span>
             </div>
             <h1 className="text-4xl font-black leading-[1.15] tracking-tight">
-              Smart Mobility<br/>
-              Business Solution<span className="text-steel-400">.</span>
+              비즈니스 운영의<br/>
+              새로운 기준<span className="text-steel-400">.</span>
             </h1>
             <p className="text-slate-400 text-sm leading-relaxed max-w-sm">
-              중고차 렌터카 운영에 필요한 모든 것을 하나의 플랫폼에서.<br/>
-              차량 자산, 계약, 재무, 고객 관리까지 통합 솔루션.
+              사업 운영에 필요한 모든 것을 하나의 플랫폼에서.<br/>
+              자산, 계약, 재무, 고객 관리까지 통합 솔루션.
             </p>
           </div>
         </div>
@@ -536,7 +726,7 @@ function AuthPage() {
         <div className="relative z-10 space-y-3">
           {[
             { icon: '🔐', title: '엔터프라이즈 보안', desc: 'SOC2 수준의 데이터 보호 및 암호화' },
-            { icon: '📊', title: '실시간 대시보드', desc: '매출, 차량, 계약 현황을 한눈에 파악' },
+            { icon: '📊', title: '실시간 대시보드', desc: '매출, 자산, 운영 현황을 한눈에 파악' },
             { icon: '🏢', title: '멀티 테넌시', desc: '회사별 독립 데이터, 역할 기반 접근 제어' },
           ].map((item, i) => (
             <div key={i} className="glass rounded-xl p-4 flex items-start gap-4 animate-fade-in-up" style={{ animationDelay: `${i * 0.15}s` }}>
@@ -551,7 +741,7 @@ function AuthPage() {
 
         {/* 하단 Copyright */}
         <div className="relative z-10 pt-6 border-t border-white/10">
-          <p className="text-[11px] text-slate-500">&copy; 2025 Sideline Inc. All rights reserved.</p>
+          <p className="text-[11px] text-slate-500">&copy; 2025 Self-Disruption Inc. All rights reserved.</p>
         </div>
       </div>
 
@@ -597,7 +787,7 @@ function AuthPage() {
                     </svg>
                   </div>
                   <div className="text-sm text-emerald-700 leading-relaxed">
-                    계정이 활성화되었습니다. 아래 버튼을 눌러 Sideline ERP에 입장하세요.
+                    계정이 활성화되었습니다. 아래 버튼을 눌러 Self-Disruption ERP에 입장하세요.
                   </div>
                 </div>
               </div>
@@ -621,7 +811,7 @@ function AuthPage() {
                   {loading ? (
                     <><svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" className="opacity-75"/></svg> 로그인 중...</>
                   ) : (
-                    <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg> Sideline 시작하기</>
+                    <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg> Self-Disruption 시작하기</>
                   )}
                 </button>
 
@@ -746,17 +936,17 @@ function AuthPage() {
                 <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
                   <span className="text-white font-black text-sm">S</span>
                 </div>
-                <span className="text-lg font-bold text-slate-900">Sideline</span>
+                <span className="text-lg font-bold text-slate-900">Self-Disruption</span>
               </div>
 
               {/* 헤딩 */}
               <div className="mb-8">
                 <h2 className="text-2xl font-black text-slate-900 mb-1">
-                  {view === 'login' ? 'Welcome Back' : 'Create Account'}
+                  {view === 'login' ? '로그인' : '계정 생성'}
                 </h2>
                 <p className="text-steel-600 text-sm">
                   {view === 'login'
-                    ? '등록된 비즈니스 계정으로 로그인하세요.'
+                    ? '등록된 계정으로 로그인하세요.'
                     : '기업 관리를 위한 새 계정을 생성합니다.'
                   }
                 </p>
@@ -791,13 +981,13 @@ function AuthPage() {
                 {/* 이메일 */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Email Address</label>
+                    <label className="text-[11px] font-bold text-slate-500">이메일</label>
                     <DupStatus field="email" label="이메일" />
                   </div>
                   <div className="relative">
                     <input
                       name="email" type="email" value={formData.email} onChange={handleChange}
-                      placeholder="name@company.com"
+                      placeholder="이메일 주소 입력"
                       className={`w-full px-4 py-3.5 bg-steel-50 border-2 rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 transition-all focus:bg-white ${
                         formData.email && validity.email && dupCheck.email === true ? 'border-emerald-300 focus:border-emerald-400' :
                         formData.email && validity.email && dupCheck.email === false ? 'border-red-300 focus:border-red-400' :
@@ -812,11 +1002,11 @@ function AuthPage() {
 
                 {/* 비밀번호 */}
                 <div>
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Password</label>
+                  <label className="text-[11px] font-bold text-slate-500 mb-1.5 block">비밀번호</label>
                   <div className="relative">
                     <input
                       name="password" type={showPassword ? 'text' : 'password'} value={formData.password} onChange={handleChange}
-                      placeholder={view === 'signup' ? '영문+숫자 포함 8자 이상' : '비밀번호 입력'}
+                      placeholder={view === 'signup' ? '영문 + 숫자 포함 8자 이상' : '비밀번호 입력'}
                       className={`w-full px-4 py-3.5 bg-steel-50 border-2 rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 transition-all focus:bg-white pr-20 ${
                         formData.password && validity.password ? 'border-emerald-300 focus:border-emerald-400' :
                         formData.password && !validity.password && view === 'signup' ? 'border-red-200 focus:border-red-300' :
@@ -846,11 +1036,11 @@ function AuthPage() {
                   <div className="space-y-4 animate-fade-in-down">
                     {/* 비밀번호 확인 */}
                     <div>
-                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Confirm Password</label>
+                      <label className="text-[11px] font-bold text-slate-500 mb-1.5 block">비밀번호 확인</label>
                       <div className="relative">
                         <input
                           name="passwordConfirm" type="password" value={formData.passwordConfirm} onChange={handleChange}
-                          placeholder="비밀번호 재입력"
+                          placeholder="비밀번호를 다시 입력해주세요"
                           className={`w-full px-4 py-3.5 bg-steel-50 border-2 rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 transition-all focus:bg-white ${
                             formData.passwordConfirm && validity.passwordConfirm ? 'border-emerald-300' :
                             formData.passwordConfirm && !validity.passwordConfirm ? 'border-red-200' :
@@ -866,13 +1056,13 @@ function AuthPage() {
                     {/* 이름, 전화 */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Full Name</label>
-                        <input name="name" type="text" value={formData.name} onChange={handleChange} placeholder="실명"
+                        <label className="text-[11px] font-bold text-slate-500 mb-1.5 block">이름</label>
+                        <input name="name" type="text" value={formData.name} onChange={handleChange} placeholder="홍길동"
                           className="w-full px-4 py-3.5 bg-steel-50 border-2 border-transparent rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 focus:bg-white focus:border-steel-500 transition-all"/>
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Phone</label>
+                          <label className="text-[11px] font-bold text-slate-500">연락처</label>
                           <DupStatus field="phone" label="전화번호" />
                         </div>
                         <div className="relative">
@@ -891,15 +1081,28 @@ function AuthPage() {
                     {/* 회사명 */}
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                          {roleType === 'founder' ? 'Corporate Name' : 'Company Name'}
+                        <label className="text-[11px] font-bold text-slate-500">
+                          {roleType === 'founder' ? '회사명 (법인명)' : '회사명'}
                         </label>
-                        {roleType === 'founder' && <DupStatus field="companyName" label="회사명" />}
+                        <div className="flex items-center gap-2">
+                          {roleType === 'founder' && bizNameVerified === true && (
+                            <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-0.5">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                              문서 일치
+                            </span>
+                          )}
+                          {roleType === 'founder' && bizNameVerified === false && (
+                            <span className="text-[10px] text-red-500 font-bold">문서 불일치</span>
+                          )}
+                          {roleType === 'founder' && <DupStatus field="companyName" label="회사명" />}
+                        </div>
                       </div>
                       <div className="relative">
                         <input name="companyName" type="text" value={formData.companyName} onChange={handleChange}
                           placeholder={roleType === 'founder' ? '(주)법인명 또는 상호명' : '재직 중인 회사명'}
                           className={`w-full px-4 py-3.5 bg-steel-50 border-2 rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 focus:bg-white transition-all ${
+                            roleType === 'founder' && bizNameVerified === true ? 'border-emerald-300 focus:border-emerald-400' :
+                            roleType === 'founder' && bizNameVerified === false ? 'border-red-300 focus:border-red-400' :
                             formData.companyName && validity.companyName ? 'border-emerald-300' :
                             formData.companyName && !validity.companyName ? 'border-red-200' :
                             'border-transparent focus:border-steel-500'
@@ -913,20 +1116,45 @@ function AuthPage() {
                     {roleType === 'founder' && (
                       <div className="animate-fade-in-down">
                         <div className="flex items-center justify-between mb-1.5">
-                          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Business Registration No.</label>
-                          <DupStatus field="businessNumber" label="사업자번호" />
+                          <label className="text-[11px] font-bold text-slate-500">사업자등록번호</label>
+                          <div className="flex items-center gap-2">
+                            {bizNumberVerified === true && (
+                              <span className="text-[10px] text-emerald-500 font-bold flex items-center gap-0.5">
+                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                                문서 일치
+                              </span>
+                            )}
+                            {bizNumberVerified === false && (
+                              <span className="text-[10px] text-red-500 font-bold">문서 불일치</span>
+                            )}
+                            <DupStatus field="businessNumber" label="사업자번호" />
+                          </div>
                         </div>
-                        <input name="businessNumber" type="text" value={formData.businessNumber} onChange={handleChange}
-                          placeholder="000-00-00000 (선택사항)"
-                          className="w-full px-4 py-3.5 bg-steel-50 border-2 border-transparent rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 focus:bg-white focus:border-steel-500 transition-all"/>
+                        <div className="relative">
+                          <input name="businessNumber" type="text" value={formData.businessNumber} onChange={handleChange}
+                            placeholder="000-00-00000"
+                            className={`w-full px-4 py-3.5 bg-steel-50 border-2 rounded-xl outline-none text-sm font-medium text-slate-900 placeholder-slate-300 focus:bg-white transition-all ${
+                              bizNumberVerified === true ? 'border-emerald-300 focus:border-emerald-400' :
+                              bizNumberVerified === false ? 'border-red-300 focus:border-red-400' :
+                              'border-transparent focus:border-steel-500'
+                            }`}
+                          />
+                          {bizNumberVerified === true && (
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                              <svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
+                              </svg>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
-                    {/* 사업자등록증 첨부 (대표만) */}
+                    {/* 사업자등록증 첨부 (대표 필수) */}
                     {roleType === 'founder' && (
                       <div className="animate-fade-in-down">
-                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                          Business Registration Doc <span className="text-slate-300 normal-case">(선택)</span>
+                        <label className="text-[11px] font-bold text-slate-500 mb-1.5 block">
+                          사업자등록증 <span className="text-red-400 normal-case">(필수)</span>
                         </label>
 
                         {!bizFile ? (
@@ -949,32 +1177,133 @@ function AuthPage() {
                             />
                           </label>
                         ) : (
-                          <div className="bg-slate-50 border-2 border-emerald-200 rounded-xl p-3 flex items-center gap-3">
-                            {/* 미리보기 */}
-                            {bizFilePreview ? (
-                              <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
-                                <img src={bizFilePreview} alt="미리보기" className="w-full h-full object-cover" />
+                          <div className="space-y-2">
+                            <div className={`bg-slate-50 border-2 rounded-xl p-3 flex items-center gap-3 ${
+                              (bizNumberVerified === true && bizNameVerified === true) ? 'border-emerald-200' :
+                              (bizNumberVerified === false || bizNameVerified === false) ? 'border-red-200' :
+                              bizOcrLoading ? 'border-blue-200' :
+                              'border-steel-200'
+                            }`}>
+                              {/* 미리보기 */}
+                              {bizFilePreview ? (
+                                <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-slate-200">
+                                  <img src={bizFilePreview} alt="미리보기" className="w-full h-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="w-16 h-16 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center flex-shrink-0">
+                                  <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+                                  </svg>
+                                </div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-bold text-slate-700 truncate">{bizFile.name}</p>
+                                <p className="text-[10px] text-slate-400">{(bizFile.size / 1024 / 1024).toFixed(1)}MB</p>
+                                {bizOcrLoading && (
+                                  <p className="text-[10px] text-blue-500 font-medium flex items-center gap-1 mt-0.5">
+                                    <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25"/><path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" fill="currentColor" className="opacity-75"/></svg>
+                                    사업자번호 인식 중...
+                                  </p>
+                                )}
                               </div>
-                            ) : (
-                              <div className="w-16 h-16 rounded-lg bg-red-50 border border-red-100 flex items-center justify-center flex-shrink-0">
-                                <svg className="w-7 h-7 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/>
+                              <button
+                                type="button"
+                                onClick={handleFileRemove}
+                                disabled={bizOcrLoading}
+                                className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 flex items-center justify-center transition-colors disabled:opacity-50"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
-                              </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-bold text-slate-700 truncate">{bizFile.name}</p>
-                              <p className="text-[10px] text-slate-400">{(bizFile.size / 1024 / 1024).toFixed(1)}MB</p>
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              onClick={handleFileRemove}
-                              className="flex-shrink-0 w-8 h-8 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 flex items-center justify-center transition-colors"
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
+
+                            {/* OCR 결과 표시 */}
+                            {bizOcrResult && !bizOcrLoading && (() => {
+                              const allOk = bizNumberVerified === true && bizNameVerified === true
+                              const anyFail = bizNumberVerified === false || bizNameVerified === false
+                              return (
+                              <div className={`rounded-xl p-3 text-xs space-y-2 border ${
+                                allOk ? 'bg-emerald-50 border-emerald-100' :
+                                anyFail ? 'bg-red-50 border-red-100' :
+                                'bg-blue-50 border-blue-100'
+                              }`}>
+                                {/* 헤더 */}
+                                <div className="flex items-center gap-2 font-bold">
+                                  {allOk ? (
+                                    <><svg className="w-4 h-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg><span className="text-emerald-700">사업자 정보 일치 확인됨</span></>
+                                  ) : anyFail ? (
+                                    <><svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/></svg><span className="text-red-700">입력 정보가 문서와 다릅니다</span></>
+                                  ) : (
+                                    <><svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd"/></svg><span className="text-blue-700">문서 인식 완료 — 정보를 입력해주세요</span></>
+                                  )}
+                                </div>
+
+                                {/* 항목별 상태 */}
+                                <div className="space-y-1">
+                                  {/* 사업자번호 */}
+                                  {bizOcrResult.business_number && (
+                                    <div className="flex items-center gap-1.5">
+                                      {bizNumberVerified === true ? (
+                                        <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                                      ) : bizNumberVerified === false ? (
+                                        <svg className="w-3.5 h-3.5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                                      ) : (
+                                        <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
+                                      )}
+                                      <span className={bizNumberVerified === true ? 'text-emerald-600' : bizNumberVerified === false ? 'text-red-600' : 'text-blue-600'}>
+                                        사업자번호: <span className="font-bold">{bizOcrResult.business_number}</span>
+                                        {bizNumberVerified === true && ' — 일치'}
+                                        {bizNumberVerified === false && ' — 불일치'}
+                                        {bizNumberVerified === null && ' — 확인 대기'}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {/* 상호명 */}
+                                  {(bizOcrResult.company_name || bizOcrResult.company_name_full) && (
+                                    <div className="flex items-center gap-1.5">
+                                      {bizNameVerified === true ? (
+                                        <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                                      ) : bizNameVerified === false ? (
+                                        <svg className="w-3.5 h-3.5 text-red-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/></svg>
+                                      ) : (
+                                        <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clipRule="evenodd"/></svg>
+                                      )}
+                                      <span className={bizNameVerified === true ? 'text-emerald-600' : bizNameVerified === false ? 'text-red-600' : 'text-blue-600'}>
+                                        상호: <span className="font-bold">{bizOcrResult.company_name_full || bizOcrResult.company_name}</span>
+                                        {bizNameVerified === true && ' — 일치'}
+                                        {bizNameVerified === false && ' — 불일치'}
+                                        {bizNameVerified === null && ' — 확인 대기'}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {/* 대표자 (참고용) */}
+                                  {bizOcrResult.representative && (
+                                    <div className="flex items-center gap-1.5 opacity-60">
+                                      <svg className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"/></svg>
+                                      <span className="text-slate-500">대표자: {bizOcrResult.representative}</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* 안내 메시지 */}
+                                {anyFail && (
+                                  <p className="text-red-500 font-medium mt-1">
+                                    사업자등록증의 사업자번호와 상호명이 입력한 정보와 모두 일치해야 가입할 수 있습니다.
+                                    원본을 다시 업로드하거나, 입력 정보를 확인해주세요.
+                                  </p>
+                                )}
+                                {bizOcrResult.confidence && (
+                                  <p className="opacity-40 mt-1">인식 확신도: {
+                                    bizOcrResult.confidence === 'high' ? '높음' :
+                                    bizOcrResult.confidence === 'medium' ? '보통' :
+                                    bizOcrResult.confidence === 'low' ? '낮음 (선명한 이미지 권장)' :
+                                    '인식 실패'
+                                  }</p>
+                                )}
+                              </div>
+                              )
+                            })()}
                           </div>
                         )}
                       </div>
@@ -1010,7 +1339,7 @@ function AuthPage() {
                 {isLocal && view === 'login' && (
                   <button type="button" onClick={handleDevLogin}
                     className="w-full py-2.5 bg-amber-50 text-amber-700 text-xs font-bold rounded-lg hover:bg-amber-100 border border-amber-200 border-dashed transition-all">
-                    DEV: Local Quick Login
+                    개발자 빠른 로그인
                   </button>
                 )}
               </form>

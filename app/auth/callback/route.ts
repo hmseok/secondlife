@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { headers } from 'next/headers'
 
@@ -16,9 +17,9 @@ export async function GET(request: Request) {
   const origin = `${protocol}://${host}`
 
   if (code) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    const supabase = createClient(supabaseUrl, supabaseAnonKey)
+    // createRouteHandlerClient: 쿠키에 세션 저장 → 미들웨어와 동기화
+    const cookieStore = cookies()
+    const supabase = createRouteHandlerClient({ cookies: () => cookieStore })
 
     try {
       await supabase.auth.exchangeCodeForSession(code)

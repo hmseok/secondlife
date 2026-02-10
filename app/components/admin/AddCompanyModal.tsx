@@ -130,8 +130,9 @@ export default function AddCompanyModal({ isOpen, onClose, onSuccess }: Props) {
               className="w-full px-3 py-2 border rounded-lg focus:border-steel-400 focus:ring-steel-400 outline-none bg-white"
             >
               <option value="free">Free (무료)</option>
+              <option value="basic">Basic (기본)</option>
               <option value="pro">Pro (유료)</option>
-              <option value="master">Master (최고등급)</option>
+              <option value="max">Max (최고등급)</option>
             </select>
           </div>
 

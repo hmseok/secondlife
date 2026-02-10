@@ -1,7 +1,7 @@
 {
-  "name": "Sideline ERP",
-  "short_name": "Sideline",
-  "description": "Smart Mobility Business Solution",
+  "name": "Self-Disruption ERP",
+  "short_name": "Self-Disruption",
+  "description": "Enterprise Business Solution",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#111f3c",

@@ -76,7 +76,7 @@ export default function AdminLayout({
     <div className="flex min-h-screen bg-gray-100">
       <aside className="w-64 bg-slate-900 text-white flex flex-col fixed h-full z-10">
         <div className="p-6 border-b border-slate-800">
-          <h1 className="text-xl font-bold">Sideline <span className="text-blue-500">ADMIN</span></h1>
+          <h1 className="text-xl font-bold">Self-Disruption <span className="text-blue-500">ADMIN</span></h1>
         </div>
 
         <nav className="flex-1 p-4 space-y-2">

@@ -6,8 +6,26 @@ import { useApp } from '../context/AppContext'
 
 // ============================================
 // 구독/모듈 관리 (god_admin 전용)
-// 회사별 모듈 ON/OFF 제어
+// 플랜 그룹 설정 + 회사별 모듈 ON/OFF
 // ============================================
+
+const PLANS = [
+  { key: 'free', label: '무료', color: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', headerBg: 'bg-slate-50 border-slate-200', headerText: 'text-slate-700' },
+  { key: 'basic', label: '베이직', color: 'bg-green-100 text-green-700 border-green-200', dot: 'bg-green-500', headerBg: 'bg-green-50 border-green-200', headerText: 'text-green-800' },
+  { key: 'pro', label: '프로', color: 'bg-blue-100 text-blue-700 border-blue-200', dot: 'bg-blue-500', headerBg: 'bg-blue-50 border-blue-200', headerText: 'text-blue-800' },
+  { key: 'max', label: '맥스', color: 'bg-amber-100 text-amber-700 border-amber-200', dot: 'bg-amber-500', headerBg: 'bg-amber-50 border-amber-200', headerText: 'text-amber-800' },
+]
+
+const PLAN_KEYS = PLANS.map(p => p.key)
+
+function getPlanInfo(plan: string) {
+  return PLANS.find(p => p.key === plan) || PLANS[0]
+}
+
+function getPlanIndex(plan: string) {
+  const idx = PLAN_KEYS.indexOf(plan)
+  return idx >= 0 ? idx : 0
+}
 
 export default function SystemAdminPage() {
   const router = useRouter()
@@ -18,6 +36,11 @@ export default function SystemAdminPage() {
   const [modules, setModules] = useState<any[]>([])
   const [matrix, setMatrix] = useState<any>({})
   const [filter, setFilter] = useState<'active' | 'all'>('active')
+  const [tab, setTab] = useState<'plans' | 'companies'>('plans')
+  const [showAddModule, setShowAddModule] = useState(false)
+  const [editingModule, setEditingModule] = useState<any>(null)
+  const [moduleForm, setModuleForm] = useState({ name: '', path: '', icon_key: 'Doc', description: '', plan_group: 'free' })
+  const [addingToPlan, setAddingToPlan] = useState<string | null>(null) // 어떤 플랜 카드에 추가 중인지
 
   useEffect(() => {
     if (!appLoading && role === 'god_admin') loadData()
@@ -29,19 +52,13 @@ export default function SystemAdminPage() {
 
   const loadData = async () => {
     setLoading(true)
-
-    const { data: compData } = await supabase
-      .from('companies').select('*').order('name')
-    const { data: modData } = await supabase
-      .from('system_modules').select('*').order('path')
-
-    // RPC로 읽기 (RLS 우회)
+    const { data: compData } = await supabase.from('companies').select('*').order('name')
+    const { data: modData } = await supabase.from('system_modules').select('*').order('path')
     const { data: activeData } = await supabase.rpc('get_all_company_modules')
 
     if (compData && modData) {
       setCompanies(compData)
       setModules(modData)
-
       const statusMap: any = {}
       if (activeData) {
         activeData.forEach((item: any) => {
@@ -53,46 +70,126 @@ export default function SystemAdminPage() {
     setLoading(false)
   }
 
-  // 단일 모듈 토글 (RPC 사용 - RLS 우회)
+  // 모듈 추가
+  const addModule = async () => {
+    if (!moduleForm.name || !moduleForm.path) { alert('이름과 경로를 입력하세요.'); return }
+    const { error } = await supabase.from('system_modules').insert({
+      name: moduleForm.name, path: moduleForm.path, icon_key: moduleForm.icon_key,
+      description: moduleForm.description || null, plan_group: moduleForm.plan_group,
+    })
+    if (error) { alert('추가 실패: ' + error.message); return }
+    setShowAddModule(false)
+    setModuleForm({ name: '', path: '', icon_key: 'Doc', description: '', plan_group: 'free' })
+    loadData()
+  }
+
+  // 모듈 수정
+  const saveEditModule = async () => {
+    if (!editingModule) return
+    const { error } = await supabase.from('system_modules')
+      .update({
+        name: moduleForm.name, path: moduleForm.path, icon_key: moduleForm.icon_key,
+        description: moduleForm.description || null, plan_group: moduleForm.plan_group,
+      })
+      .eq('id', editingModule.id)
+    if (error) { alert('수정 실패: ' + error.message); return }
+    setEditingModule(null)
+    setModuleForm({ name: '', path: '', icon_key: 'Doc', description: '', plan_group: 'free' })
+    loadData()
+  }
+
+  // 모듈 삭제
+  const deleteModule = async (moduleId: string, moduleName: string) => {
+    if (!confirm(`"${moduleName}" 모듈을 삭제하시겠습니까?\n모든 회사에서 이 모듈이 제거됩니다.`)) return
+    await supabase.from('company_modules').delete().eq('module_id', moduleId)
+    const { error } = await supabase.from('system_modules').delete().eq('id', moduleId)
+    if (error) { alert('삭제 실패: ' + error.message); return }
+    loadData()
+  }
+
+  // 모듈 편집 시작
+  const startEditModule = (mod: any) => {
+    setEditingModule(mod)
+    setModuleForm({ name: mod.name, path: mod.path, icon_key: mod.icon_key || 'Doc', description: mod.description || '', plan_group: mod.plan_group || 'free' })
+  }
+
+  // 플랜 카드 내 모듈 추가 (다른 플랜에서 이동)
+  const moveModuleToPlan = async (moduleId: string, targetPlan: string, sourcePlan: string) => {
+    // 상위플랜 규제: 이동 후 source 플랜에 고유 모듈이 0개가 되면 차단
+    const sourceOwnCount = modules.filter(m => (m.plan_group || 'free') === sourcePlan).length
+    if (sourceOwnCount <= 1) {
+      alert(`"${getPlanInfo(sourcePlan).label}" 플랜에 고유 모듈이 1개뿐이라 이동할 수 없습니다.\n각 플랜에는 최소 1개의 고유 모듈이 필요합니다.`)
+      return
+    }
+    // 하위 플랜으로 이동하는 경우 경고
+    const targetIdx = getPlanIndex(targetPlan)
+    const sourceIdx = getPlanIndex(sourcePlan)
+    if (targetIdx < sourceIdx) {
+      if (!confirm(`이 모듈을 "${getPlanInfo(sourcePlan).label}" → "${getPlanInfo(targetPlan).label}"로 하위 플랜 이동합니다.\n더 많은 사용자가 이 모듈을 이용할 수 있게 됩니다. 계속하시겠습니까?`)) return
+    }
+    await updateModulePlan(moduleId, targetPlan)
+    setAddingToPlan(null)
+  }
+
+  const ICON_OPTIONS = ['Doc', 'Car', 'Truck', 'Shield', 'Money', 'Clipboard', 'Building', 'Chart', 'Wrench', 'Database', 'Users']
+
+  // 모듈 플랜 그룹 변경
+  const updateModulePlan = async (moduleId: string, newPlan: string) => {
+    setModules(prev => prev.map(m => m.id === moduleId ? { ...m, plan_group: newPlan } : m))
+    const { data, error } = await supabase.rpc('update_module_plan_group', {
+      target_module_id: moduleId,
+      new_plan_group: newPlan,
+    })
+    if (error || (data && !data.success)) {
+      alert('저장 실패: ' + (error?.message || data?.error))
+      loadData()
+    }
+  }
+
+  // 회사 플랜 변경
+  const updateCompanyPlan = async (companyId: string, newPlan: string) => {
+    if (!confirm(`이 회사의 플랜을 "${getPlanInfo(newPlan).label}"로 변경하시겠습니까?\n해당 플랜의 모듈이 자동으로 활성화됩니다.`)) return
+    setCompanies(prev => prev.map(c => c.id === companyId ? { ...c, plan: newPlan } : c))
+    const { data, error } = await supabase.rpc('update_company_plan', {
+      target_company_id: companyId,
+      new_plan: newPlan,
+    })
+    if (error || (data && !data.success)) {
+      alert('변경 실패: ' + (error?.message || data?.error))
+      loadData()
+    } else {
+      triggerMenuRefresh()
+      loadData()
+    }
+  }
+
+  // 단일 모듈 토글
   const toggleModule = async (companyId: string, moduleId: string, currentStatus: boolean) => {
     const key = `${companyId}_${moduleId}`
     setMatrix((prev: any) => ({ ...prev, [key]: !currentStatus }))
-
     const { data, error } = await supabase.rpc('toggle_company_module', {
       target_company_id: companyId,
       target_module_id: moduleId,
       new_active: !currentStatus,
     })
-
-    if (error) {
-      alert('설정 저장 실패: ' + error.message)
-      setMatrix((prev: any) => ({ ...prev, [key]: currentStatus }))
-    } else if (data && !data.success) {
-      alert('설정 저장 실패: ' + (data.error || '알 수 없는 오류'))
+    if (error || (data && !data.success)) {
+      alert('설정 실패: ' + (error?.message || data?.error))
       setMatrix((prev: any) => ({ ...prev, [key]: currentStatus }))
     } else {
       triggerMenuRefresh()
     }
   }
 
-  // 전체 ON/OFF (RPC 사용 - RLS 우회)
+  // 전체 ON/OFF
   const toggleAllForCompany = async (companyId: string, enable: boolean) => {
     const newMatrix = { ...matrix }
-    modules.forEach(mod => {
-      newMatrix[`${companyId}_${mod.id}`] = enable
-    })
+    modules.forEach(mod => { newMatrix[`${companyId}_${mod.id}`] = enable })
     setMatrix(newMatrix)
-
     const { data, error } = await supabase.rpc('toggle_all_company_modules', {
-      target_company_id: companyId,
-      new_active: enable,
+      target_company_id: companyId, new_active: enable,
     })
-
-    if (error) {
-      alert('일괄 설정 실패: ' + error.message)
-      loadData()
-    } else if (data && !data.success) {
-      alert('일괄 설정 실패: ' + (data.error || '알 수 없는 오류'))
+    if (error || (data && !data.success)) {
+      alert('일괄 설정 실패')
       loadData()
     } else {
       triggerMenuRefresh()
@@ -100,12 +197,10 @@ export default function SystemAdminPage() {
   }
 
   const filteredCompanies = filter === 'active'
-    ? companies.filter(c => c.is_active)
-    : companies
+    ? companies.filter(c => c.is_active) : companies
 
-  const getActiveCount = (companyId: string) => {
-    return modules.filter(m => matrix[`${companyId}_${m.id}`]).length
-  }
+  const getActiveCount = (companyId: string) =>
+    modules.filter(m => matrix[`${companyId}_${m.id}`]).length
 
   if (loading) {
     return (
@@ -122,126 +217,353 @@ export default function SystemAdminPage() {
         {/* 헤더 */}
         <div className="mb-5 md:mb-6">
           <h1 className="text-xl md:text-3xl font-extrabold text-slate-900">구독/모듈 관리</h1>
-          <p className="text-slate-500 mt-1 text-xs md:text-base">회사별 기능 모듈을 ON/OFF 제어합니다.</p>
+          <p className="text-slate-500 mt-1 text-xs md:text-sm">플랜별 모듈 그룹 설정 및 회사별 모듈을 관리합니다.</p>
         </div>
 
-        {/* 필터 + 통계 */}
-        <div className="flex items-center gap-2 md:gap-4 mb-5 md:mb-6">
+        {/* 탭 */}
+        <div className="flex gap-1 mb-5 bg-slate-100 p-1 rounded-xl w-fit">
           {[
-            { key: 'active' as const, label: '승인된 회사', count: companies.filter(c => c.is_active).length },
-            { key: 'all' as const, label: '전체', count: companies.length },
-          ].map(tab => (
+            { key: 'plans' as const, label: '플랜/모듈 설정' },
+            { key: 'companies' as const, label: '회사별 관리' },
+          ].map(t => (
             <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              className={`px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${
-                filter === tab.key
-                  ? 'bg-steel-600 text-white'
-                  : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                tab === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              {tab.label} ({tab.count})
+              {t.label}
             </button>
           ))}
-          <span className="ml-auto text-[10px] md:text-xs text-slate-400">
-            {modules.length}개 모듈
-          </span>
         </div>
 
-        {/* 회사별 모듈 카드 */}
-        <div className="space-y-4">
-          {filteredCompanies.map(comp => {
-            const activeCount = getActiveCount(comp.id)
-            return (
-              <div key={comp.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
-                !comp.is_active ? 'border-yellow-300 opacity-60' : 'border-slate-200'
-              }`}>
-                {/* 회사 헤더 */}
-                <div className="p-3 md:p-5 border-b border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center text-white font-black text-sm flex-shrink-0 ${
-                      comp.is_active ? 'bg-steel-600' : 'bg-yellow-500'
-                    }`}>
-                      {comp.name[0]}
+        {/* ========== 탭 1: 플랜/모듈 설정 ========== */}
+        {tab === 'plans' && (
+          <div>
+            {/* 안내 + 모듈 추가 버튼 */}
+            <div className="mb-5 flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 p-3 bg-steel-50 rounded-xl border border-steel-100">
+                <p className="text-[11px] md:text-xs text-steel-700">
+                  <strong>플랜 계층 구조:</strong> 상위 플랜은 하위 플랜의 모듈을 모두 포함합니다.
+                  무료 → 베이직 → 프로 → 맥스 순으로, 맥스는 모든 모듈을 이용할 수 있습니다.
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowAddModule(true); setEditingModule(null); setModuleForm({ name: '', path: '', icon_key: 'Doc', description: '', plan_group: 'free' }) }}
+                className="px-4 py-2 bg-steel-600 text-white rounded-xl text-sm font-bold hover:bg-steel-700 transition-all flex-shrink-0 self-start"
+              >
+                + 새 모듈 개발
+              </button>
+            </div>
+
+            {/* 모듈 추가/수정 모달 */}
+            {(showAddModule || editingModule) && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => { setShowAddModule(false); setEditingModule(null) }}>
+                <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
+                  <h3 className="text-lg font-black text-slate-900 mb-4">{editingModule ? '모듈 수정' : '새 모듈 추가'}</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">모듈 이름</label>
+                      <input value={moduleForm.name} onChange={(e) => setModuleForm(f => ({ ...f, name: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-steel-500" placeholder="예: 차량 관리" />
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-slate-900 text-sm md:text-base">{comp.name}</span>
-                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${
-                          comp.plan === 'master' ? 'bg-yellow-100 text-yellow-700' :
-                          comp.plan === 'pro' ? 'bg-blue-100 text-blue-700' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>
-                          {comp.plan?.toUpperCase() || 'FREE'}
-                        </span>
-                        {!comp.is_active && (
-                          <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">
-                            승인 대기
-                          </span>
-                        )}
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">경로 (path)</label>
+                      <input value={moduleForm.path} onChange={(e) => setModuleForm(f => ({ ...f, path: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-mono focus:outline-none focus:border-steel-500" placeholder="예: /cars" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">아이콘</label>
+                        <select value={moduleForm.icon_key} onChange={(e) => setModuleForm(f => ({ ...f, icon_key: e.target.value }))}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-steel-500">
+                          {ICON_OPTIONS.map(icon => <option key={icon} value={icon}>{icon}</option>)}
+                        </select>
                       </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">
-                        활성: <strong className="text-steel-600">{activeCount}</strong>/{modules.length}
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">플랜 그룹</label>
+                        <select value={moduleForm.plan_group} onChange={(e) => setModuleForm(f => ({ ...f, plan_group: e.target.value }))}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-steel-500">
+                          {PLANS.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                        </select>
                       </div>
                     </div>
-                    {/* 전체 ON/OFF */}
-                    <div className="flex gap-1.5 flex-shrink-0">
-                      <button
-                        onClick={() => toggleAllForCompany(comp.id, true)}
-                        className="px-2.5 md:px-3 py-1.5 text-[11px] md:text-xs font-bold bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors active:scale-95"
-                      >
-                        전체 ON
-                      </button>
-                      <button
-                        onClick={() => toggleAllForCompany(comp.id, false)}
-                        className="px-2.5 md:px-3 py-1.5 text-[11px] md:text-xs font-bold bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors active:scale-95"
-                      >
-                        전체 OFF
-                      </button>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">설명 (선택)</label>
+                      <input value={moduleForm.description} onChange={(e) => setModuleForm(f => ({ ...f, description: e.target.value }))}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-steel-500" placeholder="모듈 설명" />
                     </div>
                   </div>
-                </div>
-
-                {/* 모듈 토글 그리드 */}
-                <div className="p-2 md:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
-                  {modules.map(mod => {
-                    const isActive = !!matrix[`${comp.id}_${mod.id}`]
-                    return (
-                      <button
-                        key={mod.id}
-                        onClick={() => toggleModule(comp.id, mod.id, isActive)}
-                        className={`relative p-3 rounded-xl border-2 text-left transition-all active:scale-95 ${
-                          isActive
-                            ? 'border-steel-400 bg-steel-50'
-                            : 'border-slate-200 bg-slate-50 opacity-50 hover:opacity-80'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1 gap-1">
-                          <span className="text-xs md:text-sm font-bold text-slate-800 truncate">{mod.name}</span>
-                          <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center ${isActive ? 'bg-steel-500' : 'bg-slate-300'}`}>
-                            {isActive && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
-                          </div>
-                        </div>
-                        <div className="text-[10px] md:text-[11px] text-slate-400 font-mono">{mod.path}</div>
-                      </button>
-                    )
-                  })}
+                  <div className="flex gap-2 mt-5">
+                    <button onClick={() => { setShowAddModule(false); setEditingModule(null) }}
+                      className="flex-1 px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-sm font-bold hover:bg-slate-200">취소</button>
+                    <button onClick={editingModule ? saveEditModule : addModule}
+                      className="flex-1 px-4 py-2.5 bg-steel-600 text-white rounded-xl text-sm font-bold hover:bg-steel-700">{editingModule ? '저장' : '추가'}</button>
+                  </div>
                 </div>
               </div>
-            )
-          })}
+            )}
 
-          {filteredCompanies.length === 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
-              <p className="text-slate-400 font-bold">해당 조건의 회사가 없습니다</p>
+            {/* 플랜별 모듈 그리드 — 바깥 클릭 시 드롭다운 닫기 */}
+            {addingToPlan && (
+              <div className="fixed inset-0 z-40" onClick={() => setAddingToPlan(null)} />
+            )}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 relative z-41">
+              {PLANS.map(plan => {
+                const planModules = modules.filter(m => (m.plan_group || 'free') === plan.key)
+                const planIdx = getPlanIndex(plan.key)
+
+                return (
+                  <div key={plan.key} className={`rounded-2xl border-2 overflow-hidden ${plan.headerBg}`}>
+                    {/* 플랜 헤더 */}
+                    <div className={`p-4 border-b-2 ${plan.headerBg}`}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-3 h-3 rounded-full ${plan.dot}`}></span>
+                          <span className={`text-lg font-black ${plan.headerText}`}>{plan.label}</span>
+                        </div>
+                        {/* 카드 내 추가 버튼 */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setAddingToPlan(addingToPlan === plan.key ? null : plan.key)}
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg transition-all ${
+                              addingToPlan === plan.key
+                                ? 'bg-steel-600 text-white'
+                                : 'bg-white/80 text-slate-500 hover:text-slate-700 hover:bg-white border border-slate-200'
+                            }`}
+                          >
+                            {addingToPlan === plan.key ? '닫기' : '+ 추가'}
+                          </button>
+
+                          {/* 모듈 선택 드롭다운 */}
+                          {addingToPlan === plan.key && (() => {
+                            const otherModules = modules.filter(m => (m.plan_group || 'free') !== plan.key)
+                            return otherModules.length > 0 ? (
+                              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl shadow-xl border border-slate-200 z-50 max-h-64 overflow-y-auto">
+                                <div className="p-2 border-b border-slate-100">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase">다른 플랜의 모듈 선택</span>
+                                </div>
+                                {otherModules.map(mod => {
+                                  const modPlanInfo = getPlanInfo(mod.plan_group || 'free')
+                                  const sourceOwnCount = modules.filter(m => (m.plan_group || 'free') === (mod.plan_group || 'free')).length
+                                  const isBlocked = sourceOwnCount <= 1
+                                  return (
+                                    <button
+                                      key={mod.id}
+                                      onClick={() => !isBlocked && moveModuleToPlan(mod.id, plan.key, mod.plan_group || 'free')}
+                                      className={`w-full text-left px-3 py-2 flex items-center gap-2 transition-colors ${
+                                        isBlocked
+                                          ? 'opacity-30 cursor-not-allowed bg-slate-50'
+                                          : 'hover:bg-slate-50 cursor-pointer'
+                                      }`}
+                                      title={isBlocked ? `${modPlanInfo.label} 플랜의 마지막 모듈이라 이동 불가` : `${plan.label} 플랜으로 이동`}
+                                    >
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-bold text-slate-700 truncate">{mod.name}</div>
+                                        <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
+                                      </div>
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ${modPlanInfo.color}`}>
+                                        {modPlanInfo.label}
+                                      </span>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            ) : (
+                              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-50 p-4 text-center">
+                                <p className="text-xs text-slate-400">모든 모듈이 이 플랜에 있습니다</p>
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        이 플랜 고유: <strong>{planModules.length}개</strong>
+                        {planIdx > 0 && (
+                          <span className="ml-2">누적: <strong>{modules.filter(m => getPlanIndex(m.plan_group || 'free') <= planIdx).length}개</strong></span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 이 플랜 고유 모듈 */}
+                    <div className="p-3 bg-white/80">
+                      {planModules.length === 0 ? (
+                        <p className="text-xs text-slate-400 py-4 text-center">모듈 없음</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {planModules.map(mod => (
+                            <div key={mod.id} className="flex items-center gap-2 p-2 rounded-lg bg-white border border-slate-100 hover:border-slate-200 transition-all group">
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-bold text-slate-800 truncate">{mod.name}</div>
+                                <div className="text-[10px] text-slate-400 font-mono">{mod.path}</div>
+                              </div>
+                              {/* 수정/삭제 버튼 */}
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => startEditModule(mod)}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 hover:bg-slate-200" title="수정">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+                                </button>
+                                <button onClick={() => deleteModule(mod.id, mod.name)}
+                                  className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-400 hover:bg-red-100" title="삭제">
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* 하위 플랜에서 상속받는 모듈 */}
+                      {planIdx > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-100">
+                          <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">하위 플랜 포함</div>
+                          <div className="flex flex-wrap gap-1">
+                            {modules
+                              .filter(m => getPlanIndex(m.plan_group || 'free') < planIdx)
+                              .map(mod => (
+                                <span key={mod.id} className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-medium">
+                                  {mod.name}
+                                </span>
+                              ))
+                            }
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
-          )}
-        </div>
+          </div>
+        )}
+
+        {/* ========== 탭 2: 회사별 관리 ========== */}
+        {tab === 'companies' && (
+          <div>
+            {/* 필터 */}
+            <div className="flex items-center gap-2 md:gap-4 mb-5">
+              {[
+                { key: 'active' as const, label: '승인된 회사', count: companies.filter(c => c.is_active).length },
+                { key: 'all' as const, label: '전체', count: companies.length },
+              ].map(f => (
+                <button
+                  key={f.key}
+                  onClick={() => setFilter(f.key)}
+                  className={`px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${
+                    filter === f.key ? 'bg-steel-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {f.label} ({f.count})
+                </button>
+              ))}
+              <span className="ml-auto text-[10px] md:text-xs text-slate-400">{modules.length}개 모듈</span>
+            </div>
+
+            {/* 회사 카드 */}
+            <div className="space-y-4">
+              {filteredCompanies.map(comp => {
+                const activeCount = getActiveCount(comp.id)
+                const planInfo = getPlanInfo(comp.plan || 'free')
+                return (
+                  <div key={comp.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${
+                    !comp.is_active ? 'border-yellow-300 opacity-60' : 'border-slate-200'
+                  }`}>
+                    {/* 회사 헤더 */}
+                    <div className="p-3 md:p-5 border-b border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 md:w-10 md:h-10 rounded-xl flex items-center justify-center text-white font-black text-sm flex-shrink-0 ${
+                          comp.is_active ? 'bg-steel-600' : 'bg-yellow-500'
+                        }`}>
+                          {comp.name[0]}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-slate-900 text-sm md:text-base">{comp.name}</span>
+                            {/* 플랜 선택 드롭다운 */}
+                            <select
+                              value={comp.plan || 'free'}
+                              onChange={(e) => updateCompanyPlan(comp.id, e.target.value)}
+                              className={`text-[10px] font-black px-2 py-0.5 rounded border cursor-pointer focus:outline-none ${planInfo.color}`}
+                            >
+                              {PLANS.map(p => (
+                                <option key={p.key} value={p.key}>{p.label.toUpperCase()}</option>
+                              ))}
+                            </select>
+                            {!comp.is_active && (
+                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-yellow-100 text-yellow-700">승인 대기</span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 mt-0.5">
+                            활성: <strong className="text-steel-600">{activeCount}</strong>/{modules.length}
+                          </div>
+                        </div>
+                        <div className="flex gap-1.5 flex-shrink-0">
+                          <button
+                            onClick={() => toggleAllForCompany(comp.id, true)}
+                            className="px-2.5 md:px-3 py-1.5 text-[11px] md:text-xs font-bold bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors active:scale-95"
+                          >
+                            전체 ON
+                          </button>
+                          <button
+                            onClick={() => toggleAllForCompany(comp.id, false)}
+                            className="px-2.5 md:px-3 py-1.5 text-[11px] md:text-xs font-bold bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors active:scale-95"
+                          >
+                            전체 OFF
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 모듈 그리드 (플랜 뱃지 포함) */}
+                    <div className="p-2 md:p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 md:gap-3">
+                      {modules.map(mod => {
+                        const isActive = !!matrix[`${comp.id}_${mod.id}`]
+                        const modPlan = getPlanInfo(mod.plan_group || 'free')
+                        return (
+                          <button
+                            key={mod.id}
+                            onClick={() => toggleModule(comp.id, mod.id, isActive)}
+                            className={`relative p-3 rounded-xl border-2 text-left transition-all active:scale-95 ${
+                              isActive
+                                ? 'border-steel-400 bg-steel-50'
+                                : 'border-slate-200 bg-slate-50 opacity-50 hover:opacity-80'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-1 gap-1">
+                              <span className="text-xs md:text-sm font-bold text-slate-800 truncate">{mod.name}</span>
+                              <div className={`w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center ${isActive ? 'bg-steel-500' : 'bg-slate-300'}`}>
+                                {isActive && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] md:text-[11px] text-slate-400 font-mono">{mod.path}</span>
+                              <span className={`text-[8px] font-black px-1 py-0.5 rounded ${modPlan.color}`}>
+                                {modPlan.label}
+                              </span>
+                            </div>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+
+              {filteredCompanies.length === 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+                  <p className="text-slate-400 font-bold">해당 조건의 회사가 없습니다</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* 안내 */}
         <div className="mt-6 p-3 md:p-4 bg-steel-50 rounded-xl border border-steel-100">
           <p className="text-[11px] md:text-xs text-steel-700">
-            <strong>모듈 ON/OFF 연동:</strong> 모듈을 켜면 해당 회사의 사이드바와 대시보드에 즉시 반영됩니다. 모듈을 꺼도 데이터는 유지됩니다.
+            <strong>플랜 계층:</strong> 무료 → 베이직 → 프로 → 맥스. 상위 플랜은 하위 플랜의 모든 모듈을 포함합니다.
+            회사 플랜을 변경하면 해당 플랜의 모듈이 자동으로 활성화됩니다. 개별 모듈을 수동으로 오버라이드할 수 있습니다.
           </p>
         </div>
 

@@ -29,7 +29,11 @@ const generateModelCode = (brand: string, model: string, year: number) => {
     return `${b}_${m}_${year}`;
 }
 
+// 조건부 압축: 5MB 이하 원본 유지, 초과 시 고품질 압축 (OCR 정확도 보호)
 const compressImage = async (file: File): Promise<File> => {
+  const MAX_SIZE = 5 * 1024 * 1024; // 5MB
+  if (file.size <= MAX_SIZE) return file; // 작은 파일은 원본 그대로
+
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -39,11 +43,12 @@ const compressImage = async (file: File): Promise<File> => {
       img.onload = () => {
         const canvas = document.createElement('canvas');
         let w = img.width, h = img.height;
-        if (w > h && w > 1280) { h *= 1280/w; w = 1280; }
-        else if (h > 1280) { w *= 1280/h; h = 1280; }
+        const MAX_DIM = 2048; // OCR용 해상도 유지
+        if (w > h && w > MAX_DIM) { h *= MAX_DIM/w; w = MAX_DIM; }
+        else if (h > MAX_DIM) { w *= MAX_DIM/h; h = MAX_DIM; }
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d')?.drawImage(img, 0, 0, w, h);
-        canvas.toBlob((blob) => resolve(new File([blob!], file.name, {type:'image/jpeg'})), 'image/jpeg', 0.7);
+        canvas.toBlob((blob) => resolve(new File([blob!], file.name, {type:'image/jpeg'})), 'image/jpeg', 0.85);
       };
     };
   });

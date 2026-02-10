@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '../../utils/auth-guard'
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     const { brand, model } = await request.json()
 

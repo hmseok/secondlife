@@ -74,7 +74,7 @@ export default function AdminDashboard() {
               <span className="text-green-400 text-xs font-bold">Online</span>
             </div>
             <h1 className="text-4xl font-black tracking-tight">System Control Tower</h1>
-            <p className="text-slate-400 mt-2 font-medium">Sideline 전체 시스템 중앙 제어</p>
+            <p className="text-slate-400 mt-2 font-medium">Self-Disruption 전체 시스템 중앙 제어</p>
           </div>
 
           <button

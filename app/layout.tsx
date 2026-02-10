@@ -17,13 +17,13 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Sideline ERP',
-  description: 'Smart Mobility Business Solution',
+  title: 'Self-Disruption ERP',
+  description: 'Enterprise Business Solution',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Sideline',
+    title: 'Self-Disruption',
   },
   other: {
     'mobile-web-app-capable': 'yes',

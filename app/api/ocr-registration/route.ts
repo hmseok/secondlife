@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
+import { requireAuth } from '../../utils/auth-guard'
 
 // ⚡️ [엔진] 2.0 Flash (PDF 분석도 빠르고 정확함)
 const MODEL_MAIN = "gemini-2.0-flash";
@@ -84,7 +86,10 @@ async function callGeminiAI(base64Data: string, mimeType: string) {
   return JSON.parse(rawText.replace(/```json/g, '').replace(/```/g, '').trim());
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request)
+  if (auth.error) return auth.error
+
   try {
     const { imageBase64, mimeType } = await request.json()
     const base64Data = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;

@@ -231,7 +231,7 @@ function LoginForm() {
                     <svg className="w-12 h-12 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                 </div>
                 <h2 className="text-3xl font-black text-gray-900 mb-3">환영합니다, {name || '대표'}님!</h2>
-                <p className="text-gray-500 text-lg mb-8 leading-relaxed">성공적으로 가입되었습니다.<br/>이제 Sideline과 함께하세요.</p>
+                <p className="text-gray-500 text-lg mb-8 leading-relaxed">성공적으로 가입되었습니다.<br/>이제 Self-Disruption과 함께하세요.</p>
                 <div className="inline-flex items-center justify-center gap-2 text-indigo-600 font-bold bg-indigo-50 px-6 py-3 rounded-xl animate-pulse">
                     <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                     <span>대시보드로 이동 중...</span>
@@ -240,7 +240,7 @@ function LoginForm() {
           ) : (
             <>
               <div className="mb-2">
-                <span className="bg-indigo-50 text-indigo-700 text-xs font-black px-2 py-1 rounded-md uppercase tracking-wider">Sideline</span>
+                <span className="bg-indigo-50 text-indigo-700 text-xs font-black px-2 py-1 rounded-md uppercase tracking-wider">Self-Disruption</span>
                 <span className="ml-2 text-gray-400 text-xs font-medium">관리자 전용 로그인</span>
               </div>
 

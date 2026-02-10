@@ -45,6 +45,8 @@ export default function RegistrationDetailPage() {
   const [trims, setTrims] = useState<any[]>([])
   const [selectedTrimId, setSelectedTrimId] = useState<string>('')
   const [baseModelName, setBaseModelName] = useState('') // "EV4" 같은 순수 모델명 저장
+  const [vinLoading, setVinLoading] = useState(false)
+  const [vinResult, setVinResult] = useState<any>(null)
 
   useEffect(() => {
     if (carId) fetchCarData()
@@ -203,6 +205,41 @@ export default function RegistrationDetailPage() {
     finally { setIsAnalyzing(false); }
   }
 
+  // VIN으로 차량 정보 자동조회 (NHTSA API)
+  const handleVinLookup = async () => {
+    const vin = car.vin?.trim()
+    if (!vin || vin.length < 11) { alert('차대번호가 11자 이상이어야 합니다.'); return }
+    setVinLoading(true)
+    setVinResult(null)
+    try {
+      const res = await fetch(`/api/vin-decode?vin=${encodeURIComponent(vin)}`)
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setVinResult(data)
+
+      // 조회 결과로 자동 반영 (빈 필드만)
+      const updates: any = {}
+      if (data.model && !car.model) updates.model = data.model
+      if (data.make && (!car.brand || car.brand === '기타')) updates.brand = data.make
+      if (data.fuel_type && !car.fuel_type) updates.fuel_type = data.fuel_type
+      if (data.displacement && !car.displacement) updates.displacement = data.displacement + 'cc'
+      if (data.year && !car.year) updates.year = Number(data.year)
+
+      if (Object.keys(updates).length > 0) {
+        setCar((prev: any) => ({ ...prev, ...updates }))
+      }
+
+      // 모델명으로 트림 검색 시도
+      if (data.model) {
+        findBaseModelAndTrims(data.model)
+      }
+    } catch (err: any) {
+      alert('VIN 조회 실패: ' + err.message)
+    } finally {
+      setVinLoading(false)
+    }
+  }
+
   const handleChange = (field: string, value: any) => { setCar((prev: any) => ({ ...prev, [field]: value })) }
   const handleAddressComplete = (data: any) => {
     let fullAddress = data.address;
@@ -281,8 +318,57 @@ export default function RegistrationDetailPage() {
                         <div><label className="label">소유자</label><input className="input" value={car.owner_name || ''} onChange={e=>handleChange('owner_name', e.target.value)} /></div>
                         <div className="md:col-span-2"><label className="label">사용본거지</label><div className="flex gap-2"><input className="input flex-1 bg-gray-50" value={car.location || ''} readOnly /><button onClick={()=>open({onComplete: handleAddressComplete})} className="bg-gray-800 text-white px-5 rounded-xl text-sm font-bold">주소검색</button></div></div>
                         <div><label className="label">최초등록일</label><input type="date" className="input" value={car.registration_date || ''} onChange={e=>handleChange('registration_date', e.target.value)} /></div>
-                        <div><label className="label">차대번호</label><input className="input font-mono" value={car.vin || ''} onChange={e=>handleChange('vin', e.target.value)} /></div>
+                        <div>
+                            <label className="label">차대번호</label>
+                            <div className="flex gap-2">
+                                <input className="input font-mono flex-1" value={car.vin || ''} onChange={e=>handleChange('vin', e.target.value)} />
+                                <button
+                                    onClick={handleVinLookup}
+                                    disabled={vinLoading || !car.vin}
+                                    className="bg-steel-600 text-white px-4 rounded-xl text-xs font-bold hover:bg-steel-700 transition-colors disabled:opacity-40 whitespace-nowrap"
+                                >
+                                    {vinLoading ? '조회중...' : 'VIN 조회'}
+                                </button>
+                            </div>
+                        </div>
                     </div>
+
+                    {/* VIN 조회 결과 */}
+                    {vinResult && (
+                        <div className="mt-5 p-4 bg-steel-50 rounded-xl border border-steel-100">
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="text-xs font-bold text-steel-700 uppercase">VIN 조회 결과 (NHTSA)</h4>
+                                <button onClick={() => setVinResult(null)} className="text-xs text-gray-400 hover:text-gray-600">&times; 닫기</button>
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                                {vinResult.make && <div><span className="text-xs text-gray-400 block">제조사</span><span className="font-bold text-gray-800">{vinResult.make}</span></div>}
+                                {vinResult.model && <div><span className="text-xs text-gray-400 block">모델</span><span className="font-bold text-gray-800">{vinResult.model}</span></div>}
+                                {vinResult.year && <div><span className="text-xs text-gray-400 block">연식</span><span className="font-bold text-gray-800">{vinResult.year}년</span></div>}
+                                {vinResult.trim && <div><span className="text-xs text-gray-400 block">트림</span><span className="font-bold text-steel-700">{vinResult.trim}</span></div>}
+                                {vinResult.fuel_type && <div><span className="text-xs text-gray-400 block">연료</span><span className="font-bold text-gray-800">{vinResult.fuel_type}</span></div>}
+                                {vinResult.displacement && <div><span className="text-xs text-gray-400 block">배기량</span><span className="font-bold text-gray-800">{vinResult.displacement}L</span></div>}
+                                {vinResult.body_class && <div><span className="text-xs text-gray-400 block">차체</span><span className="font-bold text-gray-800">{vinResult.body_class}</span></div>}
+                                {vinResult.drive_type && <div><span className="text-xs text-gray-400 block">구동</span><span className="font-bold text-gray-800">{vinResult.drive_type}</span></div>}
+                                {vinResult.plant_country && <div><span className="text-xs text-gray-400 block">생산국</span><span className="font-bold text-gray-800">{vinResult.plant_country}</span></div>}
+                            </div>
+                            {vinResult.trim && (
+                                <button
+                                    onClick={() => {
+                                        const fullModel = vinResult.trim ? `${vinResult.model} ${vinResult.trim}` : vinResult.model
+                                        setCar((prev: any) => ({ ...prev, model: fullModel, brand: vinResult.make || prev.brand }))
+                                        findBaseModelAndTrims(fullModel)
+                                        alert(`✅ 모델명이 "${fullModel}"(으)로 설정되었습니다.`)
+                                    }}
+                                    className="mt-3 w-full py-2 bg-steel-600 text-white rounded-lg text-sm font-bold hover:bg-steel-700 transition-colors"
+                                >
+                                    트림 정보 적용 → {vinResult.model} {vinResult.trim}
+                                </button>
+                            )}
+                            {!vinResult.make && !vinResult.model && (
+                                <p className="text-xs text-gray-400 mt-2">이 VIN에 대한 정보가 NHTSA에 등록되어 있지 않습니다.</p>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* 제원 */}

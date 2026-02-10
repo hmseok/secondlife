@@ -97,7 +97,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUser(session.user)
 
       // 2. 프로필 + 직급 + 부서 + 회사 한 번에 로드
-      const { data: profileData } = await supabase
+      // ★ REST 요청이 서버 프록시(/api/sp/)를 경유하므로 RLS 우회됨
+      const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select(`
           *,
@@ -107,6 +108,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         `)
         .eq('id', session.user.id)
         .maybeSingle()
+
+      if (profileError) {
+        console.error('❌ 프로필 로드 에러:', profileError.message)
+      }
 
       if (profileData) {
         console.log('✅ AppContext 로드:', profileData.role, profileData.position?.name)

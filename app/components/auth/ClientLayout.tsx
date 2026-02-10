@@ -195,15 +195,28 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
         )
       }
     }
-    if (!loading && (company || role === 'god_admin')) fetchMenus()
+    if (!loading && (company || role === 'god_admin')) {
+      // 승인 대기 중인 회사는 메뉴 로드하지 않음
+      if (company && company.is_active === false && role !== 'god_admin') {
+        setDynamicMenus([])
+        return
+      }
+      fetchMenus()
+    }
   }, [company, loading, role, adminSelectedCompanyId, menuRefreshKey])
+
+  // 로그아웃 상태 → 로그인 페이지로 즉시 이동 (useEffect로 감싸서 렌더링 중 setState 방지)
+  useEffect(() => {
+    if (!loading && !user && pathname !== '/' && !pathname.startsWith('/auth')) {
+      router.replace('/')
+    }
+  }, [loading, user, pathname, router])
 
   // 로그인/인증 페이지 제외
   if (pathname === '/' || pathname.startsWith('/auth')) return <>{children}</>
 
-  // 로그아웃 상태 → 로그인 페이지로 즉시 이동
+  // 로그아웃 상태 → 빈 화면 (useEffect에서 리디렉트 처리)
   if (!loading && !user) {
-    router.replace('/')
     return null
   }
 
@@ -217,8 +230,9 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     }))
     .filter(g => g.items.length > 0)
 
+  const isPendingApproval = company && company.is_active === false && role !== 'god_admin'
   const showPlatform = role === 'god_admin'
-  const showSettings = role === 'god_admin' || role === 'master'
+  const showSettings = !isPendingApproval && (role === 'god_admin' || role === 'master')
 
   return (
     <div className="flex h-[100dvh] bg-gray-50 overflow-hidden">
@@ -235,7 +249,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             </button>
 
             {/* 로고 */}
-            <span className="text-sm font-bold text-white tracking-tight flex-shrink-0">Sideline</span>
+            <span className="text-sm font-bold text-white tracking-tight flex-shrink-0">Self-Disruption</span>
 
             {/* god_admin 업체 선택 */}
             {role === 'god_admin' && allCompanies.length > 0 && (
@@ -272,7 +286,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
           {/* 로고 */}
           <div className="px-5 py-4 flex items-center justify-between border-b border-steel-800">
             <span className="text-lg font-black text-white tracking-tight cursor-pointer" onClick={() => router.push('/dashboard')}>
-              Sideline
+              Self-Disruption
             </span>
             <button onClick={() => setIsSidebarOpen(false)} className="text-steel-400 hover:text-white lg:hidden">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
@@ -289,11 +303,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
                 </div>
                 {role !== 'god_admin' && company?.plan && (
                   <span className={`text-[9px] font-black px-1.5 py-0.5 rounded flex-shrink-0 ${
-                    company.plan === 'master' ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white' :
+                    company.plan === 'max' ? 'bg-gradient-to-r from-yellow-500 to-amber-500 text-white' :
                     company.plan === 'pro' ? 'bg-blue-500 text-white' :
+                    company.plan === 'basic' ? 'bg-green-500 text-white' :
                     'bg-steel-700 text-steel-200'
                   }`}>
-                    {company.plan === 'master' ? 'MASTER' : company.plan === 'pro' ? 'PRO' : 'FREE'}
+                    {company.plan === 'max' ? 'MAX' : company.plan === 'pro' ? 'PRO' : company.plan === 'basic' ? 'BASIC' : 'FREE'}
                   </span>
                 )}
                 {role === 'god_admin' && (
