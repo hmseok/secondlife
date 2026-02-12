@@ -1,10 +1,10 @@
 'use client'
 import { supabase } from '../../utils/supabase'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useApp } from '../../context/AppContext'
 
-export default function QuoteCalculatorPage() {
+function QuoteCalculatorContent() {
   const router = useRouter()
   const { company, role, adminSelectedCompanyId } = useApp()
   const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : company?.id
@@ -47,6 +47,10 @@ export default function QuoteCalculatorPage() {
   const [taxRates, setTaxRates] = useState<any[]>([])
   const [autoInfo, setAutoInfo] = useState('')
 
+  // 🆕 URL 파라미터 & 가격 시트
+  const searchParams = useSearchParams()
+  const [worksheetData, setWorksheetData] = useState<any>(null)
+
   // --- 데이터 불러오기 ---
   useEffect(() => {
     const fetchData = async () => {
@@ -81,6 +85,55 @@ export default function QuoteCalculatorPage() {
     }
     fetchData()
   }, [])
+
+  // 🆕 URL 파라미터 처리
+  useEffect(() => {
+    const processUrlParams = async () => {
+      const carId = searchParams.get('car_id')
+      const rentFee = searchParams.get('rent_fee')
+      const depositParam = searchParams.get('deposit')
+      const termParam = searchParams.get('term')
+
+      // car_id가 있으면 차량 선택
+      if (carId && cars.length > 0) {
+        await handleCarSelect(carId)
+
+        // 가격 워크시트 조회
+        const { data: worksheetData } = await supabase
+          .from('pricing_worksheets')
+          .select('*')
+          .eq('car_id', carId)
+          .single()
+        if (worksheetData) {
+          setWorksheetData(worksheetData)
+        }
+      }
+
+      // deposit 파라미터 처리
+      if (depositParam) {
+        setDeposit(Number(depositParam))
+      }
+
+      // term 파라미터 처리
+      if (termParam) {
+        setTerm(Number(termParam))
+      }
+
+    }
+
+    if (cars.length > 0) {
+      processUrlParams()
+    }
+  }, [searchParams, cars.length])
+
+  // rent_fee URL 파라미터 → 마진 계산 (costs가 갱신된 후)
+  useEffect(() => {
+    const rentFee = searchParams.get('rent_fee')
+    if (rentFee && costs.total_cost > 0) {
+      const calculatedMargin = Number(rentFee) - costs.total_cost
+      if (calculatedMargin > 0) setMargin(calculatedMargin)
+    }
+  }, [costs.total_cost, searchParams])
 
   // 차량 선택 핸들러
   const handleCarSelect = async (carId: string) => {
@@ -276,6 +329,13 @@ export default function QuoteCalculatorPage() {
                         <span className="font-black text-xl text-steel-600">{f(estimatedPrice)}원</span>
                       </div>
                     </div>
+
+                    {/* 🆕 가격 워크시트 상태 */}
+                    {worksheetData && (
+                      <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex items-center gap-3">
+                        <span className="text-green-600 text-sm font-bold">✅ 렌트가 산출 분석 데이터 연동됨</span>
+                      </div>
+                    )}
                 </div>
             )}
           </div>
@@ -334,5 +394,13 @@ export default function QuoteCalculatorPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function QuoteCalculatorPage() {
+  return (
+    <Suspense fallback={<div className="max-w-7xl mx-auto py-6 px-4 md:py-12 md:px-6 bg-gray-50/50 min-h-screen"><p className="text-gray-500">로딩 중...</p></div>}>
+      <QuoteCalculatorContent />
+    </Suspense>
   )
 }
