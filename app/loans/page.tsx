@@ -11,6 +11,8 @@ export default function LoanListPage() {
 const router = useRouter()
   const [loans, setLoans] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => { fetchData() }, [company, role, adminSelectedCompanyId])
 
@@ -45,6 +47,38 @@ const router = useRouter()
   const totalDebt = loans.reduce((acc, cur) => acc + (cur.total_amount || 0), 0)
   const monthlyOut = loans.reduce((acc, cur) => acc + (cur.monthly_payment || 0), 0)
 
+  // 타입별 카운트
+  const typeStats = {
+    all: loans.length,
+    '할부': loans.filter(l => l.type === '할부').length,
+    '리스': loans.filter(l => l.type === '리스').length,
+    '렌트': loans.filter(l => l.type === '렌트').length,
+    '담보대출': loans.filter(l => l.type === '담보대출').length,
+  }
+
+  // 만기 임박 계산 (90일 이내)
+  const today = new Date()
+  const ninetyDaysLater = new Date(today.getTime() + 90*24*60*60*1000)
+  const expiringCount = loans.filter(l => {
+    if (!l.end_date) return false
+    const end = new Date(l.end_date)
+    return end >= today && end <= ninetyDaysLater
+  }).length
+
+  // 필터 + 검색 적용
+  const filteredLoans = loans.filter(loan => {
+    if (typeFilter !== 'all' && loan.type !== typeFilter) return false
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      return (
+        (loan.cars?.number || '').toLowerCase().includes(term) ||
+        (loan.cars?.model || '').toLowerCase().includes(term) ||
+        (loan.finance_name || '').toLowerCase().includes(term)
+      )
+    }
+    return true
+  })
+
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 md:py-12 md:px-6 bg-gray-50/50 min-h-screen">
       {/* 헤더 */}
@@ -63,27 +97,64 @@ const router = useRouter()
       </div>
 
       {/* 요약 카드 */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-200 shadow-sm">
-          <p className="text-gray-500 text-xs font-bold mb-1">총 대출 잔액</p>
-          <p className="text-xl md:text-3xl font-black text-steel-900">{totalDebt.toLocaleString()}원</p>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mb-6">
+        <div className="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm">
+          <p className="text-xs text-gray-400 font-bold">총 대출 잔액</p>
+          <p className="text-lg md:text-xl font-black text-steel-900 mt-1">{totalDebt.toLocaleString()}<span className="text-xs text-gray-400 ml-0.5">원</span></p>
         </div>
-        <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-200 shadow-sm">
-          <p className="text-gray-500 text-xs font-bold mb-1">월 고정 지출액</p>
-          <p className="text-xl md:text-3xl font-black text-red-500">{monthlyOut.toLocaleString()}원</p>
+        <div className="bg-red-50 p-3 md:p-4 rounded-xl border border-red-100">
+          <p className="text-xs text-red-500 font-bold">월 고정 지출</p>
+          <p className="text-lg md:text-xl font-black text-red-600 mt-1">{monthlyOut.toLocaleString()}<span className="text-xs text-red-400 ml-0.5">원</span></p>
         </div>
-        <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-200 shadow-sm">
-          <p className="text-gray-500 text-xs font-bold mb-1">관리 중인 계약</p>
-          <p className="text-xl md:text-3xl font-black text-gray-800">{loans.length}건</p>
+        <div className="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm">
+          <p className="text-xs text-gray-400 font-bold">계약 건수</p>
+          <p className="text-lg md:text-xl font-black text-gray-800 mt-1">{loans.length}<span className="text-xs text-gray-400 ml-0.5">건</span></p>
         </div>
+        <div className={`p-3 md:p-4 rounded-xl border ${expiringCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`}>
+          <p className="text-xs text-amber-600 font-bold">만기 임박 (90일)</p>
+          <p className="text-lg md:text-xl font-black text-amber-700 mt-1">{expiringCount}<span className="text-xs text-amber-500 ml-0.5">건</span></p>
+        </div>
+        <div className="bg-blue-50 p-3 md:p-4 rounded-xl border border-blue-100">
+          <p className="text-xs text-blue-500 font-bold">평균 이자율</p>
+          <p className="text-lg md:text-xl font-black text-blue-700 mt-1">
+            {loans.length > 0 ? (loans.reduce((a, l) => a + (l.interest_rate || 0), 0) / loans.length).toFixed(1) : '0'}
+            <span className="text-xs text-blue-400 ml-0.5">%</span>
+          </p>
+        </div>
+      </div>
+
+      {/* 타입 필터 + 검색 */}
+      <div className="flex flex-col md:flex-row gap-3 mb-4">
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {['all', '할부', '리스', '렌트', '담보대출'].map(type => (
+            <button
+              key={type}
+              onClick={() => setTypeFilter(type)}
+              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                typeFilter === type
+                  ? 'bg-steel-600 text-white shadow'
+                  : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {type === 'all' ? '전체' : type} ({typeStats[type as keyof typeof typeStats] || 0})
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          placeholder="차량번호, 금융사 검색..."
+          className="px-3 py-2 border border-gray-200 rounded-lg text-sm flex-1 focus:outline-none focus:border-steel-500 shadow-sm"
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+        />
       </div>
 
       {/* 리스트 테이블 */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
         {loading ? (
           <div className="p-6 md:p-10 text-center text-gray-400">데이터를 불러오는 중...</div>
-        ) : loans.length === 0 ? (
-          <div className="p-6 md:p-10 text-center text-gray-400">등록된 금융 정보가 없습니다.</div>
+        ) : filteredLoans.length === 0 ? (
+          <div className="p-6 md:p-10 text-center text-gray-400">{loans.length === 0 ? '등록된 금융 정보가 없습니다.' : '해당 조건의 금융 정보가 없습니다.'}</div>
         ) : (
           <>
             {/* Desktop Table View */}
@@ -100,7 +171,7 @@ const router = useRouter()
                   </tr>
                 </thead>
                 <tbody>
-                  {loans.map((loan) => (
+                  {filteredLoans.map((loan) => (
                     <tr
                       key={loan.id}
                       onClick={() => router.push(`/loans/${loan.id}`)}
@@ -140,7 +211,7 @@ const router = useRouter()
 
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-100">
-              {loans.map((loan) => (
+              {filteredLoans.map((loan) => (
                 <div
                   key={loan.id}
                   onClick={() => router.push(`/loans/${loan.id}`)}

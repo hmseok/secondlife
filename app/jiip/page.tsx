@@ -12,6 +12,8 @@ const router = useRouter()
 
   const [contracts, setContracts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
 
   // 데이터 불러오기
   const fetchContracts = async () => {
@@ -50,8 +52,26 @@ const router = useRouter()
     fetchContracts()
   }, [currentCompany, role, adminSelectedCompanyId])
 
-  // (편의기능) 총 투자금 합계 계산
+  // 통계 계산
   const totalInvest = contracts.reduce((sum, item) => sum + (item.invest_amount || 0), 0)
+  const activeContracts = contracts.filter(c => c.status === 'active')
+  const endedContracts = contracts.filter(c => c.status !== 'active')
+  const monthlyPayout = activeContracts.reduce((sum, c) => sum + (c.admin_fee || 0), 0)
+
+  // 필터 + 검색
+  const filteredContracts = contracts.filter(item => {
+    if (statusFilter === 'active' && item.status !== 'active') return false
+    if (statusFilter === 'ended' && item.status === 'active') return false
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      return (
+        (item.car?.number || '').toLowerCase().includes(term) ||
+        (item.investor_name || '').toLowerCase().includes(term) ||
+        (item.investor_phone || '').includes(term)
+      )
+    }
+    return true
+  })
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 md:py-12 md:px-6 bg-gray-50/50 min-h-screen">
@@ -71,27 +91,65 @@ const router = useRouter()
         </button>
       </div>
 
-      {/* 요약 대시보드 (간단) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm">
-            <p className="text-xs text-gray-400 font-bold">총 운영 차량</p>
-            <p className="text-xl md:text-3xl font-black text-gray-800">{contracts.length}대</p>
+      {/* 요약 대시보드 */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mb-6">
+        <div className="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm">
+          <p className="text-xs text-gray-400 font-bold">전체 계약</p>
+          <p className="text-lg md:text-xl font-black text-gray-800 mt-1">{contracts.length}<span className="text-xs text-gray-400 ml-0.5">건</span></p>
         </div>
-        <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm">
-            <p className="text-xs text-gray-400 font-bold">총 투자 유치금</p>
-            <p className="text-xl md:text-3xl font-black text-steel-600">{totalInvest.toLocaleString()}원</p>
+        <div className="bg-green-50 p-3 md:p-4 rounded-xl border border-green-100 cursor-pointer hover:shadow-md" onClick={() => setStatusFilter('active')}>
+          <p className="text-xs text-green-600 font-bold">운영 중</p>
+          <p className="text-lg md:text-xl font-black text-green-700 mt-1">{activeContracts.length}<span className="text-xs text-green-500 ml-0.5">건</span></p>
         </div>
-        <div className="bg-white p-4 md:p-6 rounded-2xl border border-gray-100 shadow-sm">
-            <p className="text-xs text-gray-400 font-bold">이번 달 지급 예정액</p>
-            <p className="text-xl md:text-3xl font-black text-gray-400">-</p> {/* 추후 구현 */}
+        <div className="bg-steel-50 p-3 md:p-4 rounded-xl border border-steel-100">
+          <p className="text-xs text-steel-500 font-bold">총 투자 유치금</p>
+          <p className="text-lg md:text-xl font-black text-steel-700 mt-1">{totalInvest.toLocaleString()}<span className="text-xs text-steel-400 ml-0.5">원</span></p>
         </div>
+        <div className="bg-red-50 p-3 md:p-4 rounded-xl border border-red-100">
+          <p className="text-xs text-red-500 font-bold">월 관리비 합계</p>
+          <p className="text-lg md:text-xl font-black text-red-600 mt-1">{monthlyPayout.toLocaleString()}<span className="text-xs text-red-400 ml-0.5">원</span></p>
+        </div>
+        <div className="bg-gray-50 p-3 md:p-4 rounded-xl border border-gray-200 cursor-pointer hover:shadow-md" onClick={() => setStatusFilter('ended')}>
+          <p className="text-xs text-gray-500 font-bold">종료 계약</p>
+          <p className="text-lg md:text-xl font-black text-gray-500 mt-1">{endedContracts.length}<span className="text-xs text-gray-400 ml-0.5">건</span></p>
+        </div>
+      </div>
+
+      {/* 필터 + 검색 */}
+      <div className="flex flex-col md:flex-row gap-3 mb-4">
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {[
+            { key: 'all', label: '전체', count: contracts.length },
+            { key: 'active', label: '운영 중', count: activeContracts.length },
+            { key: 'ended', label: '종료', count: endedContracts.length },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                statusFilter === tab.key
+                  ? 'bg-steel-600 text-white shadow'
+                  : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          placeholder="차량번호, 차주명, 연락처 검색..."
+          className="px-3 py-2 border border-gray-200 rounded-lg text-sm flex-1 focus:outline-none focus:border-steel-500 shadow-sm"
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+        />
       </div>
 
       {/* 리스트 테이블 */}
       <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
         {loading ? (
            <div className="p-20 text-center text-gray-400 font-bold animate-pulse">데이터를 불러오는 중...</div>
-        ) : contracts.length === 0 ? (
+        ) : filteredContracts.length === 0 ? (
            <div className="p-20 text-center flex flex-col items-center justify-center">
              <div className="text-5xl mb-4">🚛</div>
              <p className="text-gray-900 font-bold text-lg">등록된 지입 계약이 없습니다.</p>
@@ -113,7 +171,7 @@ const router = useRouter()
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {contracts.map((item) => (
+                  {filteredContracts.map((item) => (
                     <tr key={item.id} className="hover:bg-gray-50/50 transition-colors cursor-pointer" onClick={() => router.push(`/jiip/${item.id}`)}>
                       <td className="p-3 md:p-5">
                         <div className="font-bold text-gray-900">{item.car?.number || '차량 미지정'}</div>
@@ -150,7 +208,7 @@ const router = useRouter()
 
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-100">
-              {contracts.map((item) => (
+              {filteredContracts.map((item) => (
                 <div key={item.id} onClick={() => router.push(`/jiip/${item.id}`)} className="p-4 hover:bg-gray-50/50 transition-colors cursor-pointer">
                   <div className="flex justify-between items-start mb-3">
                     <div>

@@ -50,7 +50,6 @@ const compressImage = async (file: File): Promise<File> => {
 };
 
 export default function InsuranceListPage() {
-// ✅ [수정 2] supabase 클라이언트 생성 (이 줄이 없어서 에러가 난 겁니다!)
 const router = useRouter()
 const { company, role, adminSelectedCompanyId } = useApp()
 const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : company?.id
@@ -63,6 +62,10 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [allCars, setAllCars] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
+
+  // 🔥 필터/검색 상태
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired' | 'none' | 'expiring'>('all')
+  const [listSearchTerm, setListSearchTerm] = useState('')
 
   // VIN 매칭 실패 재시도 관련
   const [failedItems, setFailedItems] = useState<any[]>([])
@@ -335,6 +338,59 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
   const filteredCars = allCars.filter(car => car.number.includes(searchTerm))
   const f = (n: number) => n?.toLocaleString() || '0'
 
+  // 📊 KPI 통계 계산
+  const today = new Date()
+  const thirtyDaysLater = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000)
+
+  const stats = {
+    total: list.length,
+    active: list.filter(i => i.insurance && new Date(i.insurance.end_date) >= today).length,
+    expired: list.filter(i => i.insurance && new Date(i.insurance.end_date) < today).length,
+    none: list.filter(i => !i.insurance).length,
+    expiring: list.filter(i => {
+      if (!i.insurance) return false
+      const end = new Date(i.insurance.end_date)
+      return end >= today && end <= thirtyDaysLater
+    }).length,
+    totalPremium: list.reduce((s, i) => s + (i.insurance?.premium || 0), 0),
+  }
+
+  // 🔍 필터 + 검색 적용
+  const filteredList = list.filter(item => {
+    // 상태 필터
+    if (statusFilter === 'active') {
+      if (!item.insurance || new Date(item.insurance.end_date) < today) return false
+    } else if (statusFilter === 'expired') {
+      if (!item.insurance || new Date(item.insurance.end_date) >= today) return false
+    } else if (statusFilter === 'none') {
+      if (item.insurance) return false
+    } else if (statusFilter === 'expiring') {
+      if (!item.insurance) return false
+      const end = new Date(item.insurance.end_date)
+      if (end < today || end > thirtyDaysLater) return false
+    }
+
+    // 검색어 필터
+    if (listSearchTerm) {
+      const term = listSearchTerm.toLowerCase()
+      return (
+        (item.number || '').toLowerCase().includes(term) ||
+        (item.brand || '').toLowerCase().includes(term) ||
+        (item.model || '').toLowerCase().includes(term) ||
+        (item.vin || '').toLowerCase().includes(term) ||
+        (item.insurance?.company || '').toLowerCase().includes(term)
+      )
+    }
+    return true
+  })
+
+  // 만기 임박 차량 (30일 이내)
+  const expiringCars = list.filter(i => {
+    if (!i.insurance) return false
+    const end = new Date(i.insurance.end_date)
+    return end >= today && end <= thirtyDaysLater
+  }).sort((a, b) => new Date(a.insurance.end_date).getTime() - new Date(b.insurance.end_date).getTime())
+
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 md:py-12 md:px-6 bg-gray-50/50 min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-10 gap-4">
@@ -397,9 +453,106 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
         </div>
       )}
 
+      {/* 📊 KPI 대시보드 */}
+      {list.length > 0 && !bulkProcessing && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+          <div className="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter('all')}>
+            <p className="text-xs text-gray-400 font-bold">전체 차량</p>
+            <p className="text-xl md:text-2xl font-black text-gray-900 mt-1">{stats.total}<span className="text-sm text-gray-400 ml-0.5">대</span></p>
+          </div>
+          <div className="bg-green-50 p-3 md:p-4 rounded-xl border border-green-100 cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter('active')}>
+            <p className="text-xs text-green-600 font-bold">가입중</p>
+            <p className="text-xl md:text-2xl font-black text-green-700 mt-1">{stats.active}<span className="text-sm text-green-500 ml-0.5">대</span></p>
+          </div>
+          <div className={`p-3 md:p-4 rounded-xl border cursor-pointer hover:shadow-md transition-shadow ${stats.expiring > 0 ? 'bg-amber-50 border-amber-200 animate-pulse' : 'bg-amber-50 border-amber-100'}`} onClick={() => setStatusFilter('expiring')}>
+            <p className="text-xs text-amber-600 font-bold">만기 임박 (30일)</p>
+            <p className="text-xl md:text-2xl font-black text-amber-700 mt-1">{stats.expiring}<span className="text-sm text-amber-500 ml-0.5">대</span></p>
+          </div>
+          <div className="bg-red-50 p-3 md:p-4 rounded-xl border border-red-100 cursor-pointer hover:shadow-md transition-shadow" onClick={() => setStatusFilter('expired')}>
+            <p className="text-xs text-red-500 font-bold">만료됨</p>
+            <p className="text-xl md:text-2xl font-black text-red-600 mt-1">{stats.expired}<span className="text-sm text-red-400 ml-0.5">대</span></p>
+          </div>
+          <div className="bg-blue-50 p-3 md:p-4 rounded-xl border border-blue-100">
+            <p className="text-xs text-blue-500 font-bold">총 보험료</p>
+            <p className="text-lg md:text-xl font-black text-blue-700 mt-1">{f(stats.totalPremium)}<span className="text-sm text-blue-400 ml-0.5">원</span></p>
+          </div>
+        </div>
+      )}
+
+      {/* ⚠️ 만기 임박 경고 배너 */}
+      {expiringCars.length > 0 && !bulkProcessing && (
+        <div className="mb-6 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-4 md:p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">⚠️</span>
+            <h3 className="font-bold text-amber-800 text-sm">만기 임박 차량 ({expiringCars.length}대) — 30일 이내 갱신 필요</h3>
+          </div>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {expiringCars.slice(0, 8).map(item => {
+              const daysLeft = Math.ceil((new Date(item.insurance.end_date).getTime() - today.getTime()) / (1000*60*60*24))
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => router.push(`/insurance/${item.id}`)}
+                  className="bg-white border border-amber-200 rounded-xl px-3 py-2 flex-shrink-0 cursor-pointer hover:shadow-md transition-all hover:border-amber-400"
+                >
+                  <div className="font-bold text-gray-800 text-sm">{item.number}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs text-gray-500">{item.insurance.company}</span>
+                    <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${daysLeft <= 7 ? 'bg-red-100 text-red-600' : daysLeft <= 14 ? 'bg-orange-100 text-orange-600' : 'bg-yellow-100 text-yellow-700'}`}>
+                      D-{daysLeft}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+            {expiringCars.length > 8 && (
+              <div className="bg-amber-100 rounded-xl px-3 py-2 flex-shrink-0 flex items-center text-amber-700 text-xs font-bold">
+                +{expiringCars.length - 8}대 더
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 🔍 필터 + 검색 바 */}
+      {list.length > 0 && !bulkProcessing && (
+        <div className="flex flex-col md:flex-row gap-3 mb-4">
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {[
+              { key: 'all' as const, label: '전체', count: stats.total },
+              { key: 'active' as const, label: '가입중', count: stats.active },
+              { key: 'expiring' as const, label: '만기임박', count: stats.expiring },
+              { key: 'expired' as const, label: '만료', count: stats.expired },
+              { key: 'none' as const, label: '미가입', count: stats.none },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setStatusFilter(tab.key)}
+                className={`px-3 md:px-4 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                  statusFilter === tab.key
+                    ? 'bg-steel-600 text-white shadow'
+                    : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
+                }`}
+              >
+                {tab.label} ({tab.count})
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="차량번호, 브랜드, VIN, 보험사 검색..."
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm flex-1 focus:outline-none focus:border-steel-500 shadow-sm"
+            value={listSearchTerm}
+            onChange={e => setListSearchTerm(e.target.value)}
+          />
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-        {list.length === 0 ? (
-            <div className="p-12 md:p-20 text-center text-gray-400">등록된 차량이 없습니다.</div>
+        {filteredList.length === 0 ? (
+            <div className="p-12 md:p-20 text-center text-gray-400">
+              {list.length === 0 ? '등록된 차량이 없습니다.' : '해당 조건의 차량이 없습니다.'}
+            </div>
         ) : (
             <>
               {/* Desktop Table View */}
@@ -418,7 +571,7 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {list.map((item) => (
+                    {filteredList.map((item) => (
                       <tr key={item.id} onClick={() => router.push(`/insurance/${item.id}`)} className="hover:bg-steel-50/30 cursor-pointer transition-colors group">
                         <td className="p-3 md:p-5 pl-4 md:pl-8 font-black text-lg text-gray-900">{item.number}</td>
                         <td className="p-3 md:p-5">
@@ -431,7 +584,20 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
                             {item.model}
                         </td>
                         <td className="p-3 md:p-5 font-bold text-gray-700">{item.insurance?.company || '-'}</td>
-                        <td className="p-3 md:p-5 font-mono text-gray-600">{item.insurance?.end_date || '-'}</td>
+                        <td className="p-3 md:p-5 font-mono text-gray-600">
+                          {item.insurance?.end_date ? (
+                            <>
+                              {item.insurance.end_date}
+                              {(() => {
+                                const end = new Date(item.insurance.end_date)
+                                const diff = Math.ceil((end.getTime() - today.getTime()) / (1000*60*60*24))
+                                if (diff < 0) return null
+                                if (diff <= 30) return <span className={`ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded ${diff<=7?'bg-red-100 text-red-600':diff<=14?'bg-orange-100 text-orange-600':'bg-yellow-100 text-yellow-700'}`}>D-{diff}</span>
+                                return null
+                              })()}
+                            </>
+                          ) : '-'}
+                        </td>
                         <td className="p-3 md:p-5 text-right font-medium text-steel-600">{item.insurance?.premium ? `${f(item.insurance.premium)}원` : '-'}</td>
                         <td className="p-3 md:p-5 text-center">
                           {item.insurance ? (
@@ -461,7 +627,7 @@ const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : compa
 
               {/* Mobile Card View */}
               <div className="md:hidden divide-y divide-gray-100">
-                {list.map((item) => (
+                {filteredList.map((item) => (
                   <div key={item.id} onClick={() => router.push(`/insurance/${item.id}`)} className="p-4 hover:bg-steel-50/30 transition-colors cursor-pointer">
                     <div className="flex justify-between items-start mb-3">
                       <div>

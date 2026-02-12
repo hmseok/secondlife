@@ -34,8 +34,8 @@ const Icons: any = {
 // 동적 메뉴 → 그룹 매핑
 const PATH_TO_GROUP: Record<string, string> = {
   '/insurance': 'vehicle', '/registration': 'vehicle',
-  '/quotes': 'sales', '/customers': 'sales',
-  '/finance': 'finance', '/loans': 'finance',
+  '/quotes': 'sales', '/quotes/pricing': 'sales', '/customers': 'sales',
+  '/finance': 'finance', '/finance/settlement': 'finance', '/report': 'finance', '/loans': 'finance',
   '/invest': 'invest', '/jiip': 'invest',
 }
 

@@ -67,6 +67,8 @@ const { company, role, adminSelectedCompanyId } = useApp()
   const [showResultModal, setShowResultModal] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cancelRef = useRef(false)  // 중단 플래그
+  const [failedFiles, setFailedFiles] = useState<File[]>([])  // 실패 파일 재시도용
 
   // 수동 등록용
   const [standardCodes, setStandardCodes] = useState<any[]>([])
@@ -136,6 +138,21 @@ const { company, role, adminSelectedCompanyId } = useApp()
     e.target.value = '' // 같은 파일 재선택 가능하도록 초기화
   }
 
+  // 중단 핸들러
+  const handleCancel = () => {
+    cancelRef.current = true
+    setLogs(prev => ['🛑 사용자가 중단을 요청했습니다. 현재 건 완료 후 중단됩니다...', ...prev])
+  }
+
+  // 실패 건 재시도
+  const handleRetryFailed = () => {
+    if (failedFiles.length === 0) return
+    const dt = new DataTransfer()
+    failedFiles.forEach(f => dt.items.add(f))
+    setFailedFiles([])
+    processFiles(dt.files)
+  }
+
   const processFiles = async (files: FileList) => {
       if (!files?.length) return
       if (role === 'god_admin' && !adminSelectedCompanyId) {
@@ -144,19 +161,31 @@ const { company, role, adminSelectedCompanyId } = useApp()
       }
       if (!confirm(`총 ${files.length}건을 분석합니다.\n(PDF, JPG, PNG 지원)`)) return
 
+      cancelRef.current = false  // 중단 플래그 리셋
       setBulkProcessing(true)
       setShowResultModal(false)
       setProgress({ current: 0, total: files.length, success: 0, fail: 0, skipped: 0 })
       setLogs([])
+      const newFailedFiles: File[] = []
 
       for (let i = 0; i < files.length; i++) {
+          // 🛑 중단 체크
+          if (cancelRef.current) {
+              const remaining = files.length - i
+              setLogs(prev => [`🛑 중단됨 — 나머지 ${remaining}건 건너뜀`, ...prev])
+              // 나머지 파일을 실패 목록에 추가 (재시도 가능)
+              for (let j = i; j < files.length; j++) {
+                newFailedFiles.push(files[j])
+              }
+              break
+          }
+
           const originalFile = files[i]
-          const isPdf = originalFile.type === 'application/pdf'; // 🔥 PDF 체크
+          const isPdf = originalFile.type === 'application/pdf';
           setProgress(prev => ({ ...prev, current: i + 1 }))
 
           try {
               let fileToUpload = originalFile;
-              // PDF는 압축 생략
               if (!isPdf) {
                   try { fileToUpload = await compressImage(originalFile); } catch (e) { console.warn("압축 실패"); }
               }
@@ -172,12 +201,18 @@ const { company, role, adminSelectedCompanyId } = useApp()
                   const reader = new FileReader(); reader.readAsDataURL(fileToUpload); reader.onload = () => r(reader.result as string);
               })
 
-              // AI 분석 (MIME Type 전달)
+              // AI 분석 (MIME Type 전달) + 타임아웃 30초
+              const controller = new AbortController()
+              const timeout = setTimeout(() => controller.abort(), 30000)
+
               const response = await fetch('/api/ocr-registration', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ imageBase64: base64, mimeType: isPdf ? 'application/pdf' : 'image/jpeg' })
+                  body: JSON.stringify({ imageBase64: base64, mimeType: isPdf ? 'application/pdf' : 'image/jpeg' }),
+                  signal: controller.signal
               })
+              clearTimeout(timeout)
+
               const result = await response.json()
               if (result.error) throw new Error(result.error)
 
@@ -187,7 +222,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
               const detectedVin = result.vin || `NO-VIN-${Date.now()}`;
               let finalPrice = cleanNumber(result.purchase_price);
 
-              // 중복 체크 (차대번호 기준)
+              // 중복 체크
               const { data: existingCar } = await supabase.from('cars').select('id').eq('vin', detectedVin).maybeSingle();
               if (existingCar) {
                   setProgress(prev => ({ ...prev, skipped: prev.skipped + 1 }))
@@ -201,16 +236,10 @@ const { company, role, adminSelectedCompanyId } = useApp()
                       .delete().eq('model_name', detectedModel).eq('year', detectedYear);
 
                   const modelCode = generateModelCode(detectedBrand, detectedModel, detectedYear);
-
                   const rowsToInsert = result.trims.map((t: any) => ({
-                      brand: detectedBrand,
-                      model_name: detectedModel,
-                      model_code: modelCode,
-                      year: detectedYear,
-                      trim_name: t.name,
-                      price: t.price || 0,
-                      fuel_type: result.fuel_type || '기타',
-                      normalized_name: normalizeModelName(detectedModel)
+                      brand: detectedBrand, model_name: detectedModel, model_code: modelCode,
+                      year: detectedYear, trim_name: t.name, price: t.price || 0,
+                      fuel_type: result.fuel_type || '기타', normalized_name: normalizeModelName(detectedModel)
                   }));
                   await supabase.from('vehicle_standard_codes').insert(rowsToInsert);
 
@@ -222,35 +251,29 @@ const { company, role, adminSelectedCompanyId } = useApp()
 
               // 2. 차량 등록
               await supabase.from('cars').insert([{
-                  number: result.car_number || '임시번호',
-                  brand: detectedBrand,
-                  model: detectedModel,
-                  vin: detectedVin,
-                  owner_name: result.owner_name || '',
-                  location: result.location || '',
-                  purchase_price: finalPrice,
-                  displacement: cleanNumber(result.displacement),
-                  capacity: cleanNumber(result.capacity),
-                  registration_date: cleanDate(result.registration_date),
+                  number: result.car_number || '임시번호', brand: detectedBrand, model: detectedModel,
+                  vin: detectedVin, owner_name: result.owner_name || '', location: result.location || '',
+                  purchase_price: finalPrice, displacement: cleanNumber(result.displacement),
+                  capacity: cleanNumber(result.capacity), registration_date: cleanDate(result.registration_date),
                   inspection_end_date: cleanDate(result.inspection_end_date),
                   vehicle_age_expiry: cleanDate(result.vehicle_age_expiry),
-                  fuel_type: result.fuel_type || '기타',
-                  year: detectedYear,
-                  registration_image_url: urlData.publicUrl,
-                  status: 'available',
-                  notes: result.notes || '',
-                  company_id: effectiveCompanyId || null
+                  fuel_type: result.fuel_type || '기타', year: detectedYear,
+                  registration_image_url: urlData.publicUrl, status: 'available',
+                  notes: result.notes || '', company_id: effectiveCompanyId || null
               }])
 
               setProgress(prev => ({ ...prev, success: prev.success + 1 }))
               setLogs(prev => [`✅ [${detectedBrand}] ${detectedModel} 등록 완료 (${isPdf ? 'PDF' : 'IMG'})`, ...prev])
 
           } catch (error: any) {
+              const msg = error.name === 'AbortError' ? '타임아웃 (30초 초과)' : error.message
               setProgress(prev => ({ ...prev, fail: prev.fail + 1 }))
-              setLogs(prev => [`❌ ${files[i].name} 실패: ${error.message}`, ...prev])
+              setLogs(prev => [`❌ ${files[i].name} 실패: ${msg}`, ...prev])
+              newFailedFiles.push(originalFile)  // 실패 파일 저장
           }
       }
 
+      setFailedFiles(prev => [...prev, ...newFailedFiles])
       setBulkProcessing(false)
       setShowResultModal(true)
       fetchList()
@@ -287,6 +310,19 @@ const { company, role, adminSelectedCompanyId } = useApp()
 
   const f = (n: number) => n?.toLocaleString() || '0'
 
+  // 📊 KPI 통계
+  const stats = {
+    total: cars.length,
+    totalValue: cars.reduce((s, c) => s + (c.purchase_price || 0), 0),
+    avgValue: cars.length > 0 ? Math.round(cars.reduce((s, c) => s + (c.purchase_price || 0), 0) / cars.length) : 0,
+    electric: cars.filter(c => c.fuel_type === '전기').length,
+    hybrid: cars.filter(c => (c.fuel_type || '').includes('하이브리드')).length,
+  }
+
+  // 최근 7일 등록 차량
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const recentCars = cars.filter(c => new Date(c.created_at) >= sevenDaysAgo)
+
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 md:py-12 md:px-6 bg-gray-50/50 min-h-screen">
 
@@ -311,12 +347,82 @@ const { company, role, adminSelectedCompanyId } = useApp()
          </div>
        </div>
 
+       {/* 📊 KPI 대시보드 */}
+       {cars.length > 0 && !bulkProcessing && (
+         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+           <div className="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm">
+             <p className="text-xs text-gray-400 font-bold">등록 차량</p>
+             <p className="text-xl md:text-2xl font-black text-gray-900 mt-1">{stats.total}<span className="text-sm text-gray-400 ml-0.5">대</span></p>
+           </div>
+           <div className="bg-green-50 p-3 md:p-4 rounded-xl border border-green-100">
+             <p className="text-xs text-green-600 font-bold">친환경 차량</p>
+             <p className="text-xl md:text-2xl font-black text-green-700 mt-1">{stats.electric + stats.hybrid}<span className="text-sm text-green-500 ml-0.5">대</span></p>
+             <p className="text-[10px] text-green-500 mt-0.5">전기 {stats.electric} · 하이브리드 {stats.hybrid}</p>
+           </div>
+           <div className={`p-3 md:p-4 rounded-xl border ${recentCars.length > 0 ? 'bg-amber-50 border-amber-200 animate-pulse' : 'bg-amber-50 border-amber-100'}`}>
+             <p className="text-xs text-amber-600 font-bold">최근 7일 등록</p>
+             <p className="text-xl md:text-2xl font-black text-amber-700 mt-1">{recentCars.length}<span className="text-sm text-amber-500 ml-0.5">대</span></p>
+           </div>
+           <div className="bg-blue-50 p-3 md:p-4 rounded-xl border border-blue-100">
+             <p className="text-xs text-blue-500 font-bold">총 자산가치</p>
+             <p className="text-lg md:text-xl font-black text-blue-700 mt-1">{f(stats.totalValue)}<span className="text-sm text-blue-400 ml-0.5">원</span></p>
+           </div>
+           <div className="bg-steel-50 p-3 md:p-4 rounded-xl border border-steel-100">
+             <p className="text-xs text-steel-500 font-bold">차량 평균가</p>
+             <p className="text-lg md:text-xl font-black text-steel-700 mt-1">{f(stats.avgValue)}<span className="text-sm text-steel-400 ml-0.5">원</span></p>
+           </div>
+         </div>
+       )}
+
+       {/* 🆕 최근 등록 차량 배너 */}
+       {cars.length > 0 && !bulkProcessing && recentCars.length > 0 && (
+         <div className="mb-6 bg-gradient-to-r from-steel-50 to-blue-50 border border-steel-200 rounded-2xl p-4 md:p-5">
+           <div className="flex items-center gap-2 mb-3">
+             <span className="text-lg">🆕</span>
+             <h3 className="font-bold text-steel-800 text-sm">최근 7일 신규 등록 ({recentCars.length}대)</h3>
+           </div>
+           <div className="flex gap-2 overflow-x-auto pb-1">
+             {recentCars.slice(0, 8).map(car => (
+               <div
+                 key={car.id}
+                 onClick={() => router.push(`/registration/${car.id}`)}
+                 className="bg-white border border-steel-200 rounded-xl px-3 py-2 flex-shrink-0 cursor-pointer hover:shadow-md transition-all hover:border-steel-400"
+               >
+                 <div className="font-bold text-gray-800 text-sm">{car.number}</div>
+                 <div className="flex items-center gap-2 mt-0.5">
+                   <span className="text-xs text-gray-500">{car.brand}</span>
+                   <span className="text-[10px] text-steel-500 font-bold">{car.created_at?.split('T')[0]}</span>
+                 </div>
+               </div>
+             ))}
+             {recentCars.length > 8 && (
+               <div className="bg-steel-100 rounded-xl px-3 py-2 flex-shrink-0 flex items-center text-steel-700 text-xs font-bold">
+                 +{recentCars.length - 8}대 더
+               </div>
+             )}
+           </div>
+         </div>
+       )}
+
        {/* 진행 상태창 */}
        {bulkProcessing && (
          <div className="mb-10 bg-gray-900 rounded-2xl p-6 shadow-2xl ring-4 ring-steel-500/10 overflow-hidden relative">
             <div className="flex justify-between items-end mb-4 relative z-10 text-white">
                 <div className="flex items-center gap-3"><span className="animate-spin text-xl">⚙️</span><span className="font-bold">AI 분석 진행 중...</span></div>
-                <span className="font-mono font-bold">{progress.current} / {progress.total}</span>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-bold">{progress.current} / {progress.total}</span>
+                  <button
+                    onClick={handleCancel}
+                    disabled={cancelRef.current}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      cancelRef.current
+                        ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        : 'bg-red-500 text-white hover:bg-red-600 shadow-lg'
+                    }`}
+                  >
+                    {cancelRef.current ? '중단 중...' : '🛑 중단'}
+                  </button>
+                </div>
             </div>
             <div className="w-full bg-gray-700 rounded-full h-2 mb-4"><div className="bg-gradient-to-r from-steel-500 to-steel-600 h-2 rounded-full transition-all" style={{ width: `${(progress.current / progress.total) * 100}%` }}></div></div>
             <div className="flex gap-6 text-xs font-bold mb-4 font-mono">
@@ -325,6 +431,30 @@ const { company, role, adminSelectedCompanyId } = useApp()
                 <span className="text-red-400">❌ 실패: {progress.fail}</span>
             </div>
             <div className="h-32 overflow-y-auto font-mono text-xs text-gray-300 border-t border-gray-700 pt-2 scrollbar-hide">{logs.map((log, i) => <div key={i}>{log}</div>)}</div>
+         </div>
+       )}
+
+       {/* 실패 건 재시도 배너 */}
+       {!bulkProcessing && failedFiles.length > 0 && (
+         <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+           <div>
+             <p className="font-bold text-red-700">❌ 실패 {failedFiles.length}건이 있습니다</p>
+             <p className="text-xs text-red-500 mt-1">네트워크 오류나 타임아웃으로 실패한 파일을 다시 시도할 수 있습니다.</p>
+           </div>
+           <div className="flex gap-2">
+             <button
+               onClick={handleRetryFailed}
+               className="px-5 py-2.5 bg-red-600 text-white rounded-xl font-bold text-sm hover:bg-red-700 shadow-lg transition-all"
+             >
+               🔄 {failedFiles.length}건 재시도
+             </button>
+             <button
+               onClick={() => setFailedFiles([])}
+               className="px-4 py-2.5 bg-white text-gray-500 border border-gray-300 rounded-xl font-bold text-sm hover:bg-gray-50"
+             >
+               무시
+             </button>
+           </div>
          </div>
        )}
 
@@ -459,7 +589,18 @@ const { company, role, adminSelectedCompanyId } = useApp()
                     <div className="flex justify-between py-1 border-b border-gray-200 mt-2"><span className="text-yellow-600 font-bold">중복 제외</span><span className="font-bold text-yellow-600">{progress.skipped}건</span></div>
                     <div className="flex justify-between py-1 mt-2"><span className="text-red-500">실패</span><span className="font-bold text-red-500">{progress.fail}건</span></div>
                 </div>
-                <button onClick={() => setShowResultModal(false)} className="w-full bg-steel-600 text-white py-3 rounded-xl font-bold hover:bg-steel-700">확인</button>
+                <div className="flex gap-2">
+                  {failedFiles.length > 0 && (
+                    <button onClick={() => { setShowResultModal(false); handleRetryFailed(); }}
+                      className="flex-1 bg-red-500 text-white py-3 rounded-xl font-bold hover:bg-red-600">
+                      🔄 {failedFiles.length}건 재시도
+                    </button>
+                  )}
+                  <button onClick={() => setShowResultModal(false)}
+                    className={`${failedFiles.length > 0 ? 'flex-1' : 'w-full'} bg-steel-600 text-white py-3 rounded-xl font-bold hover:bg-steel-700`}>
+                    확인
+                  </button>
+                </div>
             </div>
         </div>
        )}

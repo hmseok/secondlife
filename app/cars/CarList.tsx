@@ -73,6 +73,26 @@ const { company, role, adminSelectedCompanyId } = useApp()
   // 숫자 포맷팅 (예: 50,000,000원)
   const formatMoney = (amount?: number) => amount?.toLocaleString() || '0'
 
+  // 📊 KPI 통계
+  const stats = {
+    total: cars.length,
+    available: cars.filter(c => c.status === 'available').length,
+    rented: cars.filter(c => c.status === 'rented').length,
+    maintenance: cars.filter(c => c.status === 'maintenance').length,
+    totalValue: cars.reduce((s, c) => s + (c.purchase_price || 0), 0),
+    avgValue: cars.length > 0 ? Math.round(cars.reduce((s, c) => s + (c.purchase_price || 0), 0) / cars.length) : 0,
+  }
+
+  // 정비/사고 차량 목록
+  const maintenanceCars = cars.filter(c => c.status === 'maintenance')
+
+  // 최근 7일 등록 차량
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const recentCars = cars.filter(c => new Date(c.created_at) >= sevenDaysAgo)
+
+  // 운용률 계산
+  const utilizationRate = stats.total > 0 ? Math.round(((stats.rented) / stats.total) * 100) : 0
+
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 md:py-10 md:px-6 min-h-screen bg-gray-50 animate-fade-in">
 
@@ -97,12 +117,120 @@ const { company, role, adminSelectedCompanyId } = useApp()
             />
 
             {/* 차량 등록 버튼 */}
-            <button className="bg-steel-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-bold hover:bg-steel-700 shadow-lg text-center whitespace-nowrap text-sm flex-shrink-0">
+            <button
+              onClick={() => {
+                if (role === 'god_admin' && !adminSelectedCompanyId) {
+                  alert('⚠️ 좌측 상단에서 회사를 먼저 선택해주세요.')
+                  return
+                }
+                router.push('/cars/new')
+              }}
+              className="bg-steel-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-xl font-bold hover:bg-steel-700 shadow-lg text-center whitespace-nowrap text-sm flex-shrink-0"
+            >
               + 등록
             </button>
 
         </div>
       </div>
+
+      {/* 📊 대시보드 */}
+      {cars.length > 0 && (
+        <>
+          {/* 종합 현황 헤더 */}
+          <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-2xl p-5 md:p-6 mb-4 shadow-xl text-white">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+              <div>
+                <p className="text-gray-400 text-xs font-bold mb-1">총 보유 차량</p>
+                <p className="text-2xl md:text-3xl font-black">{stats.total}<span className="text-sm text-gray-400 ml-1">대</span></p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs font-bold mb-1">운용률 (대여/전체)</p>
+                <p className="text-2xl md:text-3xl font-black text-steel-400">{utilizationRate}<span className="text-sm text-gray-400 ml-0.5">%</span></p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs font-bold mb-1">총 자산가치</p>
+                <p className="text-xl md:text-2xl font-black">{formatMoney(stats.totalValue)}<span className="text-xs text-gray-400 ml-0.5">원</span></p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs font-bold mb-1">차량 평균가</p>
+                <p className="text-xl md:text-2xl font-black">{formatMoney(stats.avgValue)}<span className="text-xs text-gray-400 ml-0.5">원</span></p>
+              </div>
+            </div>
+          </div>
+
+          {/* KPI 카드 */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className={`bg-white p-3 rounded-xl border shadow-sm cursor-pointer hover:shadow-md transition-shadow ${filter === 'all' ? 'border-steel-400 ring-1 ring-steel-200' : 'border-gray-200'}`} onClick={() => setFilter('all')}>
+              <p className="text-xs text-gray-400 font-bold">전체</p>
+              <p className="text-xl font-black text-gray-900 mt-1">{stats.total}<span className="text-sm text-gray-400 ml-0.5">대</span></p>
+            </div>
+            <div className={`bg-green-50 p-3 rounded-xl border cursor-pointer hover:shadow-md transition-shadow ${filter === 'available' ? 'border-green-400 ring-1 ring-green-200' : 'border-green-100'}`} onClick={() => setFilter('available')}>
+              <p className="text-xs text-green-600 font-bold">대기중</p>
+              <p className="text-xl font-black text-green-700 mt-1">{stats.available}<span className="text-sm text-green-500 ml-0.5">대</span></p>
+            </div>
+            <div className={`bg-blue-50 p-3 rounded-xl border cursor-pointer hover:shadow-md transition-shadow ${filter === 'rented' ? 'border-blue-400 ring-1 ring-blue-200' : 'border-blue-100'}`} onClick={() => setFilter('rented')}>
+              <p className="text-xs text-blue-500 font-bold">대여중</p>
+              <p className="text-xl font-black text-blue-700 mt-1">{stats.rented}<span className="text-sm text-blue-500 ml-0.5">대</span></p>
+            </div>
+            <div className={`bg-red-50 p-3 rounded-xl border cursor-pointer hover:shadow-md transition-shadow ${filter === 'maintenance' ? 'border-red-400 ring-1 ring-red-200' : 'border-red-100'}`} onClick={() => setFilter('maintenance')}>
+              <p className="text-xs text-red-500 font-bold">정비/사고</p>
+              <p className="text-xl font-black text-red-600 mt-1">{stats.maintenance}<span className="text-sm text-red-400 ml-0.5">대</span></p>
+            </div>
+          </div>
+
+          {/* ⚠️ 정비/사고 차량 경고 배너 */}
+          {maintenanceCars.length > 0 && (
+            <div className="mb-4 bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl p-4 md:p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">🔧</span>
+                <h3 className="font-bold text-red-800 text-sm">정비/사고 차량 ({maintenanceCars.length}대) — 확인 필요</h3>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {maintenanceCars.slice(0, 8).map(car => (
+                  <div
+                    key={car.id}
+                    onClick={() => router.push(`/cars/${car.id}`)}
+                    className="bg-white border border-red-200 rounded-xl px-3 py-2 flex-shrink-0 cursor-pointer hover:shadow-md transition-all hover:border-red-400"
+                  >
+                    <div className="font-bold text-gray-800 text-sm">{car.number}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{car.brand} {car.model}</div>
+                  </div>
+                ))}
+                {maintenanceCars.length > 8 && (
+                  <div className="bg-red-100 rounded-xl px-3 py-2 flex-shrink-0 flex items-center text-red-700 text-xs font-bold">
+                    +{maintenanceCars.length - 8}대 더
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 🆕 최근 등록 차량 배너 */}
+          {recentCars.length > 0 && (
+            <div className="mb-4 bg-gradient-to-r from-steel-50 to-blue-50 border border-steel-200 rounded-2xl p-4 md:p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">🆕</span>
+                <h3 className="font-bold text-steel-800 text-sm">최근 7일 신규 등록 ({recentCars.length}대)</h3>
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {recentCars.slice(0, 8).map(car => (
+                  <div
+                    key={car.id}
+                    onClick={() => router.push(`/cars/${car.id}`)}
+                    className="bg-white border border-steel-200 rounded-xl px-3 py-2 flex-shrink-0 cursor-pointer hover:shadow-md transition-all hover:border-steel-400"
+                  >
+                    <div className="font-bold text-gray-800 text-sm">{car.number}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-xs text-gray-500">{car.brand}</span>
+                      <span className="text-[10px] text-steel-500 font-bold">{car.created_at.split('T')[0]}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* 탭 필터 */}
       <div className="flex border-b border-gray-200 mb-0 overflow-x-auto">
@@ -135,7 +263,13 @@ const { company, role, adminSelectedCompanyId } = useApp()
             </div>
         ) : filteredCars.length === 0 ? (
             <div className="p-12 md:p-20 text-center text-gray-400 text-sm">
-                {searchTerm ? '검색 결과가 없습니다.' : '등록된 차량이 없습니다.'}
+                {role === 'god_admin' && !adminSelectedCompanyId ? (
+                  <div>
+                    <span className="text-4xl block mb-3">🏢</span>
+                    <p className="font-bold text-gray-600">좌측 상단에서 회사를 먼저 선택해주세요</p>
+                    <p className="text-xs mt-1">슈퍼어드민은 회사를 선택한 후 차량을 조회/등록할 수 있습니다.</p>
+                  </div>
+                ) : searchTerm ? '검색 결과가 없습니다.' : '등록된 차량이 없습니다.'}
             </div>
         ) : (
           <>
@@ -156,6 +290,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
                     {filteredCars.map((car) => (
                         <tr
                             key={car.id}
+                            onClick={() => router.push(`/cars/${car.id}`)}
                             className="hover:bg-steel-50 cursor-pointer transition-colors group"
                         >
                             <td className="p-3 md:p-4 font-black text-gray-900 text-sm md:text-lg group-hover:text-steel-600">
@@ -195,7 +330,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
             {/* Mobile Card View */}
             <div className="md:hidden divide-y divide-gray-100">
               {filteredCars.map((car) => (
-                <div key={car.id} className="p-4 active:bg-steel-50 cursor-pointer">
+                <div key={car.id} onClick={() => router.push(`/cars/${car.id}`)} className="p-4 active:bg-steel-50 cursor-pointer">
                   <div className="flex justify-between items-start">
                     <div>
                       <div className="font-black text-gray-900 text-base">{car.number}</div>

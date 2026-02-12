@@ -16,11 +16,11 @@ const formatSimpleMoney = (num: number) => {
 
 export default function GeneralInvestDashboard() {
   const { company, role, adminSelectedCompanyId } = useApp()
-
-  // ✅ [수정 2] supabase 클라이언트 생성 (이 줄이 없어서 에러가 난 겁니다!)
-const router = useRouter()
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [list, setList] = useState<any[]>([])
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [searchTerm, setSearchTerm] = useState('')
 
   // 📊 일반 투자 전용 통계
   const [stats, setStats] = useState({
@@ -70,11 +70,42 @@ const router = useRouter()
         totalAmount,
         totalMonthlyInterest,
         avgInterestRate,
-        activeCount: investments.length
+        activeCount: investments.filter(i => i.status === 'active').length
     })
 
     setLoading(false)
   }
+
+  // 종료 건수
+  const endedCount = list.filter(i => i.status !== 'active').length
+
+  // 만기 임박 (90일 이내)
+  const today = new Date()
+  const ninetyDaysLater = new Date(today.getTime() + 90*24*60*60*1000)
+  const expiringCount = list.filter(i => {
+    if (!i.contract_end_date) return false
+    const end = new Date(i.contract_end_date)
+    return end >= today && end <= ninetyDaysLater
+  }).length
+
+  // 필터 + 검색
+  const filteredList = list.filter(item => {
+    if (statusFilter === 'active' && item.status !== 'active') return false
+    if (statusFilter === 'ended' && item.status === 'active') return false
+    if (statusFilter === 'expiring') {
+      if (!item.contract_end_date) return false
+      const end = new Date(item.contract_end_date)
+      if (end < today || end > ninetyDaysLater) return false
+    }
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      return (
+        (item.investor_name || '').toLowerCase().includes(term) ||
+        (item.investor_phone || '').includes(term)
+      )
+    }
+    return true
+  })
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 md:py-12 md:px-6 bg-gray-50/50 min-h-screen pb-20 md:pb-32">
@@ -91,46 +122,68 @@ const router = useRouter()
         </Link>
       </div>
 
-      {/* 📊 KPI 요약 카드 (소수점 1자리 적용) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-          {/* 카드 1 */}
-          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-steel-100">
-              <p className="text-xs font-bold text-gray-400 mb-1 uppercase">총 투자 원금 (Principal)</p>
-              <h3 className="text-xl md:text-3xl font-black text-gray-900">{formatSimpleMoney(stats.totalAmount)}원</h3>
-              <p className="text-xs text-gray-500 mt-2">현재 운용중인 원금 합계</p>
-          </div>
-
-          {/* 카드 2 */}
-          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-red-100">
-              <p className="text-xs font-bold text-gray-400 mb-1 uppercase">월 예상 이자 (Monthly Interest)</p>
-              {/* 반올림 제거하고 formatSimpleMoney에 그대로 전달하여 소수점 표현 */}
-              <h3 className="text-xl md:text-3xl font-black text-red-600">{formatSimpleMoney(stats.totalMonthlyInterest)}원</h3>
-              <p className="text-xs text-gray-500 mt-2">매월 지급해야 할 이자 총액</p>
-          </div>
-
-          {/* 카드 3 */}
-          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-steel-100">
-              <p className="text-xs font-bold text-gray-400 mb-1 uppercase">평균 연 수익률 (Avg Rate)</p>
-              <h3 className="text-xl md:text-3xl font-black text-steel-600">{stats.avgInterestRate.toFixed(1)}%</h3>
-              <p className="text-xs text-gray-500 mt-2">투자자 약정 평균 금리</p>
-          </div>
-
-          {/* 카드 4 */}
-          <div className="bg-white p-4 md:p-6 rounded-2xl shadow-sm border border-gray-200">
-              <p className="text-xs font-bold text-gray-400 mb-1 uppercase">운용 중인 계약 (Active)</p>
-              <h3 className="text-xl md:text-3xl font-black text-gray-900">{stats.activeCount}건</h3>
-              <p className="text-xs text-gray-500 mt-2">현재 진행 중인 투자 건수</p>
-          </div>
+      {/* KPI 요약 카드 */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4 mb-6">
+        <div className="bg-white p-3 md:p-4 rounded-xl border border-gray-200 shadow-sm">
+          <p className="text-xs text-gray-400 font-bold">총 투자 원금</p>
+          <p className="text-lg md:text-xl font-black text-gray-800 mt-1">{formatSimpleMoney(stats.totalAmount)}<span className="text-xs text-gray-400 ml-0.5">원</span></p>
+        </div>
+        <div className="bg-green-50 p-3 md:p-4 rounded-xl border border-green-100 cursor-pointer hover:shadow-md" onClick={() => setStatusFilter('active')}>
+          <p className="text-xs text-green-600 font-bold">운용 중</p>
+          <p className="text-lg md:text-xl font-black text-green-700 mt-1">{stats.activeCount}<span className="text-xs text-green-500 ml-0.5">건</span></p>
+        </div>
+        <div className="bg-red-50 p-3 md:p-4 rounded-xl border border-red-100">
+          <p className="text-xs text-red-500 font-bold">월 예상 이자</p>
+          <p className="text-lg md:text-xl font-black text-red-600 mt-1">{formatSimpleMoney(stats.totalMonthlyInterest)}<span className="text-xs text-red-400 ml-0.5">원</span></p>
+        </div>
+        <div className={`p-3 md:p-4 rounded-xl border cursor-pointer hover:shadow-md ${expiringCount > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-200'}`} onClick={() => setStatusFilter('expiring')}>
+          <p className="text-xs text-amber-600 font-bold">만기 임박 (90일)</p>
+          <p className="text-lg md:text-xl font-black text-amber-700 mt-1">{expiringCount}<span className="text-xs text-amber-500 ml-0.5">건</span></p>
+        </div>
+        <div className="bg-steel-50 p-3 md:p-4 rounded-xl border border-steel-100">
+          <p className="text-xs text-steel-500 font-bold">평균 연 수익률</p>
+          <p className="text-lg md:text-xl font-black text-steel-700 mt-1">{stats.avgInterestRate.toFixed(1)}<span className="text-xs text-steel-400 ml-0.5">%</span></p>
+        </div>
       </div>
 
-      {/* 📋 일반 투자 리스트 */}
+      {/* 필터 + 검색 */}
+      <div className="flex flex-col md:flex-row gap-3 mb-4">
+        <div className="flex gap-1 overflow-x-auto pb-1">
+          {[
+            { key: 'all', label: '전체', count: list.length },
+            { key: 'active', label: '운용중', count: stats.activeCount },
+            { key: 'expiring', label: '만기임박', count: expiringCount },
+            { key: 'ended', label: '종료', count: endedCount },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setStatusFilter(tab.key)}
+              className={`px-3 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                statusFilter === tab.key
+                  ? 'bg-steel-600 text-white shadow'
+                  : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {tab.label} ({tab.count})
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          placeholder="투자자명, 연락처 검색..."
+          className="px-3 py-2 border border-gray-200 rounded-lg text-sm flex-1 focus:outline-none focus:border-steel-500 shadow-sm"
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      {/* 일반 투자 리스트 */}
       <div className="bg-white shadow-sm border rounded-2xl overflow-hidden min-h-[300px]">
           {loading ? (
               <div className="p-20 text-center text-gray-400">데이터 로딩 중...</div>
-          ) : list.length === 0 ? (
+          ) : filteredList.length === 0 ? (
               <div className="p-20 text-center text-gray-400">
-                  아직 등록된 일반 투자가 없습니다.<br/>
-                  우측 상단 버튼을 눌러 등록해주세요.
+                  {list.length === 0 ? '아직 등록된 일반 투자가 없습니다.' : '해당 조건의 투자 정보가 없습니다.'}
               </div>
           ) : (
               <>
@@ -148,7 +201,7 @@ const router = useRouter()
                               </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                              {list.map(item => (
+                              {filteredList.map(item => (
                                   <tr key={item.id} onClick={() => router.push(`/invest/general/${item.id}`)} className="hover:bg-steel-50 cursor-pointer group transition-colors">
                                       <td className="p-4">
                                           <div className="font-bold text-gray-900 text-base">{item.investor_name}</div>
@@ -179,7 +232,7 @@ const router = useRouter()
 
                   {/* Mobile Card View */}
                   <div className="md:hidden divide-y divide-gray-100">
-                      {list.map(item => (
+                      {filteredList.map(item => (
                           <div key={item.id} onClick={() => router.push(`/invest/general/${item.id}`)} className="p-4 hover:bg-steel-50/30 transition-colors cursor-pointer">
                               <div className="flex justify-between items-start mb-3">
                                   <div>

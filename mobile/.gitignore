@@ -1,0 +1,47 @@
+# OSX
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log
+
+# Xcode
+ios/build/
+ios/Pods/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.xcuserstate
+project.xcworkspace/
+xcuserdata/
+
+# Android/IntelliJ
+android/build/
+android/app/build/
+android/.gradle/
+.idea/
+*.iml
+local.properties
+*.hprof
+*.keystore
+!debug.keystore
+
+# Bundle artifacts
+*.jsbundle
+*.bundle
+
+# Env
+.env
+.env.*
+
+# Build
+*.ipa
+*.apk
+*.aab
+
+# Metro
+.metro-health-check*
+
+# Testing
+coverage/

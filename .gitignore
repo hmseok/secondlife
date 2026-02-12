@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# mobile embedded repos (Xcode/React Native 자동생성)
+mobile/SelfDisruption/
+mobile/SelfDisruptionApp/

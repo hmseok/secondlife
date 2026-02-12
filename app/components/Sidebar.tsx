@@ -52,7 +52,8 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
   }
 
   const renderMenuItem = (name: string, path: string, icon: JSX.Element) => {
-    const active = pathname.startsWith(path)
+    // /finance와 /finance/settlement 구분을 위해 정확 매칭 + 하위경로 매칭 사용
+    const active = pathname === path || (pathname.startsWith(path + '/') && path !== '/finance')
     return (
       <Link
         key={path}
@@ -108,6 +109,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         {/* 1️⃣ 그룹: 대고객 (영업) */}
         {renderGroupHeader('sales', '대고객 영업')}
         <div className={`space-y-1 transition-all duration-300 ${openGroups.sales || isCollapsed ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+           {renderMenuItem('렌트가 산출', '/quotes/pricing', <Icons.Calculator />)}
            {renderMenuItem('렌트 견적/계약', '/quotes', <Icons.DocumentCheck />)}
            {renderMenuItem('고객 관리 (CRM)', '/customers', <Icons.UserGroup />)}
         </div>
@@ -134,7 +136,9 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         {/* 4️⃣ 그룹: 경영 지원 (내부 자금 + 설정) */}
         {renderGroupHeader('mgmt', '경영 지원')}
         <div className={`space-y-1 transition-all duration-300 ${openGroups.mgmt || isCollapsed ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
+          {renderMenuItem('매출 회계 정산', '/finance/settlement', <Icons.Chart />)}
           {renderMenuItem('자금 장부 (입출금)', '/finance', <Icons.Calculator />)}
+          {renderMenuItem('리포트 / 통계', '/report', <Icons.Chart />)}
           {renderMenuItem('환경 설정 / 코드', '/db/codes', <Icons.Cog />)}
         </div>
 

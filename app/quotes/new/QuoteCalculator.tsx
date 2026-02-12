@@ -33,12 +33,19 @@ export default function QuoteCalculatorPage() {
     monthly_finance: 0,
     monthly_insurance: 0,
     maintenance: 50000,
+    monthly_tax: 0,
     total_cost: 0
   })
 
   // 🧠 [AI] 감가율 규칙 & 시스템 시세
   const [rules, setRules] = useState<any>({})
   const [estimatedPrice, setEstimatedPrice] = useState(0)
+
+  // 🆕 기준 테이블
+  const [insuranceRates, setInsuranceRates] = useState<any[]>([])
+  const [maintenanceCosts, setMaintenanceCosts] = useState<any[]>([])
+  const [taxRates, setTaxRates] = useState<any[]>([])
+  const [autoInfo, setAutoInfo] = useState('')
 
   // --- 데이터 불러오기 ---
   useEffect(() => {
@@ -61,6 +68,16 @@ export default function QuoteCalculatorPage() {
       // 4. 고객 (전체)
       const { data: custData } = await supabase.from('customers').select('*').order('name')
       setCustomers(custData || [])
+
+      // 🆕 기준 테이블 로드
+      const [insRes, maintRes, taxRes] = await Promise.all([
+        supabase.from('insurance_rate_table').select('*'),
+        supabase.from('maintenance_cost_table').select('*'),
+        supabase.from('vehicle_tax_table').select('*'),
+      ])
+      setInsuranceRates(insRes.data || [])
+      setMaintenanceCosts(maintRes.data || [])
+      setTaxRates(taxRes.data || [])
     }
     fetchData()
   }, [])
@@ -77,6 +94,58 @@ export default function QuoteCalculatorPage() {
 
     const { data: insData } = await supabase.from('insurance_contracts').select('*').eq('car_id', carId).order('id', { ascending: false }).limit(1).single()
     setInsurance(insData)
+
+    // 🆕 기준표에서 보험/정비/세금 자동 추정
+    if (carData) {
+      const IMPORT_B = ['벤츠','BMW','아우디','테슬라','볼보','포르쉐','렉서스','재규어','폭스바겐','미니','링컨']
+      const isImport = IMPORT_B.some(b => (carData.brand || '').includes(b))
+      const isEV = (carData.fuel_type || '').includes('전기')
+      const isHEV = (carData.fuel_type || '').includes('하이브리드')
+
+      // 보험 (보험계약 없을 때)
+      if (!insData) {
+        const insType = isEV ? '전기차' : isImport ? '수입 승용' : '국산 승용'
+        const insRecord = insuranceRates.find((r: any) =>
+          r.vehicle_type === insType && carData.purchase_price >= r.value_min && carData.purchase_price <= r.value_max
+        )
+        if (insRecord) {
+          const m_ins = Math.round(insRecord.annual_premium / 12)
+          setCosts(prev => ({ ...prev, monthly_insurance: m_ins }))
+        }
+      }
+
+      // 정비비
+      const carAge = new Date().getFullYear() - (carData.year || new Date().getFullYear())
+      let maintType = '국산 중형'
+      let fuelCat = '내연기관'
+      if (isEV) { maintType = '전기차'; fuelCat = '전기' }
+      else if (isHEV) { maintType = '하이브리드'; fuelCat = '하이브리드' }
+      else if (isImport) { maintType = '수입차'; fuelCat = '내연기관' }
+      else if (carData.purchase_price < 25000000) { maintType = '국산 경차/소형' }
+      else if (carData.purchase_price >= 40000000) { maintType = '국산 대형/SUV' }
+
+      const maintRecord = maintenanceCosts.find((r: any) =>
+        r.vehicle_type === maintType && r.fuel_type === fuelCat && carAge >= r.age_min && carAge <= r.age_max
+      )
+      if (maintRecord) {
+        setCosts(prev => ({ ...prev, maintenance: maintRecord.monthly_cost }))
+      }
+
+      // 자동차세 (영업용)
+      const cc = carData.engine_cc || 0
+      const fuelCategory = isEV ? '전기' : '내연기관'
+      const taxRecord = taxRates.find((r: any) =>
+        r.tax_type === '영업용' && r.fuel_category === fuelCategory && cc >= r.cc_min && cc <= r.cc_max
+      )
+      if (taxRecord) {
+        let tax = taxRecord.fixed_annual > 0 ? taxRecord.fixed_annual : Math.round(cc * taxRecord.rate_per_cc)
+        tax = Math.round(tax * (1 + taxRecord.education_tax_rate / 100))
+        setCosts(prev => ({ ...prev, monthly_tax: Math.round(tax / 12) }))
+      }
+
+      setAutoInfo(`${maintType} · 차령 ${carAge}년`)
+    }
+
     setLoading(false)
   }
 
@@ -101,12 +170,13 @@ export default function QuoteCalculatorPage() {
   // 비용 자동 계산 로직
   useEffect(() => {
     const m_fin = finance?.monthly_payment || 0
-    const m_ins = insurance?.total_premium ? Math.round(insurance.total_premium / 12) : 0
+    const m_ins = insurance?.total_premium ? Math.round(insurance.total_premium / 12) : costs.monthly_insurance
     const m_maint = costs.maintenance
-    const total = m_fin + m_ins + m_maint
+    const m_tax = costs.monthly_tax || 0
+    const total = m_fin + m_ins + m_maint + m_tax
 
     setCosts(prev => ({ ...prev, monthly_finance: m_fin, monthly_insurance: m_ins, total_cost: total }))
-  }, [selectedCar, finance, insurance, costs.maintenance])
+  }, [selectedCar, finance, insurance, costs.maintenance, costs.monthly_tax])
 
   // 최종 금액 계산
   const final_rent_fee = costs.total_cost + margin
@@ -216,6 +286,8 @@ export default function QuoteCalculatorPage() {
             <div className="flex justify-between items-center"><span className="text-gray-500">🏦 월 할부금</span><span className="font-bold text-lg">{f(costs.monthly_finance)}원</span></div>
             <div className="flex justify-between items-center"><span className="text-gray-500">🛡️ 월 보험료</span><span className="font-bold text-lg">{f(costs.monthly_insurance)}원</span></div>
             <div className="flex justify-between items-center"><span className="text-gray-500">🔧 정비예비비</span><input className="w-24 text-right border-b font-bold" value={f(costs.maintenance)} onChange={e=>setCosts({...costs, maintenance: p(e.target.value)})}/></div>
+            {costs.monthly_tax > 0 && <div className="flex justify-between items-center"><span className="text-gray-500">🏛️ 월 자동차세</span><span className="font-bold text-lg">{f(costs.monthly_tax)}원</span></div>}
+            {autoInfo && <p className="text-xs text-steel-500 bg-steel-50 px-3 py-1.5 rounded-lg">📊 기준표 자동적용: {autoInfo}</p>}
             <div className="flex justify-between items-center pt-3 border-t border-dashed text-red-500"><span className="font-bold">🩸 총 원가</span><span className="font-black text-2xl">{f(costs.total_cost)}원</span></div>
           </div>
 
