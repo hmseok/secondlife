@@ -53,3 +53,11 @@ images:
 # ★ 이 옵션이 서비스 계정 + 로그 버킷 오류를 해결합니다
 options:
   logging: CLOUD_LOGGING_ONLY
+
+# Cloudflare 시크릿 (Secret Manager에서 가져옴)
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/CLOUDFLARE_ZONE_ID/versions/latest
+      env: 'CLOUDFLARE_ZONE_ID'
+    - versionName: projects/$PROJECT_ID/secrets/CLOUDFLARE_API_TOKEN/versions/latest
+      env: 'CLOUDFLARE_API_TOKEN'
