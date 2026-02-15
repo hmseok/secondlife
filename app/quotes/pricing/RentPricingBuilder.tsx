@@ -337,6 +337,10 @@ export default function RentPricingBuilder() {
   const [savedCarPrices, setSavedCarPrices] = useState<any[]>([])
   const [isSavingPrice, setIsSavingPrice] = useState(false)
 
+  // 저장된 워크시트 목록
+  const [worksheets, setWorksheets] = useState<any[]>([])
+  const [worksheetListOpen, setWorksheetListOpen] = useState(false)
+
   // --- 데이터 로드 ---
   useEffect(() => {
     const fetchData = async () => {
@@ -679,6 +683,10 @@ export default function RentPricingBuilder() {
     }
   }, [lookupMode, effectiveCompanyId, fetchSavedPrices])
 
+  useEffect(() => {
+    if (effectiveCompanyId) fetchWorksheets()
+  }, [effectiveCompanyId, fetchWorksheets])
+
   // 🆕 신차 가격 데이터 DB 저장
   const handleSaveCarPrice = useCallback(async () => {
     if (!newCarResult || !effectiveCompanyId) return
@@ -725,6 +733,82 @@ export default function RentPricingBuilder() {
     await supabase.from('new_car_prices').delete().eq('id', id)
     await fetchSavedPrices()
   }, [fetchSavedPrices])
+
+  // 저장된 워크시트 조회
+  const fetchWorksheets = useCallback(async () => {
+    if (!effectiveCompanyId) return
+    const { data } = await supabase
+      .from('pricing_worksheets')
+      .select('*, cars(number, brand, model, trim, year)')
+      .eq('company_id', effectiveCompanyId)
+      .order('updated_at', { ascending: false })
+      .limit(50)
+    setWorksheets(data || [])
+  }, [effectiveCompanyId])
+
+  // 저장된 워크시트 삭제
+  const handleDeleteWorksheet = async (id: string) => {
+    if (!confirm('이 워크시트를 삭제하시겠습니까?')) return
+    await supabase.from('pricing_worksheets').delete().eq('id', id)
+    fetchWorksheets()
+  }
+
+  // 저장된 워크시트 로드
+  const handleLoadWorksheet = (ws: any) => {
+    // 차량 정보 복원
+    if (ws.car_id && ws.cars) {
+      const car: CarData = {
+        id: ws.car_id,
+        number: ws.cars.number || '',
+        brand: ws.cars.brand || '',
+        model: ws.cars.model || '',
+        trim: ws.cars.trim || '',
+        year: ws.cars.year || new Date().getFullYear(),
+        fuel: '',
+        mileage: 0,
+        purchase_price: ws.purchase_price || 0,
+        factory_price: ws.factory_price || 0,
+        engine_cc: 0,
+        status: 'active',
+      }
+      setSelectedCar(car)
+      setLookupMode('registered')
+    } else if (ws.newcar_info) {
+      const info = ws.newcar_info
+      const tempCar: CarData = {
+        id: `newcar-loaded-${ws.id}`,
+        number: '',
+        brand: info.brand || '',
+        model: info.model || '',
+        trim: info.trim || '',
+        year: info.year || new Date().getFullYear(),
+        fuel: info.fuel || '',
+        mileage: 0,
+        purchase_price: ws.purchase_price || 0,
+        factory_price: ws.factory_price || 0,
+        engine_cc: 0,
+        status: 'new-car-pricing',
+      }
+      setSelectedCar(tempCar)
+      setLookupMode('newcar')
+    }
+    // 모든 값 복원
+    setFactoryPrice(ws.factory_price || 0)
+    setPurchasePrice(ws.purchase_price || 0)
+    setLoanAmount(ws.loan_amount || 0)
+    setLoanRate(ws.loan_interest_rate || 4.5)
+    setInvestmentRate(ws.investment_rate || 6.0)
+    setMonthlyInsuranceCost(ws.monthly_insurance || 0)
+    setMonthlyMaintenance(ws.monthly_maintenance || 50000)
+    setDeductible(ws.deductible || 500000)
+    setDeposit(ws.deposit_amount || 3000000)
+    setPrepayment(ws.prepayment_amount || 0)
+    setTermMonths(ws.term_months || 36)
+    setMargin(ws.target_margin || 150000)
+    setAnnualMileage(ws.annual_mileage || 1.5)
+    setDepMileageRate(ws.dep_mileage_rate || 2)
+    setWorksheetListOpen(false)
+  }
 
   // 🆕 신차 트림 선택 후 분석 시작 (옵션 합산 반영)
   const handleNewCarAnalysis = useCallback(() => {
@@ -968,32 +1052,54 @@ export default function RentPricingBuilder() {
 
     let error: any = null
 
-    if (lookupMode === 'registered') {
-      // 등록차량: car_id로 upsert
-      const { error: e } = await supabase
-        .from('pricing_worksheets')
-        .upsert({ ...baseData, car_id: selectedCar.id }, { onConflict: 'company_id,car_id' })
-      error = e
-    } else {
-      // 신차 분석: car_id 없이 insert + 차량정보 JSONB
-      const { error: e } = await supabase
-        .from('pricing_worksheets')
-        .insert([{
-          ...baseData,
-          car_id: null,
-          newcar_info: {
-            brand: selectedCar.brand,
-            model: selectedCar.model,
-            year: selectedCar.year,
-            fuel: selectedCar.fuel,
-            trim: selectedCar.trim || '',
-          },
-        }])
-      error = e
+    try {
+      if (lookupMode === 'registered') {
+        // 등록차량: car_id로 기존 워크시트 조회 후 insert/update
+        const { data: existing } = await supabase
+          .from('pricing_worksheets')
+          .select('id')
+          .eq('company_id', effectiveCompanyId)
+          .eq('car_id', selectedCar.id)
+          .maybeSingle()
+
+        if (existing) {
+          const { error: e } = await supabase
+            .from('pricing_worksheets')
+            .update({ ...baseData, car_id: selectedCar.id })
+            .eq('id', existing.id)
+          error = e
+        } else {
+          const { error: e } = await supabase
+            .from('pricing_worksheets')
+            .insert([{ ...baseData, car_id: selectedCar.id }])
+          error = e
+        }
+      } else {
+        // 신차 분석: car_id 없이 insert + 차량정보 JSONB
+        const { error: e } = await supabase
+          .from('pricing_worksheets')
+          .insert([{
+            ...baseData,
+            car_id: null,
+            newcar_info: {
+              brand: selectedCar.brand,
+              model: selectedCar.model,
+              year: selectedCar.year,
+              fuel: selectedCar.fuel,
+              trim: selectedCar.trim || '',
+            },
+          }])
+        error = e
+      }
+    } catch (err: any) {
+      error = err
     }
 
-    if (error) alert('저장 실패: ' + error.message)
-    else alert(lookupMode === 'registered' ? '산출 워크시트가 저장되었습니다.' : '신차 분석이 저장되었습니다.')
+    if (error) alert('저장 실패: ' + (error.message || JSON.stringify(error)))
+    else {
+      alert(lookupMode === 'registered' ? '산출 워크시트가 저장되었습니다.' : '신차 분석이 저장되었습니다.')
+      fetchWorksheets()
+    }
     setSaving(false)
   }
 
@@ -1052,6 +1158,66 @@ export default function RentPricingBuilder() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* ===== 저장된 워크시트 목록 ===== */}
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm mb-8 overflow-hidden">
+        <button
+          onClick={() => setWorksheetListOpen(!worksheetListOpen)}
+          className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-lg">📋</span>
+            <span className="font-bold text-gray-800">저장된 워크시트</span>
+            <span className="bg-steel-100 text-steel-700 text-xs font-bold px-2 py-0.5 rounded-full">{worksheets.length}</span>
+          </div>
+          <span className={`text-gray-400 transition-transform ${worksheetListOpen ? 'rotate-180' : ''}`}>▼</span>
+        </button>
+        {worksheetListOpen && (
+          <div className="border-t border-gray-100">
+            {worksheets.length === 0 ? (
+              <p className="text-center text-gray-400 py-8 text-sm">저장된 워크시트가 없습니다</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {worksheets.map((ws: any) => {
+                  const carLabel = ws.cars
+                    ? `${ws.cars.brand} ${ws.cars.model} ${ws.cars.trim || ''}`.trim()
+                    : ws.newcar_info
+                      ? `[신차] ${ws.newcar_info.brand} ${ws.newcar_info.model} ${ws.newcar_info.trim || ''}`.trim()
+                      : '차량 정보 없음'
+                  const dateStr = ws.updated_at
+                    ? new Date(ws.updated_at).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                    : '-'
+                  return (
+                    <div key={ws.id} className="flex items-center justify-between px-6 py-3 hover:bg-gray-50 group">
+                      <button
+                        onClick={() => handleLoadWorksheet(ws)}
+                        className="flex-1 text-left min-w-0"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-800 text-sm truncate">{carLabel}</span>
+                          {ws.status === 'draft' && <span className="text-xs bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">임시</span>}
+                          {ws.status === 'confirmed' && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">확정</span>}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-xs text-gray-400">{dateStr}</span>
+                          <span className="text-xs text-gray-500">추천 렌트가: {(ws.suggested_rent || 0).toLocaleString()}원</span>
+                          <span className="text-xs text-gray-500">{ws.term_months}개월</span>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteWorksheet(ws.id)}
+                        className="ml-3 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm"
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ===== 차량 선택 ===== */}
