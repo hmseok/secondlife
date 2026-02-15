@@ -181,3 +181,29 @@ body {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* ── 인쇄 전용 스타일 ── */
+@media print {
+  /* 사이드바, 헤더, 오버레이 모두 숨김 */
+  aside, .sidebar-overlay, nav,
+  [data-print-hide], .print-hide {
+    display: none !important;
+  }
+  /* 메인 콘텐츠 전체폭 */
+  main, [role="main"], .main-content {
+    margin-left: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    background: white !important;
+  }
+  /* 그림자/둥근모서리 제거 */
+  .print-clean, .print-clean * {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+}

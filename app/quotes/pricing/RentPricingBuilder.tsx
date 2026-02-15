@@ -155,6 +155,148 @@ function mapToInsuranceType(brand: string, fuelType?: string): string {
   return '국산 승용'
 }
 
+// ============================================
+// 🛡️ 렌터카 공제조합 보험료 추정 시스템
+// ============================================
+// 기준: 렌터카공제조합(KRMA) 영업용 공제 요율 기반 추정
+// 실제 요율은 가입 후 TORIS 시스템에서 확인, 아래는 업계 평균 추정치
+
+// 차종 분류 (공제조합 기준 5분류)
+type InsVehicleClass = '경형' | '소형' | '중형' | '대형' | '수입'
+
+function getInsVehicleClass(cc: number, brand: string, purchasePrice: number, fuelType?: string): InsVehicleClass {
+  const isImport = IMPORT_BRANDS.some(ib => (brand || '').toUpperCase().includes(ib.toUpperCase()))
+  if (isImport || purchasePrice >= 60000000) return '수입'
+  if (cc <= 1000 || purchasePrice < 18000000) return '경형'
+  if (cc <= 1600 || purchasePrice < 28000000) return '소형'
+  if (cc <= 2000 || purchasePrice < 45000000) return '중형'
+  return '대형'
+}
+
+// 연간 기본 공제료 (공제조합 영업용 기준 추정, 차량가 5천만원 기준 정규화)
+// 구성: 대인II + 대물(1억) + 자손 + 무보험
+const INS_BASE_ANNUAL: Record<InsVehicleClass, number> = {
+  '경형': 480000,   // 월 4만
+  '소형': 660000,   // 월 5.5만
+  '중형': 840000,   // 월 7만
+  '대형': 1080000,  // 월 9만
+  '수입': 1440000,  // 월 12만
+}
+
+// 자차보험 연간 기본료 (차량가 대비 요율 %)
+// 공제조합 자차 요율 추정: 차량가 × 요율%
+const INS_OWN_DAMAGE_RATE: Record<InsVehicleClass, number> = {
+  '경형': 3.5,   // 차량가 × 3.5%
+  '소형': 3.8,
+  '중형': 4.2,
+  '대형': 4.8,
+  '수입': 6.5,   // 수입차 부품비 반영
+}
+
+// 면책금별 자차보험 할인율
+const DEDUCTIBLE_DISCOUNT: Record<number, number> = {
+  0: 1.0,         // 완전자차 (면책금 없음) → 할인 없음
+  200000: 0.92,   // 20만원 면책
+  300000: 0.88,   // 30만원 면책
+  500000: 0.82,   // 50만원 면책
+  1000000: 0.72,  // 100만원 면책
+  1500000: 0.65,  // 150만원 면책
+  2000000: 0.60,  // 200만원 면책
+}
+
+// 운전자 연령 할증/할인 계수 (렌터카 특수)
+type DriverAgeGroup = '21미만' | '21-25' | '26-29' | '30-39' | '40-59' | '60이상' | '전연령'
+const DRIVER_AGE_FACTORS: Record<DriverAgeGroup, { factor: number; label: string; desc: string }> = {
+  '21미만':  { factor: 1.80, label: '만 21세 미만', desc: '최고위험 (제한적)' },
+  '21-25':   { factor: 1.55, label: '만 21~25세',   desc: '고위험' },
+  '26-29':   { factor: 1.15, label: '만 26~29세',   desc: '경미 할증' },
+  '30-39':   { factor: 1.00, label: '만 30~39세',   desc: '기준 요율' },
+  '40-59':   { factor: 0.92, label: '만 40~59세',   desc: '우량 할인' },
+  '60이상':  { factor: 1.08, label: '만 60세 이상',  desc: '고령 할증' },
+  '전연령':  { factor: 1.35, label: '전 연령 허용',  desc: '연령무관 평균' },
+}
+
+// 차령(차량 나이)별 보험료 조정
+function getCarAgeFactor(carAge: number): number {
+  if (carAge <= 1) return 1.0    // 신차~1년
+  if (carAge <= 3) return 0.95   // 1~3년 (차량가 하락 → 자차 기준 감소)
+  if (carAge <= 5) return 0.90
+  if (carAge <= 7) return 0.85
+  return 0.80                    // 7년 이상
+}
+
+// 면책금에 가장 가까운 할인율 찾기
+function getDeductibleDiscount(deductible: number): number {
+  const thresholds = Object.keys(DEDUCTIBLE_DISCOUNT).map(Number).sort((a, b) => a - b)
+  let closest = 0
+  for (const t of thresholds) {
+    if (deductible >= t) closest = t
+  }
+  return DEDUCTIBLE_DISCOUNT[closest] || 1.0
+}
+
+// 종합 보험료 산출
+function estimateInsurance(params: {
+  cc: number
+  brand: string
+  purchasePrice: number
+  factoryPrice: number
+  fuelType?: string
+  driverAge: DriverAgeGroup
+  deductible: number
+  carAge: number
+}): {
+  vehicleClass: InsVehicleClass
+  basePremium: number        // 기본 공제료 (대인/대물/자손/무보험)
+  ownDamagePremium: number   // 자차보험료
+  ageFactor: number          // 연령 계수
+  carAgeFactor: number       // 차령 계수
+  deductibleDiscount: number // 면책금 할인율
+  totalAnnual: number        // 연간 총 보험료
+  totalMonthly: number       // 월 보험료
+  breakdown: {
+    label: string
+    annual: number
+    monthly: number
+  }[]
+} {
+  const vehicleClass = getInsVehicleClass(params.cc, params.brand, params.purchasePrice, params.fuelType)
+  const ageFactor = DRIVER_AGE_FACTORS[params.driverAge].factor
+  const carAgeFactor = getCarAgeFactor(params.carAge)
+  const deductibleDiscount = getDeductibleDiscount(params.deductible)
+
+  // 기본 공제료 = 기본요율 × 연령계수 × 차령계수
+  const basePremium = Math.round(INS_BASE_ANNUAL[vehicleClass] * ageFactor * carAgeFactor)
+
+  // 자차보험 = 출고가 × 차종별 요율% × 면책금할인 × 연령계수 × 차령계수
+  const ownDamageRate = INS_OWN_DAMAGE_RATE[vehicleClass] / 100
+  const vehicleValue = params.factoryPrice > 0 ? params.factoryPrice : params.purchasePrice
+  const ownDamagePremium = Math.round(
+    vehicleValue * ownDamageRate * deductibleDiscount * ageFactor * carAgeFactor
+  )
+
+  const totalAnnual = basePremium + ownDamagePremium
+  const totalMonthly = Math.round(totalAnnual / 12)
+
+  return {
+    vehicleClass,
+    basePremium,
+    ownDamagePremium,
+    ageFactor,
+    carAgeFactor,
+    deductibleDiscount,
+    totalAnnual,
+    totalMonthly,
+    breakdown: [
+      { label: '대인배상 II', annual: Math.round(basePremium * 0.35), monthly: Math.round(basePremium * 0.35 / 12) },
+      { label: '대물배상 (1억)', annual: Math.round(basePremium * 0.30), monthly: Math.round(basePremium * 0.30 / 12) },
+      { label: '자기신체사고', annual: Math.round(basePremium * 0.20), monthly: Math.round(basePremium * 0.20 / 12) },
+      { label: '무보험차상해', annual: Math.round(basePremium * 0.15), monthly: Math.round(basePremium * 0.15 / 12) },
+      { label: `자차손해 (면책 ${(params.deductible / 10000).toFixed(0)}만)`, annual: ownDamagePremium, monthly: Math.round(ownDamagePremium / 12) },
+    ],
+  }
+}
+
 // 정비 유형 매핑
 function mapToMaintenanceType(brand: string, model: string, fuelType?: string, purchasePrice?: number): { type: string, fuel: string } {
   const isImport = IMPORT_BRANDS.some(ib => (brand || '').toUpperCase().includes(ib.toUpperCase()))
@@ -199,6 +341,74 @@ const MAINT_MULTIPLIER: Record<string, number> = {
   '수입차': 1.8,
   '전기차': 0.6,
   '하이브리드': 1.0,
+}
+
+// ============================================
+// 📉 감가 곡선 프리셋 (비선형 모델)
+// ============================================
+// 연도별 누적 감가율 (%) — index 0 = 0년차(신차), 1 = 1년차, ...
+// 10년 이상은 마지막 값 기반 외삽
+type DepCurvePreset = 'conservative' | 'standard' | 'optimistic' | 'custom'
+
+const DEP_CURVE_PRESETS: Record<Exclude<DepCurvePreset, 'custom'>, {
+  label: string; desc: string; curve: number[]
+}> = {
+  conservative: {
+    label: '보수적',
+    desc: '잔가율표 기준 (세금/보험 산정용, 가장 높은 감가)',
+    //        0yr  1yr   2yr   3yr   4yr   5yr   6yr   7yr   8yr   9yr  10yr
+    curve: [  0,  27.5, 40.0, 47.4, 56.2, 61.3, 65.0, 68.5, 71.6, 74.3, 76.8 ],
+  },
+  standard: {
+    label: '표준',
+    desc: '잔가율표 + 실거래 혼합 (렌터카 실무 기준)',
+    curve: [  0,  20.0, 32.0, 40.0, 48.0, 54.0, 59.0, 63.0, 66.5, 69.5, 72.0 ],
+  },
+  optimistic: {
+    label: '낙관적',
+    desc: '인기차종/SUV 실거래 기준 (감가 최소)',
+    curve: [  0,  14.0, 23.0, 30.0, 37.0, 43.0, 48.5, 53.0, 57.0, 60.5, 63.5 ],
+  },
+}
+
+// 차종 클래스별 감가 보정 계수 (1.0 = 표준 기준)
+const DEP_CLASS_MULTIPLIER: Record<string, { label: string; mult: number }> = {
+  '국산 경차':        { label: '국산 경차', mult: 1.05 },
+  '국산 소형 세단':    { label: '국산 소형 세단', mult: 0.95 },
+  '국산 준중형 세단':   { label: '국산 준중형 세단', mult: 0.90 },
+  '국산 중형 세단':    { label: '국산 중형 세단', mult: 1.0 },
+  '국산 대형 세단':    { label: '국산 대형 세단', mult: 1.10 },
+  '국산 소형 SUV':    { label: '국산 소형 SUV', mult: 0.85 },
+  '국산 중형 SUV':    { label: '국산 중형 SUV', mult: 0.85 },
+  '국산 대형 SUV':    { label: '국산 대형 SUV', mult: 0.90 },
+  '국산 MPV/미니밴':   { label: '국산 MPV/미니밴', mult: 0.95 },
+  '수입 중형 세단':    { label: '수입 중형 세단', mult: 1.15 },
+  '수입 대형 세단':    { label: '수입 대형 세단', mult: 1.25 },
+  '수입 중형 SUV':    { label: '수입 중형 SUV', mult: 1.0 },
+  '수입 프리미엄':     { label: '수입 프리미엄', mult: 1.20 },
+  '전기차 국산':      { label: '전기차 국산', mult: 1.15 },
+  '전기차 수입':      { label: '전기차 수입', mult: 1.25 },
+  '하이브리드':       { label: '하이브리드', mult: 0.85 },
+}
+
+// 감가 곡선에서 특정 연차의 누적 감가율 보간 (소수 연차 지원)
+function getDepRateFromCurve(curve: number[], age: number, classMultiplier: number = 1.0): number {
+  if (age <= 0) return 0
+  const maxIdx = curve.length - 1
+  if (age >= maxIdx) {
+    // 10년 이상: 마지막 구간 기울기로 외삽
+    const lastSlope = curve[maxIdx] - curve[maxIdx - 1]
+    const extraYears = age - maxIdx
+    const raw = curve[maxIdx] + lastSlope * extraYears
+    return Math.min(raw * classMultiplier, 90)
+  }
+  // 선형 보간
+  const lower = Math.floor(age)
+  const upper = Math.ceil(age)
+  if (lower === upper) return Math.min(curve[lower] * classMultiplier, 90)
+  const frac = age - lower
+  const raw = curve[lower] + (curve[upper] - curve[lower]) * frac
+  return Math.min(raw * classMultiplier, 90)
 }
 
 // 정비 포함 항목 정의
@@ -306,10 +516,13 @@ export default function RentPricingBuilder() {
   // 감가 설정
   const [carAgeMode, setCarAgeMode] = useState<'new' | 'used'>('new')  // 신차 / 연식차량 구분
   const [customCarAge, setCustomCarAge] = useState(0)         // 수동 설정 차령 (연식차량 시)
-  const [depYear1Rate, setDepYear1Rate] = useState(15)      // 1년차 감가 %
-  const [depYear2Rate, setDepYear2Rate] = useState(8)        // 2년차~ 감가 %
-  const [depMileageRate, setDepMileageRate] = useState(2)     // 만km당 감가 %
-  const [annualMileage, setAnnualMileage] = useState(1.5)    // 연간 주행거리 (만km)
+  const [depCurvePreset, setDepCurvePreset] = useState<DepCurvePreset>('standard')  // 감가 곡선 프리셋
+  const [depCustomCurve, setDepCustomCurve] = useState<number[]>([0, 20, 32, 40, 48, 54, 59, 63, 66.5, 69.5, 72])  // 사용자 정의 곡선
+  const [depClassOverride, setDepClassOverride] = useState<string>('')  // 차종 클래스 수동 오버라이드 (빈값 = 자동)
+  const [depYear1Rate, setDepYear1Rate] = useState(15)      // 1년차 감가 % (레거시, custom 모드에서만)
+  const [depYear2Rate, setDepYear2Rate] = useState(8)        // 2년차~ 감가 % (레거시, custom 모드에서만)
+  const [annualMileage, setAnnualMileage] = useState(1.5)    // 계약 연간 주행거리 (만km)
+  const [excessMileageRate, setExcessMileageRate] = useState(0) // 초과주행 km당 요금 (원)
 
   // 금융비용
   const [loanAmount, setLoanAmount] = useState(0)            // 대출 원금
@@ -321,6 +534,9 @@ export default function RentPricingBuilder() {
   const [oilChangeFreq, setOilChangeFreq] = useState<1 | 2>(1)
   const [monthlyMaintenance, setMonthlyMaintenance] = useState(40000)
   const [monthlyInsuranceCost, setMonthlyInsuranceCost] = useState(0)
+  const [driverAgeGroup, setDriverAgeGroup] = useState<DriverAgeGroup>('전연령')
+  const [insEstimate, setInsEstimate] = useState<ReturnType<typeof estimateInsurance> | null>(null)
+  const [insAutoMode, setInsAutoMode] = useState(true) // true=추정자동, false=직접입력
   const [annualTax, setAnnualTax] = useState(0)              // 연간 자동차세
   const [engineCC, setEngineCC] = useState(0)                // 배기량
 
@@ -335,6 +551,9 @@ export default function RentPricingBuilder() {
   const [prepaymentDiscountRate, setPrepaymentDiscountRate] = useState(0.5)
 
   // 계약 조건
+  const [contractType, setContractType] = useState<'return' | 'buyout'>('return')  // 반납형 / 인수형
+  const [residualRate, setResidualRate] = useState(80)  // 잔존가치 설정율 (종료시점 시세 대비 %)
+  const [buyoutPremium, setBuyoutPremium] = useState(0) // 인수형 추가 마진 (원/월)
   const [termMonths, setTermMonths] = useState(36)
   const [margin, setMargin] = useState(150000)
 
@@ -363,6 +582,8 @@ export default function RentPricingBuilder() {
   const [deliveryFee, setDeliveryFee] = useState(350000)
   const [miscFee, setMiscFee] = useState(167000)
   const [totalAcquisitionCost, setTotalAcquisitionCost] = useState(0)
+  // 🆕 차량등록 지역 (공채매입 계산용)
+  const [registrationRegion, setRegistrationRegion] = useState('서울')
 
   // 🆕 자동 매핑 결과 표시
   const [autoCategory, setAutoCategory] = useState('')
@@ -417,7 +638,7 @@ export default function RentPricingBuilder() {
           if (ruleMap.DEP_YEAR_1) setDepYear1Rate(toPercent(ruleMap.DEP_YEAR_1))
           else if (ruleMap.DEP_YEAR) setDepYear1Rate(toPercent(ruleMap.DEP_YEAR))
           if (ruleMap.DEP_YEAR_2PLUS) setDepYear2Rate(toPercent(ruleMap.DEP_YEAR_2PLUS))
-          if (ruleMap.DEP_MILEAGE_10K) setDepMileageRate(toPercent(ruleMap.DEP_MILEAGE_10K))
+          // DEP_MILEAGE_10K 제거됨 — 주행감가는 초과주행 km당 요금으로 대체
           if (ruleMap.LOAN_INTEREST_RATE) setLoanRate(ruleMap.LOAN_INTEREST_RATE)
           if (ruleMap.INVESTMENT_RETURN_RATE) setInvestmentRate(ruleMap.INVESTMENT_RETURN_RATE)
           if (ruleMap.MONTHLY_MAINTENANCE_BASE) setMonthlyMaintenance(ruleMap.MONTHLY_MAINTENANCE_BASE)
@@ -549,18 +770,99 @@ export default function RentPricingBuilder() {
       if (rateRecord) setLoanRate(Number(rateRecord.annual_rate))
     }
 
-    // 취득원가 계산 (registration_cost_table)
-    const acqTaxRecord = regCosts.find(r => r.cost_type === '취득세' && (r.vehicle_category === (fuelCat === '전기' ? '전기차' : '승용')))
-    const bondRecord = regCosts.find(r => r.cost_type === '공채매입' && r.region === '서울')
-    const bondDiscountRecord = regCosts.find(r => r.cost_type === '공채할인')
+    // ============================================
+    // 취득원가 계산
+    // ============================================
+    // ★ 렌터카(자동차대여업) = 영업용 → 취득세 4% (비영업용 승용 7%와 다름)
+    const acqTaxRecord = regCosts.find(r => r.cost_type === '취득세' && (r.vehicle_category === (fuelCat === '전기' ? '전기차' : '영업용')))
+      || regCosts.find(r => r.cost_type === '취득세' && r.vehicle_category === '영업용')
     const deliveryRecord = regCosts.find(r => r.cost_type === '탁송료')
 
-    const acqTaxAmt = acqTaxRecord ? Math.round(carInfo.purchase_price * acqTaxRecord.rate / 100) : Math.round(carInfo.purchase_price * 0.07)
+    // 영업용 취득세: 4% (지방세법 제12조제1항제2호)
+    const acqTaxAmt = acqTaxRecord ? Math.round(carInfo.purchase_price * acqTaxRecord.rate / 100) : Math.round(carInfo.purchase_price * 0.04)
     setAcquisitionTax(acqTaxAmt)
 
-    const bondGross = bondRecord ? Math.round(carInfo.purchase_price * bondRecord.rate / 100) : 0
-    const bondDiscount = bondDiscountRecord ? bondGross * bondDiscountRecord.rate / 100 : 0
-    const bondNet = Math.round(bondGross - bondDiscount)
+    // ============================================
+    // 공채매입: 지역별 + 영업용 기준
+    // ============================================
+    // 채권 종류: 서울/부산/대구 = 도시철도채권, 그 외 = 지역개발채권
+    // 핵심: 지역개발채권 지역에서는 영업용 등록 시 공채매입 면제!
+    //       도시철도채권 지역(서울/부산/대구)에서는 영업용에도 매입 의무
+    //
+    // [서울 도시철도채권 - 영업용 승용차 매입비율]
+    //   배기량 2,000cc 이상: 8%
+    //   배기량 1,600cc~2,000cc 미만: 5%
+    //   배기량 1,000cc~1,600cc 미만: 면제 (2025.12.31까지)
+    //   배기량 1,000cc 미만: 면제
+    //   ※ 비영업용: 2000cc↑ 20%, 1600~2000cc 12%
+    //
+    // [부산 도시철도채권 - 영업용 승용차 매입비율]
+    //   배기량 2,000cc 이상: 4%
+    //   배기량 1,600cc~2,000cc 미만: 2%
+    //   배기량 1,600cc 미만: 면제
+    //
+    // [대구 도시철도채권 - 영업용 승용차 매입비율]
+    //   배기량 2,000cc 이상: 4%
+    //   배기량 1,600cc~2,000cc 미만: 2%
+    //   배기량 1,600cc 미만: 면제
+    //
+    // [그 외 지역 - 지역개발채권] → 영업용 전차종 면제
+    //
+    // 공채할인: 매입 즉시 할인 매도 가능 (할인율 약 4~8%, 시장 금리에 따라 변동)
+
+    const bondCC = carInfo.engine_cc || engineCC || cc || 0
+
+    const BOND_RATES_BUSINESS: Record<string, { getRate: (cc: number) => number; bondType: string; maturityYears: number }> = {
+      '서울': {
+        bondType: '도시철도채권',
+        maturityYears: 7,
+        getRate: (cc: number) => {
+          if (cc >= 2000) return 8
+          if (cc >= 1600) return 5
+          return 0 // 1600cc 미만 면제
+        },
+      },
+      '부산': {
+        bondType: '도시철도채권',
+        maturityYears: 5,
+        getRate: (cc: number) => {
+          if (cc >= 2000) return 4
+          if (cc >= 1600) return 2
+          return 0
+        },
+      },
+      '대구': {
+        bondType: '도시철도채권',
+        maturityYears: 5,
+        getRate: (cc: number) => {
+          if (cc >= 2000) return 4
+          if (cc >= 1600) return 2
+          return 0
+        },
+      },
+      // 지역개발채권 지역 → 영업용 면제
+      '인천': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '광주': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '대전': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '울산': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '세종': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '경기': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '강원': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '충북': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '충남': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '전북': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '전남': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '경북': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '경남': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+      '제주': { bondType: '지역개발채권', maturityYears: 5, getRate: () => 0 },
+    }
+
+    const regionData = BOND_RATES_BUSINESS[registrationRegion] || BOND_RATES_BUSINESS['서울']
+    const bondRate = regionData.getRate(bondCC)
+    const bondGross = Math.round(carInfo.purchase_price * bondRate / 100)
+    // 공채할인율: 시장 금리에 따라 변동, 약 4~8% 수준. 기본 6% 적용
+    const bondDiscountRate = 0.06
+    const bondNet = bondRate > 0 ? Math.round(bondGross * (1 - bondDiscountRate)) : 0
     setBondCost(bondNet)
 
     const dlvFee = deliveryRecord?.fixed_amount || 350000
@@ -572,7 +874,7 @@ export default function RentPricingBuilder() {
 
     const totalAcq = carInfo.purchase_price + acqTaxAmt + bondNet + dlvFee + miscTotal
     setTotalAcquisitionCost(totalAcq)
-  }, [depreciationDB, insuranceRates, maintenanceCosts, taxRates, financeRates, regCosts, termMonths, maintPackage, oilChangeFreq])
+  }, [depreciationDB, insuranceRates, maintenanceCosts, taxRates, financeRates, regCosts, termMonths, maintPackage, oilChangeFreq, registrationRegion, engineCC])
 
   // ============================================
   // 등록 차량 선택 시 연관 데이터 로드
@@ -976,6 +1278,8 @@ export default function RentPricingBuilder() {
     setLoanRate(ws.loan_interest_rate || 4.5)
     setInvestmentRate(ws.investment_rate || 6.0)
     setMonthlyInsuranceCost(ws.monthly_insurance || 0)
+    if (ws.driver_age_group) setDriverAgeGroup(ws.driver_age_group as DriverAgeGroup)
+    if (ws.ins_auto_mode !== undefined) setInsAutoMode(ws.ins_auto_mode)
     setMonthlyMaintenance(ws.monthly_maintenance || 40000)
     if (ws.maint_package) setMaintPackage(ws.maint_package as MaintenancePackage)
     if (ws.oil_change_freq) setOilChangeFreq(ws.oil_change_freq as 1 | 2)
@@ -985,7 +1289,13 @@ export default function RentPricingBuilder() {
     setTermMonths(ws.term_months || 36)
     setMargin(ws.target_margin || 150000)
     setAnnualMileage(ws.annual_mileage || 1.5)
-    setDepMileageRate(ws.dep_mileage_rate || 2)
+    if (ws.excess_mileage_rate) setExcessMileageRate(ws.excess_mileage_rate)
+    if (ws.dep_curve_preset) setDepCurvePreset(ws.dep_curve_preset as DepCurvePreset)
+    if (ws.dep_custom_curve) setDepCustomCurve(ws.dep_custom_curve)
+    if (ws.dep_class_override !== undefined) setDepClassOverride(ws.dep_class_override || '')
+    if (ws.contract_type) setContractType(ws.contract_type as 'return' | 'buyout')
+    if (ws.residual_rate !== undefined) setResidualRate(ws.residual_rate)
+    if (ws.buyout_premium !== undefined) setBuyoutPremium(ws.buyout_premium)
   }
 
   // 🆕 신차 트림 선택 후 분석 시작 (옵션 합산 반영)
@@ -1047,6 +1357,51 @@ export default function RentPricingBuilder() {
   }, [newCarResult, newCarSelectedVariant, newCarSelectedTrim, newCarSelectedOptions, newCarPurchasePrice, applyReferenceTableMappings])
 
   // ============================================
+  // 초과주행 km당 요금 자동 산출 (출고가 기반)
+  // ============================================
+  // 대형 렌터카사 기준:
+  //   경차/소형 (~2500만): 100~120원/km
+  //   중형 (2500~4000만): 130~150원/km
+  //   준대형 (4000~6000만): 180~220원/km
+  //   대형/수입 (6000~8000만): 220~280원/km
+  //   프리미엄 (8000만~1.2억): 280~350원/km
+  //   슈퍼카/초고가 (1.2억+): 400~500원/km
+  useEffect(() => {
+    if (factoryPrice <= 0) return
+    let rate = 150 // 기본값
+    if (factoryPrice < 25000000) rate = 110
+    else if (factoryPrice < 40000000) rate = 150
+    else if (factoryPrice < 60000000) rate = 200
+    else if (factoryPrice < 80000000) rate = 250
+    else if (factoryPrice < 120000000) rate = 320
+    else rate = 450
+    setExcessMileageRate(rate)
+  }, [factoryPrice])
+
+  // 보험료 자동 추정 (공제조합 기준)
+  useEffect(() => {
+    if (!selectedCar || !insAutoMode) return
+    const cc = selectedCar.engine_cc || engineCC || 0
+    const carAge = (() => {
+      if (carAgeMode === 'manual') return customCarAge
+      const year = selectedCar.year || new Date().getFullYear()
+      return new Date().getFullYear() - year
+    })()
+    const est = estimateInsurance({
+      cc,
+      brand: selectedCar.brand || '',
+      purchasePrice: purchasePrice,
+      factoryPrice: factoryPrice,
+      fuelType: selectedCar.fuel_type,
+      driverAge: driverAgeGroup,
+      deductible: deductible,
+      carAge: carAge,
+    })
+    setInsEstimate(est)
+    setMonthlyInsuranceCost(est.totalMonthly)
+  }, [selectedCar, factoryPrice, purchasePrice, engineCC, driverAgeGroup, deductible, carAgeMode, customCarAge, insAutoMode])
+
+  // ============================================
   // 자동 계산 로직
   // ============================================
   const calculations = useMemo(() => {
@@ -1061,46 +1416,49 @@ export default function RentPricingBuilder() {
         : Math.max(0, thisYear - (selectedCar.year || thisYear))
     const mileage10k = (selectedCar.mileage || 0) / 10000
 
-    // 1. 시세하락 / 감가 (계약기간 반영)
-    // ── 현재 시점 연식 감가율 (신차는 0%)
-    const yearDepNow = carAge === 0
-      ? 0
-      : carAge <= 1
-        ? depYear1Rate
-        : depYear1Rate + (depYear2Rate * (carAge - 1))
+    // 1. 시세하락 / 감가 (비선형 곡선 모델)
+    // ── 감가 곡선 결정
+    const activeCurve = depCurvePreset === 'custom'
+      ? depCustomCurve
+      : DEP_CURVE_PRESETS[depCurvePreset].curve
 
-    // ── 주행감가: 연식감가가 높을수록 주행의 영향 감소
-    // 실효 주행감가율 = 기본율 × (1 - 연식감가율/100)
-    // 예: 연식감가 0% → 만km당 2.0%, 연식감가 50% → 만km당 1.0%
-    const effectiveMileageRateNow = depMileageRate * (1 - yearDepNow / 100)
-    const mileageDepNow = mileage10k * effectiveMileageRateNow
-    const totalDepRateNow = Math.min(yearDepNow + mileageDepNow, 85)
+    // ── 차종 클래스 보정 계수
+    const autoDepClass = selectedCar
+      ? mapToDepCategory(selectedCar.brand, selectedCar.model, selectedCar.fuel, factoryPrice)
+      : ''
+    const depClass = depClassOverride || autoDepClass
+    const classMult = DEP_CLASS_MULTIPLIER[depClass]?.mult ?? 1.0
+
+    // ── 현재 시점 연식 감가율 (비선형 곡선 기반)
+    // 잔가율표 곡선에는 이미 "평균 주행거리"가 반영되어 있음
+    const yearDepNow = getDepRateFromCurve(activeCurve, carAge, classMult)
+
+    // ── 잔가율표 곡선에 평균 주행거리가 이미 포함 → 주행감가 별도 적용 안함
+    // 초과 주행 리스크는 초과주행 km당 요금(excessMileageRate)으로 별도 청구
+    const totalDepRateNow = Math.max(0, Math.min(yearDepNow, 90))
     const currentMarketValue = carAge === 0
-      ? factoryPrice  // 신차는 출고가 = 현재 시세
+      ? factoryPrice
       : Math.round(factoryPrice * (1 - totalDepRateNow / 100))
 
     // ── 계약 종료 시점 감가율
     const termYears = termMonths / 12
     const endAge = carAge + termYears
-    const yearDepEnd = endAge <= 1
-      ? depYear1Rate
-      : depYear1Rate + (depYear2Rate * (endAge - 1))
-
-    // 종료 시점 실효 주행감가율 (연식감가 증가 → 주행 영향 감소)
-    const effectiveMileageRateEnd = depMileageRate * (1 - yearDepEnd / 100)
-    const projectedMileage10k = mileage10k + (termYears * annualMileage)
-    const mileageDepEnd = projectedMileage10k * effectiveMileageRateEnd
-    const totalDepRateEnd = Math.min(yearDepEnd + mileageDepEnd, 85)
+    const yearDepEnd = getDepRateFromCurve(activeCurve, endAge, classMult)
+    const totalDepRateEnd = Math.max(0, Math.min(yearDepEnd, 90))
     const endMarketValue = Math.round(factoryPrice * (1 - totalDepRateEnd / 100))
+
+    // 예상 종료 시점 주행거리 (정보용)
+    const projectedMileage10k = mileage10k + (termYears * annualMileage)
 
     // UI 표시용
     const yearDep = yearDepNow
-    const mileageDep = mileageDepNow
-    const totalDepRate = totalDepRateNow // UI 표시용 (현재)
+    const totalDepRate = totalDepRateNow
 
     // 취득원가 기준 월 감가비
     const costBase = totalAcquisitionCost > 0 ? totalAcquisitionCost : purchasePrice
-    const residualValue = Math.round(endMarketValue * 0.8) // 종료시점 시세 × 80%
+    const residualValue = Math.round(endMarketValue * (residualRate / 100))
+    // 인수형: 인수가격 = 잔존가치 (고객이 계약 종료 시 이 금액에 인수)
+    const buyoutPrice = residualValue
     const monthlyDepreciation = Math.round(Math.max(0, costBase - residualValue) / termMonths)
 
     // 2. 금융비용
@@ -1158,13 +1516,16 @@ export default function RentPricingBuilder() {
     return {
       carAge, mileage10k, termYears,
       // 감가 — 현재
-      yearDep, mileageDep, totalDepRate,
-      effectiveMileageRateNow, effectiveMileageRateEnd,
+      yearDep, totalDepRate,
       currentMarketValue,
       // 감가 — 계약 종료 시점
-      yearDepEnd, mileageDepEnd, totalDepRateEnd,
+      yearDepEnd, totalDepRateEnd,
       endMarketValue, projectedMileage10k,
       monthlyDepreciation,
+      // 잔존가치 & 인수
+      residualValue, buyoutPrice, costBase,
+      // 감가 곡선 참조
+      depClass, classMult,
       // 금융
       equityAmount, monthlyLoanInterest, monthlyOpportunityCost, totalMonthlyFinance,
       // 운영
@@ -1181,7 +1542,8 @@ export default function RentPricingBuilder() {
       costBreakdown,
     }
   }, [
-    selectedCar, factoryPrice, purchasePrice, carAgeMode, customCarAge, depYear1Rate, depYear2Rate, depMileageRate, annualMileage,
+    selectedCar, factoryPrice, purchasePrice, carAgeMode, customCarAge, depCurvePreset, depCustomCurve, depClassOverride, depYear1Rate, depYear2Rate, annualMileage,
+    contractType, residualRate,
     loanAmount, loanRate, investmentRate,
     monthlyInsuranceCost, monthlyMaintenance, annualTax,
     riskRate, deposit, prepayment, depositDiscountRate, prepaymentDiscountRate,
@@ -1231,11 +1593,19 @@ export default function RentPricingBuilder() {
       investment_rate: investmentRate,
       monthly_opportunity_cost: calculations.monthlyOpportunityCost,
       monthly_insurance: monthlyInsuranceCost,
+      driver_age_group: driverAgeGroup,
+      ins_auto_mode: insAutoMode,
       monthly_maintenance: monthlyMaintenance,
       maint_package: maintPackage,
       oil_change_freq: oilChangeFreq,
       car_age_mode: carAgeMode,
       custom_car_age: customCarAge,
+      dep_curve_preset: depCurvePreset,
+      dep_custom_curve: depCustomCurve,
+      dep_class_override: depClassOverride,
+      contract_type: contractType,
+      residual_rate: residualRate,
+      buyout_premium: buyoutPremium,
       monthly_tax: calculations.monthlyTax,
       deductible: deductible,
       monthly_risk_reserve: calculations.monthlyRiskReserve,
@@ -1252,7 +1622,7 @@ export default function RentPricingBuilder() {
         : 'average',
       term_months: termMonths,
       annual_mileage: annualMileage,
-      dep_mileage_rate: depMileageRate,
+      excess_mileage_rate: excessMileageRate,
       status: 'draft',
       updated_at: new Date().toISOString(),
     }
@@ -1314,14 +1684,98 @@ export default function RentPricingBuilder() {
 
   // 견적서로 전환
   const handleCreateQuote = () => {
-    if (!calculations) return
-    const params = new URLSearchParams({
-      car_id: selectedCar!.id,
-      rent_fee: String(calculations.suggestedRent),
-      deposit: String(deposit),
-      term: String(termMonths),
-    })
-    router.push(`/quotes/new?${params.toString()}`)
+    if (!calculations || !selectedCar) return
+
+    // 견적서 작성에 필요한 전체 데이터를 sessionStorage로 전달
+    const quoteData = {
+      // 차량 정보
+      car: {
+        id: selectedCar.id,
+        brand: selectedCar.brand,
+        model: selectedCar.model,
+        trim: selectedCar.trim || '',
+        year: selectedCar.year,
+        fuel: selectedCar.fuel || '',
+        mileage: selectedCar.mileage || 0,
+        number: selectedCar.number || '',
+        status: selectedCar.status,
+        engine_cc: selectedCar.engine_cc || engineCC,
+      },
+      // 가격 정보
+      factoryPrice,
+      purchasePrice,
+      totalAcquisitionCost,
+      // 계약 조건
+      contractType,
+      termMonths,
+      deposit,
+      prepayment,
+      annualMileage,
+      // 감가 정보
+      depCurvePreset,
+      carAgeMode,
+      customCarAge: calculations.carAge,
+      residualRate,
+      // 산출 결과
+      calculations: {
+        monthlyDepreciation: calculations.monthlyDepreciation,
+        totalMonthlyFinance: calculations.totalMonthlyFinance,
+        monthlyLoanInterest: calculations.monthlyLoanInterest,
+        monthlyOpportunityCost: calculations.monthlyOpportunityCost,
+        monthlyTax: calculations.monthlyTax,
+        monthlyRiskReserve: calculations.monthlyRiskReserve,
+        totalDiscount: calculations.totalDiscount,
+        totalMonthlyCost: calculations.totalMonthlyCost,
+        suggestedRent: calculations.suggestedRent,
+        rentWithVAT: calculations.rentWithVAT,
+        currentMarketValue: calculations.currentMarketValue,
+        endMarketValue: calculations.endMarketValue,
+        residualValue: calculations.residualValue,
+        buyoutPrice: calculations.buyoutPrice,
+        costBase: calculations.costBase,
+        yearDep: calculations.yearDep,
+        yearDepEnd: calculations.yearDepEnd,
+        totalDepRate: calculations.totalDepRate,
+        totalDepRateEnd: calculations.totalDepRateEnd,
+        depClass: calculations.depClass,
+        classMult: calculations.classMult,
+        purchaseDiscount: calculations.purchaseDiscount,
+        marketAvg: calculations.marketAvg,
+        marketDiff: calculations.marketDiff,
+      },
+      // 보험/정비/세금
+      monthlyInsuranceCost,
+      driverAgeGroup,
+      insEstimate: insEstimate ? {
+        vehicleClass: insEstimate.vehicleClass,
+        basePremium: insEstimate.basePremium,
+        ownDamagePremium: insEstimate.ownDamagePremium,
+        totalAnnual: insEstimate.totalAnnual,
+      } : null,
+      monthlyMaintenance,
+      maintPackage,
+      annualTax,
+      // 금융
+      loanAmount,
+      loanRate,
+      investmentRate,
+      // 리스크/마진
+      deductible,
+      riskRate,
+      margin,
+      // 초과주행
+      excessMileageRate,
+      // 등록 지역
+      registrationRegion,
+      bondCost,
+      acquisitionTax,
+      // 메타
+      companyId: effectiveCompanyId,
+      createdAt: new Date().toISOString(),
+    }
+
+    sessionStorage.setItem('quoteBuilderData', JSON.stringify(quoteData))
+    router.push('/quotes/create')
   }
 
   // ============================================
@@ -2223,11 +2677,60 @@ export default function RentPricingBuilder() {
 
             {/* 🆕 1.5 취득원가 분석 */}
             <Section icon="📋" title="취득원가 분석 (차량가 + 등록비)">
+              {/* 등록 지역 선택 */}
+              <div className="mb-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold text-gray-600">차량 등록 지역</p>
+                  <span className="text-[10px] text-gray-400">
+                    {['서울', '부산', '대구'].includes(registrationRegion)
+                      ? `${registrationRegion}: 도시철도채권 · 영업용 매입 의무`
+                      : `${registrationRegion}: 지역개발채권 · 영업용 매입 면제`}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {['서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
+                    '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'].map(region => (
+                    <button
+                      key={region}
+                      onClick={() => setRegistrationRegion(region)}
+                      className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-colors
+                        ${registrationRegion === region
+                          ? ['서울', '부산', '대구'].includes(region)
+                            ? 'bg-red-500 text-white'
+                            : 'bg-green-500 text-white'
+                          : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                        }`}
+                    >
+                      {region}
+                    </button>
+                  ))}
+                </div>
+                {bondCost === 0 && (
+                  <p className="text-xs text-green-600 font-bold mt-2">
+                    {['서울', '부산', '대구'].includes(registrationRegion)
+                      ? `배기량 ${engineCC || 0}cc → 면제 대상`
+                      : `${registrationRegion} 지역 영업용(렌터카) → 공채매입 면제`}
+                  </p>
+                )}
+                {bondCost > 0 && (
+                  <p className="text-xs text-red-500 font-bold mt-2">
+                    {registrationRegion} 도시철도채권: 영업용 {engineCC >= 2000 ? (registrationRegion === '서울' ? '8%' : '4%') : (registrationRegion === '서울' ? '5%' : '2%')} × 할인매도 후 실부담 {f(bondCost)}원
+                  </p>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1">
                   <ResultRow label="차량 매입가" value={purchasePrice} />
-                  <InputRow label="취득세 (7%)" value={acquisitionTax} onChange={setAcquisitionTax} />
-                  <InputRow label="공채 실부담" value={bondCost} onChange={setBondCost} sub="서울12% × (1-할인6%)" />
+                  <InputRow label="취득세 (영업용 4%)" value={acquisitionTax} onChange={setAcquisitionTax} sub="렌터카 대여업 영업용 기준" />
+                  <InputRow
+                    label={bondCost > 0 ? `공채 실부담 (${registrationRegion})` : `공채 (${registrationRegion})`}
+                    value={bondCost}
+                    onChange={setBondCost}
+                    sub={bondCost > 0
+                      ? `${registrationRegion} 도시철도채권 영업용 · 할인매도 후`
+                      : `영업용 매입 면제`}
+                  />
                   <InputRow label="탁송료" value={deliveryFee} onChange={setDeliveryFee} />
                   <InputRow label="기타 (번호판/인지/대행/검사)" value={miscFee} onChange={setMiscFee} />
                 </div>
@@ -2307,13 +2810,130 @@ export default function RentPricingBuilder() {
                 )}
               </div>
 
+              {/* 감가 곡선 프리셋 선택 */}
+              <div className="mb-5 p-4 bg-amber-50/50 rounded-xl border border-amber-200/50">
+                <p className="text-xs font-bold text-gray-500 mb-2.5">📉 감가 곡선 기준</p>
+                <div className="flex gap-2 flex-wrap mb-3">
+                  {(Object.entries(DEP_CURVE_PRESETS) as [Exclude<DepCurvePreset, 'custom'>, typeof DEP_CURVE_PRESETS[keyof typeof DEP_CURVE_PRESETS]][]).map(([key, preset]) => (
+                    <button key={key}
+                      onClick={() => setDepCurvePreset(key)}
+                      className={`py-2 px-3.5 text-xs rounded-lg border font-bold transition-colors
+                        ${depCurvePreset === key
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-amber-300'
+                        }`}
+                    >
+                      {preset.label}
+                      <span className="text-[10px] font-normal ml-1 opacity-75">{preset.desc.split('(')[0]}</span>
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setDepCurvePreset('custom')
+                      // custom으로 전환 시 현재 활성 곡선을 복사
+                      if (depCurvePreset !== 'custom') {
+                        setDepCustomCurve([...DEP_CURVE_PRESETS[depCurvePreset].curve])
+                      }
+                    }}
+                    className={`py-2 px-3.5 text-xs rounded-lg border font-bold transition-colors
+                      ${depCurvePreset === 'custom'
+                        ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                        : 'border-gray-200 bg-white text-gray-500 hover:border-amber-300'
+                      }`}
+                  >
+                    직접입력
+                  </button>
+                </div>
+
+                {/* 곡선 미리보기 (연도별 감가율 표) */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="text-gray-400">
+                        <th className="text-left py-1 pr-2">연차</th>
+                        {Array.from({ length: 8 }, (_, i) => (
+                          <th key={i} className="text-center py-1 px-1">{i}년</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-gray-600">
+                        <td className="py-1 pr-2 text-gray-400 font-bold whitespace-nowrap">
+                          누적 감가{calculations && calculations.classMult !== 1.0 ? ` (×${calculations.classMult.toFixed(2)})` : ''}
+                        </td>
+                        {Array.from({ length: 8 }, (_, i) => {
+                          const activeCurve = depCurvePreset === 'custom'
+                            ? depCustomCurve
+                            : DEP_CURVE_PRESETS[depCurvePreset].curve
+                          const rate = getDepRateFromCurve(activeCurve, i, calculations?.classMult ?? 1.0)
+                          return (
+                            <td key={i} className={`text-center py-1 px-1 font-bold
+                              ${i === 0 ? 'text-gray-300' : rate > 50 ? 'text-red-500' : 'text-amber-600'}`}>
+                              {depCurvePreset === 'custom' && i > 0 ? (
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  min="0"
+                                  max="95"
+                                  value={depCustomCurve[i] ?? ''}
+                                  onChange={(e) => {
+                                    const newCurve = [...depCustomCurve]
+                                    newCurve[i] = parseFloat(e.target.value) || 0
+                                    setDepCustomCurve(newCurve)
+                                  }}
+                                  className="w-12 text-center border border-amber-200 rounded px-0.5 py-0.5 text-[11px] font-bold focus:border-amber-500 outline-none"
+                                />
+                              ) : (
+                                `${rate.toFixed(1)}%`
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                      <tr className="text-gray-400 border-t border-gray-100">
+                        <td className="py-1 pr-2 font-bold whitespace-nowrap">잔가율</td>
+                        {Array.from({ length: 8 }, (_, i) => {
+                          const activeCurve = depCurvePreset === 'custom'
+                            ? depCustomCurve
+                            : DEP_CURVE_PRESETS[depCurvePreset].curve
+                          const rate = getDepRateFromCurve(activeCurve, i, calculations?.classMult ?? 1.0)
+                          return (
+                            <td key={i} className="text-center py-1 px-1">
+                              {(100 - rate).toFixed(1)}%
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 차종 클래스 보정 */}
+                {calculations && (
+                  <div className="mt-3 pt-3 border-t border-amber-200/50">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[11px] text-gray-400 font-bold">차종 클래스:</span>
+                      <select
+                        value={depClassOverride}
+                        onChange={(e) => setDepClassOverride(e.target.value)}
+                        className="text-[11px] border border-gray-200 rounded-lg px-2 py-1 bg-white focus:border-amber-500 outline-none"
+                      >
+                        <option value="">자동감지 ({calculations.depClass})</option>
+                        {Object.entries(DEP_CLASS_MULTIPLIER).map(([key, { label, mult }]) => (
+                          <option key={key} value={key}>{label} (×{mult.toFixed(2)})</option>
+                        ))}
+                      </select>
+                      <span className="text-[10px] text-gray-400">
+                        보정계수 ×{calculations.classMult.toFixed(2)}
+                        {calculations.classMult > 1 ? ' (감가 빠름)' : calculations.classMult < 1 ? ' (감가 느림)' : ' (기준)'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1">
-                  <InputRow label="1년차 감가율" value={depYear1Rate} onChange={setDepYear1Rate} suffix="%" type="percent" />
-                  <InputRow label="2년차~ 연간 감가율" value={depYear2Rate} onChange={setDepYear2Rate} suffix="%" type="percent" />
-                  <InputRow label="주행거리 감가율 (기본)" value={depMileageRate} onChange={setDepMileageRate} suffix="%/만km" type="percent" />
-                  <p className="text-[10px] text-gray-400 pl-1 -mt-0.5">* 연식감가가 높을수록 실효 주행감가율 자동 감소</p>
-
                   {/* 연간 주행거리 설정 */}
                   <div className="border-t mt-3 pt-3">
                     <p className="text-xs font-bold text-gray-500 mb-2">연간 예상 주행거리</p>
@@ -2349,6 +2969,43 @@ export default function RentPricingBuilder() {
                     </div>
                   </div>
 
+                  {/* 초과주행 km당 요금 */}
+                  <div className="border-t mt-3 pt-3">
+                    <p className="text-xs font-bold text-gray-500 mb-2">초과주행 km당 요금</p>
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {[
+                        { val: 110, label: '110원', desc: '경/소형' },
+                        { val: 150, label: '150원', desc: '중형' },
+                        { val: 200, label: '200원', desc: '준대형' },
+                        { val: 250, label: '250원', desc: '대형' },
+                        { val: 320, label: '320원', desc: '수입/프리미엄' },
+                        { val: 450, label: '450원', desc: '초고가' },
+                      ].map(opt => (
+                        <button key={opt.val}
+                          onClick={() => setExcessMileageRate(opt.val)}
+                          className={`py-1 px-2.5 text-xs rounded-lg border font-bold transition-colors
+                            ${excessMileageRate === opt.val
+                              ? 'bg-red-500 text-white border-red-500'
+                              : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="10"
+                        min="0"
+                        className="w-24 text-right border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-bold focus:border-steel-500 focus:ring-1 focus:ring-steel-500 outline-none"
+                        value={excessMileageRate}
+                        onChange={(e) => setExcessMileageRate(parseInt(e.target.value) || 0)}
+                      />
+                      <span className="text-xs text-gray-400">원/km</span>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1">약정거리 초과 시 계약 종료 시점 정산. 차량가 기준 자동 산출됨</p>
+                  </div>
+
                   <div className="border-t mt-3 pt-3 space-y-1">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">차량 구분</span>
@@ -2382,13 +3039,6 @@ export default function RentPricingBuilder() {
                       <span className="text-sm text-gray-500">연식 감가</span>
                       <span className="font-bold text-red-500">{calculations.yearDep.toFixed(1)}%</span>
                     </div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-sm text-gray-500">
-                        주행 감가
-                        <span className="text-[10px] text-gray-400 ml-1">({calculations.effectiveMileageRateNow.toFixed(2)}%/만km)</span>
-                      </span>
-                      <span className="font-bold text-red-500">{calculations.mileageDep.toFixed(1)}%</span>
-                    </div>
                     <div className="flex justify-between pt-2 border-t">
                       <span className="text-sm font-bold text-gray-700">총 감가율</span>
                       <span className="font-black text-red-600">{calculations.totalDepRate.toFixed(1)}%</span>
@@ -2405,13 +3055,6 @@ export default function RentPricingBuilder() {
                     <div className="flex justify-between mb-1">
                       <span className="text-sm text-blue-500">연식 감가</span>
                       <span className="font-bold text-blue-600">{calculations.yearDepEnd.toFixed(1)}%</span>
-                    </div>
-                    <div className="flex justify-between mb-1">
-                      <span className="text-sm text-blue-500">
-                        주행 감가
-                        <span className="text-[10px] text-blue-400 ml-1">({calculations.effectiveMileageRateEnd.toFixed(2)}%/만km)</span>
-                      </span>
-                      <span className="font-bold text-blue-600">{calculations.mileageDepEnd.toFixed(1)}%</span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-blue-200">
                       <span className="text-sm font-bold text-blue-700">총 감가율</span>
@@ -2472,14 +3115,57 @@ export default function RentPricingBuilder() {
             </Section>
 
             {/* 4. 보험료 & 세금 */}
-            <Section icon="🛡️" title="보험료 & 세금">
+            <Section icon="🛡️" title="보험료 & 세금 (공제조합)">
+              {/* 보험료 모드 전환 */}
+              <div className="flex items-center gap-3 mb-4">
+                <button
+                  onClick={() => { setInsAutoMode(true) }}
+                  className={`py-1.5 px-4 text-xs rounded-lg border font-bold transition-colors
+                    ${insAutoMode ? 'bg-steel-600 text-white border-steel-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                >
+                  🤖 공제조합 추정
+                </button>
+                <button
+                  onClick={() => { setInsAutoMode(false) }}
+                  className={`py-1.5 px-4 text-xs rounded-lg border font-bold transition-colors
+                    ${!insAutoMode ? 'bg-steel-600 text-white border-steel-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                >
+                  ✏️ 직접 입력
+                </button>
+                {linkedInsurance && (
+                  <span className="text-xs text-green-600 font-bold">✅ 보험계약 연동중</span>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <InputRow label="월 보험료" value={monthlyInsuranceCost} onChange={setMonthlyInsuranceCost}
-                    sub={linkedInsurance ? `✅ 보험계약 연동 (연 ${f(linkedInsurance.total_premium || 0)}원)` : autoInsType ? `📊 기준표 (${autoInsType}) 자동적용 · 연 ${f(monthlyInsuranceCost * 12)}원` : '직접 입력'} />
+                <div className="space-y-3">
+                  {/* 운전자 연령 선택 */}
+                  <div>
+                    <p className="text-xs font-bold text-gray-500 mb-2">운전자 연령 기준</p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {(Object.entries(DRIVER_AGE_FACTORS) as [DriverAgeGroup, typeof DRIVER_AGE_FACTORS[DriverAgeGroup]][]).map(([key, info]) => (
+                        <button key={key}
+                          onClick={() => setDriverAgeGroup(key)}
+                          className={`py-1.5 px-2.5 text-[11px] rounded-lg border font-bold transition-colors
+                            ${driverAgeGroup === key
+                              ? info.factor > 1.2 ? 'bg-red-500 text-white border-red-500'
+                                : info.factor > 1.0 ? 'bg-orange-500 text-white border-orange-500'
+                                : info.factor < 1.0 ? 'bg-green-500 text-white border-green-500'
+                                : 'bg-steel-600 text-white border-steel-600'
+                              : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          <span>{info.label}</span>
+                          <span className="block text-[9px] opacity-80">
+                            {info.factor > 1.0 ? `+${((info.factor - 1) * 100).toFixed(0)}%` : info.factor < 1.0 ? `${((info.factor - 1) * 100).toFixed(0)}%` : '기준'}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 배기량 */}
                   <InputRow label="배기량" value={engineCC} onChange={(v) => {
                     setEngineCC(v)
-                    // 🆕 영업용 자동차세 재계산
                     const fuelCat = selectedCar?.fuel_type?.includes('전기') ? '전기' : '내연기관'
                     const tr = taxRates.find(r => r.tax_type === '영업용' && r.fuel_category === fuelCat && v >= r.cc_min && v <= r.cc_max)
                     let tax = 0
@@ -2492,13 +3178,74 @@ export default function RentPricingBuilder() {
                     }
                     setAnnualTax(tax)
                   }} suffix="cc" />
+
+                  {/* 직접입력 모드 */}
+                  {!insAutoMode && (
+                    <InputRow label="월 보험료 (직접입력)" value={monthlyInsuranceCost} onChange={setMonthlyInsuranceCost}
+                      sub={`연 ${f(monthlyInsuranceCost * 12)}원`} />
+                  )}
+
+                  {/* 자동차세 */}
                   <InputRow label="연간 자동차세" value={annualTax} onChange={setAnnualTax} />
                 </div>
-                <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                  <ResultRow label="월 보험료" value={monthlyInsuranceCost} />
-                  <ResultRow label="월 자동차세" value={calculations.monthlyTax} />
-                  <div className="border-t pt-3">
-                    <div className="flex justify-between items-center">
+
+                {/* 오른쪽: 보험료 산출 결과 */}
+                <div className="space-y-3">
+                  {insAutoMode && insEstimate ? (
+                    <>
+                      {/* 차종/요율 정보 */}
+                      <div className="bg-blue-50 rounded-xl p-3">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-xs font-bold text-blue-600">
+                            공제조합 추정 · {insEstimate.vehicleClass}
+                          </span>
+                          <span className="text-[10px] text-blue-400">
+                            연령 ×{insEstimate.ageFactor.toFixed(2)} · 차령 ×{insEstimate.carAgeFactor.toFixed(2)}
+                          </span>
+                        </div>
+                        {/* 담보별 내역 */}
+                        <div className="space-y-1">
+                          {insEstimate.breakdown.map((item, i) => (
+                            <div key={i} className="flex justify-between text-xs">
+                              <span className="text-gray-500">{item.label}</span>
+                              <span className="font-bold text-gray-700">{f(item.monthly)}원/월</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 합계 */}
+                      <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">기본공제 (대인/대물/자손/무보험)</span>
+                          <span className="font-bold">{f(Math.round(insEstimate.basePremium / 12))}원/월</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">자차손해 (면책 {f(deductible)}원, {((1 - insEstimate.deductibleDiscount) * 100).toFixed(0)}%↓)</span>
+                          <span className="font-bold">{f(Math.round(insEstimate.ownDamagePremium / 12))}원/월</span>
+                        </div>
+                        <div className="border-t pt-2 flex justify-between items-center">
+                          <span className="font-bold text-gray-700">월 공제료 합계</span>
+                          <span className="font-black text-lg text-steel-600">{f(insEstimate.totalMonthly)}원</span>
+                        </div>
+                        <p className="text-[10px] text-gray-400">연간 {f(insEstimate.totalAnnual)}원 · 공제조합 영업용 추정치 (실제 요율과 차이 가능)</p>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                      <ResultRow label="월 보험료" value={monthlyInsuranceCost} />
+                      <p className="text-[10px] text-gray-400">
+                        {linkedInsurance ? `보험계약 연동 (연 ${f(linkedInsurance.total_premium || 0)}원)` :
+                         autoInsType ? `기준표 (${autoInsType}) · 연 ${f(monthlyInsuranceCost * 12)}원` :
+                         '직접 입력'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 세금 합계 */}
+                  <div className="bg-purple-50 rounded-xl p-3">
+                    <ResultRow label="월 자동차세" value={calculations.monthlyTax} />
+                    <div className="border-t pt-2 mt-2 flex justify-between items-center">
                       <span className="font-bold text-gray-700 text-sm">월 보험+세금 합계</span>
                       <span className="font-black text-lg text-gray-800">
                         {f(monthlyInsuranceCost + calculations.monthlyTax)}원
@@ -2821,6 +3568,116 @@ export default function RentPricingBuilder() {
                     </button>
                   ))}
                 </div>
+                {/* 계약 유형 선택 */}
+                <div className="mb-4">
+                  <p className="text-xs font-bold text-gray-500 mb-2">계약 유형</p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setContractType('return')}
+                      className={`flex-1 py-2.5 px-3 rounded-lg border text-xs font-bold transition-colors
+                        ${contractType === 'return'
+                          ? 'bg-steel-600 text-white border-steel-600 shadow-sm'
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-steel-300'}`}
+                    >
+                      🔄 반납형
+                      <span className="block text-[10px] font-normal mt-0.5 opacity-75">계약 종료 시 차량 반납</span>
+                    </button>
+                    <button
+                      onClick={() => setContractType('buyout')}
+                      className={`flex-1 py-2.5 px-3 rounded-lg border text-xs font-bold transition-colors
+                        ${contractType === 'buyout'
+                          ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-amber-300'}`}
+                    >
+                      🏷️ 인수형
+                      <span className="block text-[10px] font-normal mt-0.5 opacity-75">계약 종료 시 고객 인수</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* 잔존가치 / 인수가격 설정 */}
+                <div className={`mb-4 p-3 rounded-xl border ${contractType === 'buyout' ? 'bg-amber-50/50 border-amber-200/50' : 'bg-gray-50 border-gray-100'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold text-gray-500">
+                      {contractType === 'buyout' ? '🏷️ 인수가격 설정' : '잔존가치 설정'}
+                    </p>
+                    <div className="flex gap-1.5">
+                      {(contractType === 'buyout'
+                        ? [90, 100, 110, 120, 130]
+                        : [70, 75, 80, 85, 90]
+                      ).map(r => (
+                        <button key={r}
+                          onClick={() => setResidualRate(r)}
+                          className={`px-2 py-1 text-[10px] rounded border font-bold
+                            ${residualRate === r
+                              ? contractType === 'buyout' ? 'bg-amber-500 text-white border-amber-500' : 'bg-steel-600 text-white border-steel-600'
+                              : 'border-gray-200 text-gray-400 hover:bg-gray-100'}`}
+                        >
+                          {r}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-gray-400">종료시점 추정시세 대비</span>
+                    <input
+                      type="number"
+                      min="50" max={contractType === 'buyout' ? 150 : 100} step="1"
+                      value={residualRate}
+                      onChange={(e) => setResidualRate(Math.max(50, Math.min(contractType === 'buyout' ? 150 : 100, parseInt(e.target.value) || 80)))}
+                      className="w-14 text-center border border-gray-200 rounded px-1 py-0.5 text-xs font-bold focus:border-steel-500 outline-none"
+                    />
+                    <span className="text-[11px] text-gray-400">%</span>
+                  </div>
+
+                  {/* 인수형: 높은 잔존 → 렌탈료 절감 효과 설명 */}
+                  {contractType === 'buyout' && residualRate > 100 && (
+                    <div className="mt-2 p-2 bg-amber-100/50 rounded-lg">
+                      <p className="text-[11px] text-amber-700">
+                        💡 인수가격을 시세보다 <b>{residualRate - 100}%</b> 높게 설정 → 월 렌탈료가 낮아져 가격 경쟁력 확보.
+                        고객은 낮은 월납입 대신 계약 종료 시 인수가격으로 차량을 구매합니다.
+                      </p>
+                    </div>
+                  )}
+
+                  {calculations && (
+                    <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-gray-400">종료시점 추정시세</span>
+                        <span className="font-bold text-gray-600">{f(calculations.endMarketValue)}원</span>
+                      </div>
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-gray-400">
+                          {contractType === 'buyout' ? '인수가격' : '잔존가치'} (시세 × {residualRate}%)
+                        </span>
+                        <span className={`font-bold ${contractType === 'buyout' ? 'text-amber-600' : 'text-steel-600'}`}>
+                          {f(calculations.residualValue)}원
+                        </span>
+                      </div>
+                      {contractType === 'buyout' && residualRate > 100 && (
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-amber-500">인수 프리미엄 (시세 초과분)</span>
+                          <span className="font-bold text-amber-500">+{f(calculations.buyoutPrice - calculations.endMarketValue)}원</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-gray-400">감가 대상금액 (취득원가 - 잔존)</span>
+                        <span className="font-bold text-red-500">{f(Math.max(0, calculations.costBase - calculations.residualValue))}원</span>
+                      </div>
+                      {contractType === 'buyout' && calculations.costBase > 0 && (
+                        <div className="mt-1 pt-1 border-t border-gray-100">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-gray-400">월 감가비 절감 효과</span>
+                            <span className="font-bold text-green-600">
+                              잔존 80% 대비 월 -{f(Math.round((Math.max(0, calculations.costBase - calculations.endMarketValue * 0.8) - Math.max(0, calculations.costBase - calculations.residualValue)) / termMonths))}원
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <InputRow label="목표 마진" value={margin} onChange={setMargin} />
                 <div className="mt-2 flex gap-2">
                   {[100000, 150000, 200000, 300000].map(m => (
@@ -2842,6 +3699,17 @@ export default function RentPricingBuilder() {
                 <div className="text-center border-b border-gray-700 pb-4 mb-4">
                   <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">PRICING ANALYSIS</p>
                   <h2 className="text-2xl font-black mt-1">렌트가 산출 결과</h2>
+                  <div className="flex justify-center gap-3 mt-2">
+                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-bold
+                      ${contractType === 'return'
+                        ? 'bg-steel-600/30 text-steel-300'
+                        : 'bg-amber-500/30 text-amber-300'
+                      }`}>
+                      {contractType === 'return' ? '🔄 반납형' : '🏷️ 인수형'}
+                    </span>
+                    <span className="text-[11px] text-gray-500">{termMonths}개월</span>
+                    <span className="text-[11px] text-gray-500">잔존 {residualRate}%</span>
+                  </div>
                 </div>
 
                 <div className="space-y-3 text-sm">
@@ -2910,6 +3778,40 @@ export default function RentPricingBuilder() {
                       {f(calculations.rentWithVAT)}<span className="text-lg ml-1">원</span>
                     </p>
                   </div>
+
+                  {/* 인수형: 인수가격 표시 */}
+                  {contractType === 'buyout' && (
+                    <div className="mt-4 pt-4 border-t border-amber-500/30">
+                      <div className="flex justify-between items-end">
+                        <div>
+                          <p className="text-[11px] text-amber-400/70">계약 종료 시</p>
+                          <p className="text-sm text-amber-300 font-bold">인수가격 (잔존가치)</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-black text-amber-400">
+                            {f(calculations.buyoutPrice)}<span className="text-sm ml-1">원</span>
+                          </p>
+                          <p className="text-[10px] text-gray-500">
+                            출고가 대비 {factoryPrice > 0 ? (calculations.buyoutPrice / factoryPrice * 100).toFixed(1) : 0}%
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2 text-[10px] text-gray-500 text-right">
+                        총 납입액 {f(calculations.rentWithVAT * termMonths + deposit)} + 인수 {f(calculations.buyoutPrice)}
+                        = <b className="text-gray-300">{f(calculations.rentWithVAT * termMonths + deposit + calculations.buyoutPrice)}원</b>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 반납형: 잔존가치 참고 */}
+                  {contractType === 'return' && (
+                    <div className="mt-4 pt-3 border-t border-gray-700">
+                      <div className="flex justify-between text-[11px] text-gray-500">
+                        <span>반납 시 잔존가치 (회수 예상)</span>
+                        <span className="font-bold text-gray-400">{f(calculations.residualValue)}원</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* 원가 비중 차트 */}
@@ -2966,6 +3868,60 @@ export default function RentPricingBuilder() {
                         {purchasePrice > 0 ? ((margin * 12) / purchasePrice * 100).toFixed(1) : 0}%
                       </span>
                     </div>
+                  </div>
+
+                  {/* 계약 유형별 추가 수익성 분석 */}
+                  <div className="border-t pt-3 mt-3">
+                    <p className="text-[11px] text-gray-400 font-bold mb-2">
+                      {contractType === 'return' ? '🔄 반납형 수익성' : '🏷️ 인수형 수익성'}
+                    </p>
+                    {contractType === 'return' ? (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">반납 차량 회수가</span>
+                          <span className="font-bold text-steel-600">{f(calculations.residualValue)}원</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">렌트료 수입 합계</span>
+                          <span className="font-bold text-gray-700">{f(calculations.rentWithVAT * termMonths)}원</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">총 회수 (렌트+잔존)</span>
+                          <span className="font-black text-green-600">{f(calculations.rentWithVAT * termMonths + calculations.residualValue)}원</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>취득원가 대비</span>
+                          <span className="font-bold">
+                            {calculations.costBase > 0
+                              ? (((calculations.rentWithVAT * termMonths + calculations.residualValue) / calculations.costBase) * 100).toFixed(1)
+                              : 0}%
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-sm">
+                          <span className="text-amber-600">인수가격 (고객)</span>
+                          <span className="font-bold text-amber-600">{f(calculations.buyoutPrice)}원</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">고객 총 지불액</span>
+                          <span className="font-bold text-gray-700">
+                            {f(calculations.rentWithVAT * termMonths + deposit + calculations.buyoutPrice)}원
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>렌트료 수입 합계</span>
+                          <span className="font-bold">{f(calculations.rentWithVAT * termMonths)}원</span>
+                        </div>
+                        <div className="flex justify-between text-xs text-gray-400">
+                          <span>인수 수익 (잔존 - 예상시세)</span>
+                          <span className={`font-bold ${calculations.buyoutPrice >= calculations.endMarketValue ? 'text-green-500' : 'text-red-500'}`}>
+                            {calculations.buyoutPrice >= calculations.endMarketValue ? '+' : ''}{f(calculations.buyoutPrice - calculations.endMarketValue)}원
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

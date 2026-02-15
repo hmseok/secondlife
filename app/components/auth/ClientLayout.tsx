@@ -457,8 +457,8 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       </aside>
 
       {/* 메인 콘텐츠 — 앱 셸: 내부 스크롤 */}
-      <main className="flex-1 transition-all duration-300 ml-0 lg:ml-60 overflow-hidden w-full min-w-0 h-[100dvh]">
-        <div className="h-full pt-12 lg:pt-0 overflow-y-auto overflow-x-hidden overscroll-none max-w-full">
+      <main className="flex-1 transition-all duration-300 ml-0 lg:ml-60 overflow-hidden w-full min-w-0 h-[100dvh] print:!ml-0 print:!h-auto print:!overflow-visible">
+        <div className="h-full pt-12 lg:pt-0 overflow-y-auto overflow-x-hidden overscroll-none max-w-full print:!pt-0 print:!h-auto print:!overflow-visible">
           {children}
         </div>
       </main>
