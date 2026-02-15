@@ -132,6 +132,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
           {renderMenuItem('산출 기준 관리', '/db/pricing-standards', <Icons.Calculator />)}
           {renderMenuItem('차량 시세/감가 DB', '/db/models', <Icons.Chart />)}
           {renderMenuItem('정비/부품 DB', '/db/maintenance', <Icons.Wrench />)}
+          {renderMenuItem('벤치마크 비교', '/db/lotte', <Icons.Briefcase />)}
         </div>
 
         {/* 4️⃣ 그룹: 경영 지원 (내부 자금 + 설정) */}
@@ -140,7 +141,6 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
           {renderMenuItem('매출 회계 정산', '/finance/settlement', <Icons.Chart />)}
           {renderMenuItem('자금 장부 (입출금)', '/finance', <Icons.Calculator />)}
           {renderMenuItem('리포트 / 통계', '/report', <Icons.Chart />)}
-          {renderMenuItem('환경 설정 / 코드', '/db/codes', <Icons.Cog />)}
         </div>
 
       </nav>
