@@ -170,8 +170,8 @@ export default function RegistrationTab() {
             <div key={item.type} className={`rounded-lg p-3 border ${COST_TYPE_COLORS[item.type] || 'bg-gray-50 border-gray-200'}`}>
               <p className="text-xs font-bold text-gray-800 mb-0.5">{item.type}</p>
               <p className="text-[10px] text-gray-500 mb-1.5">{item.legalBasis}</p>
-              <p className="text-[11px] text-gray-600 mb-1">{item.desc}</p>
-              <p className="text-[11px] font-semibold text-gray-700">{item.rate}</p>
+              <p className="text-xs text-gray-600 mb-1">{item.desc}</p>
+              <p className="text-xs font-semibold text-gray-700">{item.rate}</p>
               <p className="text-[10px] text-gray-400 mt-1">{item.example}</p>
             </div>
           ))}
@@ -316,7 +316,7 @@ export default function RegistrationTab() {
                   <h4 className="text-[10px] font-semibold text-blue-300">Gemini 검증 결과</h4>
                   <span className="text-[9px] text-slate-500">{searchResults.searched_at}</span>
                 </div>
-                <div className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{searchResults.results}</div>
+                <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">{searchResults.results}</div>
                 {searchResults.sources?.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-slate-700">
                     <p className="text-[10px] text-slate-400 mb-1">출처:</p>

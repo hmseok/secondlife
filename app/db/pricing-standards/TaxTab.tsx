@@ -234,7 +234,7 @@ export default function TaxTab() {
               <p className="text-[10px] text-gray-500 mb-3">{std.legalBasis}</p>
               <div className="space-y-1.5">
                 {std.rows.map((r, i) => (
-                  <div key={i} className="flex justify-between items-center text-[11px]">
+                  <div key={i} className="flex justify-between items-center text-xs">
                     <span className="text-gray-600">{r.cc}</span>
                     <span className="font-semibold text-gray-800">{r.rate}</span>
                   </div>
@@ -404,7 +404,7 @@ export default function TaxTab() {
             {/* 계산 결과 */}
             <div className="bg-slate-800 rounded-lg p-4 border border-slate-700 mb-4">
               <p className="text-[10px] font-semibold text-blue-300 mb-3">계산 결과</p>
-              <div className="space-y-2 text-[11px]">
+              <div className="space-y-2 text-xs">
                 {simFuel === '내연기관' && (
                   <div className="flex justify-between">
                     <span className="text-slate-400">적용 세율</span>
@@ -446,7 +446,7 @@ export default function TaxTab() {
             {simFuel === '내연기관' && (
               <div className="bg-slate-800 rounded-lg p-3 mb-4 border border-slate-700">
                 <p className="text-[10px] font-semibold text-amber-300 mb-2">영업용 vs 비영업용 비교 ({formatCurrency(simCc)}cc)</p>
-                <div className="text-[11px] space-y-1">
+                <div className="text-xs space-y-1">
                   <div className="flex justify-between">
                     <span className="text-blue-400">영업용 (렌터카)</span>
                     <span className="text-white font-semibold">{formatCurrency(simCc * (simCc <= 1600 ? 18 : simCc <= 2500 ? 19 : 24))}원</span>
@@ -474,7 +474,7 @@ export default function TaxTab() {
             {showResults && searchResults.length > 0 && (
               <div className="mt-4 space-y-2">
                 {searchResults.map((result, idx) => (
-                  <div key={idx} className={`rounded-lg p-3 border text-[11px] ${result.status === 'compliant' ? 'bg-emerald-900/30 border-emerald-600' : 'bg-red-900/30 border-red-600'}`}>
+                  <div key={idx} className={`rounded-lg p-3 border text-xs ${result.status === 'compliant' ? 'bg-emerald-900/30 border-emerald-600' : 'bg-red-900/30 border-red-600'}`}>
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-white font-semibold">{result.tax_type} · {result.fuel_category}</span>
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${result.status === 'compliant' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`}>

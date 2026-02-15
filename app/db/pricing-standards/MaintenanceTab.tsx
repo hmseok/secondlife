@@ -329,7 +329,7 @@ export default function MaintenanceTab() {
               return matched ? (
                 <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700">
                   <p className="text-[10px] font-semibold text-emerald-400 mb-1.5">현재 기준표 매칭</p>
-                  <div className="text-[11px] space-y-1">
+                  <div className="text-xs space-y-1">
                     <div className="flex justify-between"><span className="text-slate-400">차종</span><span className="text-white">{matched.vehicle_type}</span></div>
                     <div className="flex justify-between"><span className="text-slate-400">연식 범위</span><span className="text-white">{matched.age_min}~{matched.age_max}년</span></div>
                     <div className="flex justify-between"><span className="text-slate-400">월 정비비</span><span className="font-bold text-blue-400">{formatCurrency(matched.monthly_cost)}원</span></div>
@@ -337,7 +337,7 @@ export default function MaintenanceTab() {
                   </div>
                 </div>
               ) : (
-                <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-amber-600/50 text-[11px] text-amber-400">
+                <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-amber-600/50 text-xs text-amber-400">
                   해당 조건에 맞는 기준표가 없습니다. 행을 추가해주세요.
                 </div>
               )
@@ -354,7 +354,7 @@ export default function MaintenanceTab() {
                   <h4 className="text-[10px] font-semibold text-blue-300">Gemini 검증 결과</h4>
                   <span className="text-[9px] text-slate-500">{searchResults.searched_at}</span>
                 </div>
-                <div className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
                   {searchResults.results}
                 </div>
                 {searchResults.sources?.length > 0 && (

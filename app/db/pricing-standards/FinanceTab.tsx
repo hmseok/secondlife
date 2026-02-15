@@ -146,7 +146,7 @@ export default function FinanceTab() {
                   <span className="text-xs font-bold text-gray-800">{info.type}</span>
                   <span className="text-xs font-semibold text-blue-600">{info.rateRange}</span>
                 </div>
-                <p className="text-[11px] text-gray-600 mb-1">{info.desc}</p>
+                <p className="text-xs text-gray-600 mb-1">{info.desc}</p>
                 <div className="flex justify-between text-[10px] text-gray-500">
                   <span>기간: {info.term}</span>
                   <span>{info.note}</span>
@@ -272,7 +272,7 @@ export default function FinanceTab() {
             {/* 금리별 월이자 비교 */}
             <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700">
               <p className="text-[10px] font-semibold text-blue-300 mb-2">금리별 월이자 비교 (3천만원 기준)</p>
-              <div className="space-y-1.5 text-[11px]">
+              <div className="space-y-1.5 text-xs">
                 {[4, 5, 6, 7, 8, 9].map(rate => (
                   <div key={rate} className="flex justify-between items-center">
                     <span className="text-slate-400">{rate}.0%</span>
@@ -291,7 +291,7 @@ export default function FinanceTab() {
                   <h4 className="text-[10px] font-semibold text-blue-300">Gemini 검증 결과</h4>
                   <span className="text-[9px] text-slate-500">{searchResults.searched_at}</span>
                 </div>
-                <div className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
                   {searchResults.results}
                 </div>
                 {searchResults.sources?.length > 0 && (

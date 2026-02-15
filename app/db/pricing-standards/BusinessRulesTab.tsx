@@ -149,7 +149,7 @@ export default function BusinessRulesTab() {
                     <span>{category.icon}</span>
                     <h3 className="text-sm font-bold text-gray-900">{category.name}</h3>
                   </div>
-                  <p className="text-[11px] text-gray-500 mb-4 leading-relaxed">{category.explanation}</p>
+                  <p className="text-xs text-gray-500 mb-4 leading-relaxed">{category.explanation}</p>
 
                   <div className="space-y-3">
                     {categoryRules.map((rule) => {
@@ -163,9 +163,9 @@ export default function BusinessRulesTab() {
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="text-xs font-bold text-gray-800">{detail?.label || rule.key}</span>
-                                <span className="text-[9px] px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded font-mono">{rule.key}</span>
+                                <span className="text-[10px] px-1.5 py-0.5 bg-gray-200 text-gray-500 rounded font-mono">{rule.key}</span>
                               </div>
-                              <p className="text-[11px] text-gray-500">{rule.description}</p>
+                              <p className="text-xs text-gray-500">{rule.description}</p>
                             </div>
                             <div className="text-[10px] text-gray-400 text-right flex-shrink-0 ml-3">
                               {formatDate(rule.updated_at)}
@@ -191,18 +191,18 @@ export default function BusinessRulesTab() {
                                   const v = parseFloat(e.target.value)
                                   if (!isNaN(v) && v !== rule.value) handleSave(rule.id, v)
                                 }}
-                                className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isSaved ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} />
+                                className={`flex-1 px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isSaved ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} />
                             ) : valueType === 'boolean' ? (
                               <select defaultValue={rule.value ? 'true' : 'false'}
                                 onChange={(e) => handleSave(rule.id, e.target.value === 'true')}
-                                className={`flex-1 px-3 py-2 text-sm border rounded-lg ${isSaved ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
+                                className={`flex-1 px-3 py-2 text-xs border rounded-lg ${isSaved ? 'border-green-500 bg-green-50' : 'border-gray-300'}`}>
                                 <option value="true">활성화</option>
                                 <option value="false">비활성화</option>
                               </select>
                             ) : (
                               <input type="text" defaultValue={rule.value}
                                 onBlur={(e) => { if (e.target.value !== rule.value) handleSave(rule.id, e.target.value) }}
-                                className={`flex-1 px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isSaved ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} />
+                                className={`flex-1 px-3 py-2 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${isSaved ? 'border-green-500 bg-green-50' : 'border-gray-300'}`} />
                             )}
                             {isSaved && <span className="text-green-600 text-xs font-semibold">💾 저장됨</span>}
                           </div>
@@ -240,7 +240,7 @@ export default function BusinessRulesTab() {
 
               <div className="p-3 bg-slate-800 rounded-lg border border-slate-700">
                 <div className="text-[10px] font-semibold text-blue-300 mb-2">주요 설정값 요약</div>
-                <div className="space-y-1 text-[11px] text-slate-300">
+                <div className="space-y-1 text-xs text-slate-300">
                   {getRuleByKey('DEFAULT_MARGIN_RATE') && <div className="flex justify-between"><span>마진율</span><span className="font-semibold text-white">{getRuleByKey('DEFAULT_MARGIN_RATE')!.value}%</span></div>}
                   {getRuleByKey('VAT_RATE') && <div className="flex justify-between"><span>부가세율</span><span className="font-semibold text-white">{getRuleByKey('VAT_RATE')!.value}%</span></div>}
                   {getRuleByKey('DEFAULT_TERM_MONTHS') && <div className="flex justify-between"><span>기본 기간</span><span className="font-semibold text-white">{getRuleByKey('DEFAULT_TERM_MONTHS')!.value}개월</span></div>}

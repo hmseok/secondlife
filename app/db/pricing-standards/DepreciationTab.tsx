@@ -318,7 +318,7 @@ export default function DepreciationTab() {
             {comparison && (
               <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700">
                 <p className="text-[10px] font-semibold text-slate-300 mb-2">📊 현재값 vs 업계 평균</p>
-                <div className="space-y-1.5 text-[11px]">
+                <div className="space-y-1.5 text-xs">
                   {[
                     { label: '1년차', diff: comparison.diffs.yr1 },
                     { label: '3년차', diff: comparison.diffs.yr3 },
@@ -348,7 +348,7 @@ export default function DepreciationTab() {
                     <h4 className="text-[10px] font-semibold text-blue-300">Gemini 검증 결과</h4>
                     <span className="text-[9px] text-slate-500">{searchResults.searched_at}</span>
                   </div>
-                  <div className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                  <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
                     {searchResults.results}
                   </div>
                 </div>
@@ -370,7 +370,7 @@ export default function DepreciationTab() {
             )}
 
             {!searchResults && !searching && (
-              <div className="text-center text-slate-500 text-[11px] py-3">
+              <div className="text-center text-slate-500 text-xs py-3">
                 차종을 선택하고 검증을 시작하세요.<br/>
                 <span className="text-slate-600 text-[10px]">중고차 시세·매각 데이터를 실시간으로 조회합니다</span>
               </div>

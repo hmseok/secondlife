@@ -377,7 +377,7 @@ export default function InsuranceTab() {
             {matchedPremium && (
               <div className="bg-slate-800 rounded-lg p-3 mb-3 border border-slate-700">
                 <p className="text-[10px] font-semibold text-emerald-400 mb-1.5">현재 기준표 매칭</p>
-                <div className="text-[11px] text-slate-300 space-y-1">
+                <div className="text-xs text-slate-300 space-y-1">
                   <div className="flex justify-between">
                     <span>차종</span>
                     <span className="font-semibold text-white">{matchedPremium.vehicle_type}</span>
@@ -406,7 +406,7 @@ export default function InsuranceTab() {
                     <h4 className="text-[10px] font-semibold text-blue-300">Gemini 검증 결과</h4>
                     <span className="text-[9px] text-slate-500">{searchResults.searched_at}</span>
                   </div>
-                  <div className="text-[11px] text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
+                  <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
                     {searchResults.results}
                   </div>
                 </div>
@@ -427,7 +427,7 @@ export default function InsuranceTab() {
             )}
 
             {!searchResults && !searching && !matchedPremium && (
-              <div className="text-center text-slate-500 text-[11px] py-3">
+              <div className="text-center text-slate-500 text-xs py-3">
                 차종과 차량가를 입력하고 검증을 시작하세요
               </div>
             )}
