@@ -336,6 +336,7 @@ export default function RentPricingBuilder() {
   const [isParsingQuote, setIsParsingQuote] = useState(false)
   const [savedCarPrices, setSavedCarPrices] = useState<any[]>([])
   const [isSavingPrice, setIsSavingPrice] = useState(false)
+  const [carSearchQuery, setCarSearchQuery] = useState('')
 
   // 저장된 워크시트 목록
   const [worksheets, setWorksheets] = useState<any[]>([])
@@ -1248,22 +1249,81 @@ export default function RentPricingBuilder() {
 
         {/* === 등록차량 모드 === */}
         {lookupMode === 'registered' && (
-          <>
+          <div>
             <label className="block text-sm font-bold text-gray-500 mb-3">분석 대상 차량 선택</label>
-            <select
-              className="w-full p-4 border border-steel-100 rounded-xl font-bold text-lg bg-steel-50/50 focus:border-steel-500 outline-none"
-              value={selectedCar ? String(selectedCar.id) : ''}
-              onChange={(e) => handleCarSelect(e.target.value)}
-            >
-              <option value="">차량을 선택하세요</option>
-              {cars.map(car => (
-                <option key={String(car.id)} value={String(car.id)}>
-                  [{car.number}] {car.brand} {car.model} {car.trim || ''} ({car.year}년식)
-                  {car.status === 'rented' ? ' [렌트중]' : ''}
-                </option>
-              ))}
-            </select>
-          </>
+            {/* 선택된 차량 표시 */}
+            {selectedCar && (
+              <div className="flex items-center justify-between p-4 bg-steel-50 border-2 border-steel-400 rounded-xl mb-3">
+                <div>
+                  <span className="font-black text-steel-800 text-lg">{selectedCar.brand} {selectedCar.model}</span>
+                  <span className="ml-2 text-sm text-gray-500">{selectedCar.trim || ''}</span>
+                  {selectedCar.number && <span className="ml-3 text-sm font-bold text-steel-600">[{selectedCar.number}]</span>}
+                  <span className="ml-2 text-xs text-gray-400">{selectedCar.year}년식</span>
+                </div>
+                <button onClick={() => { setSelectedCar(null); setCarSearchQuery('') }}
+                  className="text-sm text-gray-400 hover:text-red-500 font-bold">변경</button>
+              </div>
+            )}
+            {/* 차량 검색 + 리스트 */}
+            {!selectedCar && (
+              <>
+                <input
+                  type="text"
+                  placeholder="차량번호, 브랜드, 모델명으로 검색..."
+                  value={carSearchQuery}
+                  onChange={(e) => setCarSearchQuery(e.target.value)}
+                  className="w-full p-3 border border-gray-200 rounded-xl font-bold text-sm bg-white focus:border-steel-500 outline-none mb-3"
+                />
+                <div className="max-h-[320px] overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100">
+                  {cars
+                    .filter(car => {
+                      if (!carSearchQuery.trim()) return true
+                      const q = carSearchQuery.toLowerCase()
+                      return (
+                        (car.number || '').toLowerCase().includes(q) ||
+                        (car.brand || '').toLowerCase().includes(q) ||
+                        (car.model || '').toLowerCase().includes(q) ||
+                        (car.trim || '').toLowerCase().includes(q)
+                      )
+                    })
+                    .map(car => (
+                      <button
+                        key={String(car.id)}
+                        onClick={() => { handleCarSelect(String(car.id)); setCarSearchQuery('') }}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-steel-50 transition-colors text-left"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-800">{car.brand} {car.model}</span>
+                            <span className="text-xs text-gray-400">{car.trim || ''}</span>
+                            {car.status === 'rented' && (
+                              <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded font-bold">렌트중</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            {car.number && <span className="text-xs font-bold text-steel-600">{car.number}</span>}
+                            <span className="text-xs text-gray-400">{car.year}년식</span>
+                            {car.mileage ? <span className="text-xs text-gray-400">{(car.mileage / 10000).toFixed(1)}만km</span> : null}
+                            {car.purchase_price ? <span className="text-xs text-gray-400">매입 {(car.purchase_price / 10000).toLocaleString()}만원</span> : null}
+                          </div>
+                        </div>
+                        <span className="text-gray-300 text-sm ml-2">→</span>
+                      </button>
+                    ))
+                  }
+                  {cars.filter(car => {
+                    if (!carSearchQuery.trim()) return true
+                    const q = carSearchQuery.toLowerCase()
+                    return (car.number || '').toLowerCase().includes(q) || (car.brand || '').toLowerCase().includes(q) || (car.model || '').toLowerCase().includes(q) || (car.trim || '').toLowerCase().includes(q)
+                  }).length === 0 && (
+                    <p className="text-center text-gray-400 py-6 text-sm">
+                      {carSearchQuery ? '검색 결과가 없습니다' : '등록된 차량이 없습니다'}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         )}
 
         {/* === 신차 조회 모드 === */}
