@@ -261,6 +261,7 @@ export default function RentPricingBuilder() {
   const [depYear1Rate, setDepYear1Rate] = useState(15)      // 1년차 감가 %
   const [depYear2Rate, setDepYear2Rate] = useState(8)        // 2년차~ 감가 %
   const [depMileageRate, setDepMileageRate] = useState(2)     // 만km당 감가 %
+  const [annualMileage, setAnnualMileage] = useState(1.5)    // 연간 주행거리 (만km)
 
   // 금융비용
   const [loanAmount, setLoanAmount] = useState(0)            // 대출 원금
@@ -802,8 +803,8 @@ export default function RentPricingBuilder() {
     const yearDepEnd = endAge <= 1
       ? depYear1Rate
       : depYear1Rate + (depYear2Rate * (endAge - 1))
-    // 연간 1.5만km 주행 가정 → 계약기간 중 추가 주행
-    const projectedMileage10k = mileage10k + (termYears * 1.5)
+    // 연간 주행거리 × 계약기간 → 종료 시 예상 주행거리
+    const projectedMileage10k = mileage10k + (termYears * annualMileage)
     const mileageDepEnd = projectedMileage10k * depMileageRate
     const totalDepRateEnd = Math.min(yearDepEnd + mileageDepEnd, 85)
     const endMarketValue = Math.round(factoryPrice * (1 - totalDepRateEnd / 100))
@@ -895,7 +896,7 @@ export default function RentPricingBuilder() {
       costBreakdown,
     }
   }, [
-    selectedCar, factoryPrice, purchasePrice, depYear1Rate, depYear2Rate, depMileageRate,
+    selectedCar, factoryPrice, purchasePrice, depYear1Rate, depYear2Rate, depMileageRate, annualMileage,
     loanAmount, loanRate, investmentRate,
     monthlyInsuranceCost, monthlyMaintenance, annualTax,
     riskRate, deposit, prepayment, depositDiscountRate, prepaymentDiscountRate,
@@ -924,19 +925,13 @@ export default function RentPricingBuilder() {
     setMarketComps(prev => prev.filter(c => c.id !== id))
   }
 
-  // 워크시트 저장
+  // 워크시트 저장 (등록차량 + 신차 모두 지원)
   const handleSaveWorksheet = async () => {
     if (!selectedCar || !effectiveCompanyId || !calculations) return
-    // 신차 시뮬레이션은 워크시트 저장 불가
-    if (lookupMode === 'newcar') {
-      alert('신차 가격 조회 결과는 임시 분석입니다.\n정식 차량 등록 후 워크시트를 저장할 수 있습니다.')
-      return
-    }
     setSaving(true)
 
-    const worksheetData = {
+    const baseData = {
       company_id: effectiveCompanyId,
-      car_id: selectedCar.id,
       factory_price: factoryPrice,
       purchase_price: purchasePrice,
       current_market_value: calculations.currentMarketValue,
@@ -965,16 +960,40 @@ export default function RentPricingBuilder() {
         ? (calculations.marketDiff > 5 ? 'premium' : calculations.marketDiff < -5 ? 'economy' : 'average')
         : 'average',
       term_months: termMonths,
+      annual_mileage: annualMileage,
+      dep_mileage_rate: depMileageRate,
       status: 'draft',
       updated_at: new Date().toISOString(),
     }
 
-    const { error } = await supabase
-      .from('pricing_worksheets')
-      .upsert(worksheetData, { onConflict: 'company_id,car_id' })
+    let error: any = null
+
+    if (lookupMode === 'registered') {
+      // 등록차량: car_id로 upsert
+      const { error: e } = await supabase
+        .from('pricing_worksheets')
+        .upsert({ ...baseData, car_id: selectedCar.id }, { onConflict: 'company_id,car_id' })
+      error = e
+    } else {
+      // 신차 분석: car_id 없이 insert + 차량정보 JSONB
+      const { error: e } = await supabase
+        .from('pricing_worksheets')
+        .insert([{
+          ...baseData,
+          car_id: null,
+          newcar_info: {
+            brand: selectedCar.brand,
+            model: selectedCar.model,
+            year: selectedCar.year,
+            fuel: selectedCar.fuel,
+            trim: selectedCar.trim || '',
+          },
+        }])
+      error = e
+    }
 
     if (error) alert('저장 실패: ' + error.message)
-    else alert('산출 워크시트가 저장되었습니다.')
+    else alert(lookupMode === 'registered' ? '산출 워크시트가 저장되었습니다.' : '신차 분석이 저장되었습니다.')
     setSaving(false)
   }
 
@@ -1623,6 +1642,42 @@ export default function RentPricingBuilder() {
                   <InputRow label="1년차 감가율" value={depYear1Rate} onChange={setDepYear1Rate} suffix="%" type="percent" />
                   <InputRow label="2년차~ 연간 감가율" value={depYear2Rate} onChange={setDepYear2Rate} suffix="%" type="percent" />
                   <InputRow label="주행거리 감가율" value={depMileageRate} onChange={setDepMileageRate} suffix="%/만km" type="percent" />
+
+                  {/* 연간 주행거리 설정 */}
+                  <div className="border-t mt-3 pt-3">
+                    <p className="text-xs font-bold text-gray-500 mb-2">연간 예상 주행거리</p>
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {[
+                        { val: 1, label: '1만' },
+                        { val: 1.5, label: '1.5만' },
+                        { val: 2, label: '2만' },
+                        { val: 3, label: '3만' },
+                        { val: 5, label: '무제한' },
+                      ].map(opt => (
+                        <button key={opt.val}
+                          onClick={() => setAnnualMileage(opt.val)}
+                          className={`py-1.5 px-3 text-xs rounded-lg border font-bold transition-colors
+                            ${annualMileage === opt.val
+                              ? 'bg-steel-600 text-white border-steel-600'
+                              : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        className="w-24 text-right border border-gray-200 rounded-lg px-3 py-1.5 text-sm font-bold focus:border-steel-500 focus:ring-1 focus:ring-steel-500 outline-none"
+                        value={annualMileage}
+                        onChange={(e) => setAnnualMileage(parseFloat(e.target.value) || 0)}
+                      />
+                      <span className="text-xs text-gray-400">만km/년</span>
+                    </div>
+                  </div>
+
                   <div className="border-t mt-3 pt-3 space-y-1">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">현재 차령</span>
