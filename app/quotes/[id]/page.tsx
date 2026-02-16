@@ -160,8 +160,9 @@ export default function QuoteDetailPage() {
   }
 
   const handleEditWorksheet = () => {
-    if (worksheet) router.push(`/quotes/pricing?worksheet_id=${worksheet.id}&car_id=${worksheet.car_id || ''}`)
-    else router.push('/quotes/pricing')
+    // quote_id를 포함하여 수정 모드로 진입
+    if (worksheet) router.push(`/quotes/pricing?worksheet_id=${worksheet.id}&car_id=${worksheet.car_id || ''}&quote_id=${quoteId}`)
+    else router.push(`/quotes/pricing?quote_id=${quoteId}`)
   }
 
   if (loading) return (
@@ -264,9 +265,10 @@ export default function QuoteDetailPage() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => window.print()} className="px-4 py-2 text-sm border border-gray-300 rounded-xl font-bold text-gray-600 hover:bg-white">인쇄</button>
-            {worksheet && (
-              <button onClick={handleEditWorksheet} className="px-4 py-2 text-sm border border-steel-300 rounded-xl font-bold text-steel-600 hover:bg-steel-50">렌트가 산출 수정</button>
-            )}
+            <button onClick={() => router.push(`/quotes/pricing?quote_id=${quoteId}`)}
+              className="px-4 py-2 text-sm border border-steel-300 rounded-xl font-bold text-steel-600 hover:bg-steel-50">
+              {worksheet ? '렌트가 산출 수정' : '견적서 수정'}
+            </button>
             <button onClick={handleArchiveQuote} disabled={updating || quote.status === 'archived'}
               className="px-4 py-2 text-sm border border-gray-300 rounded-xl font-bold text-gray-600 hover:bg-white disabled:opacity-50">
               {updating ? '처리 중...' : '보관'}

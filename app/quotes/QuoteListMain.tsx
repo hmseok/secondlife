@@ -314,7 +314,7 @@ export default function QuoteListPage() {
   // Handle edit
   const handleEdit = useCallback(
     (quoteId: string) => {
-      router.push(`/quotes/new?quote_id=${quoteId}`)
+      router.push(`/quotes/pricing?quote_id=${quoteId}`)
     },
     [router]
   )
@@ -384,7 +384,7 @@ export default function QuoteListPage() {
             💰 렌트가 산출기
           </Link>
           <Link
-            href="/quotes/new"
+            href="/quotes/pricing"
             className="px-3 py-2 text-xs md:px-6 md:py-3 md:text-sm bg-steel-600 text-white rounded-xl font-bold hover:bg-steel-700 shadow-lg transition-colors"
           >
             + 새 견적 작성
