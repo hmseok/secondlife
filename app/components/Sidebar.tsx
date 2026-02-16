@@ -52,8 +52,9 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
   }
 
   const renderMenuItem = (name: string, path: string, icon: JSX.Element) => {
-    // /finance와 /finance/settlement 구분을 위해 정확 매칭 + 하위경로 매칭 사용
-    const active = pathname === path || (pathname.startsWith(path + '/') && path !== '/finance')
+    // 정확 매칭 + 하위경로 매칭 (단, 별도 메뉴 항목이 있는 상위 경로는 제외)
+    const exactParents = ['/finance', '/quotes'] // 하위 경로가 별도 메뉴인 경우
+    const active = pathname === path || (pathname.startsWith(path + '/') && !exactParents.includes(path))
     return (
       <Link
         key={path}

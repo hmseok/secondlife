@@ -73,9 +73,10 @@ const SETTINGS_MENUS = [
 // ============================================
 function MenuItem({ item, pathname, accent }: { item: { name: string; path: string; iconKey: string }; pathname: string; accent?: boolean }) {
   const Icon = Icons[item.iconKey] || Icons.Doc
+  // 하위 경로가 별도 메뉴로 존재하는 상위 경로는 정확 매칭만 적용
+  const exactMatchOnly = ['/admin', '/quotes', '/finance']
   const isActive = pathname === item.path ||
-    (item.path !== '/admin' && pathname.startsWith(item.path + '/')) ||
-    (item.path === '/admin' && pathname === '/admin')
+    (!exactMatchOnly.includes(item.path) && pathname.startsWith(item.path + '/'))
 
   return (
     <Link

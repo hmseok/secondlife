@@ -47,7 +47,7 @@ const getExcessMileageRateFallback = (factoryPrice: number): number => {
 // ============================================
 interface QuoteBuilderData {
   car: {
-    id: string; brand: string; model: string; trim: string;
+    id: string | number; brand: string; model: string; trim: string;
     year: number; fuel: string; mileage: number; number: string;
     status: string; engine_cc: number;
   }
@@ -75,6 +75,8 @@ interface QuoteBuilderData {
     totalDepRate: number; totalDepRateEnd: number;
     depClass: string; classMult: number;
     purchaseDiscount: number; marketAvg: number; marketDiff: number;
+    avgLoanBalance?: number; avgEquityBalance?: number;
+    monthlyDepositDiscount?: number; monthlyPrepaymentDiscount?: number;
   }
   monthlyInsuranceCost: number
   monthlyMaintenance: number
@@ -88,6 +90,10 @@ interface QuoteBuilderData {
   acquisitionTax?: number
   companyId: string
   createdAt: string
+  worksheetId?: string
+  baselineKm?: number
+  driverAgeGroup?: string
+  insEstimate?: any
 }
 
 interface Customer {
@@ -100,7 +106,8 @@ interface Customer {
 // ============================================
 export default function QuoteCreator() {
   const router = useRouter()
-  const { effectiveCompanyId } = useApp()
+  const { company: appCompany, role, adminSelectedCompanyId } = useApp()
+  const effectiveCompanyId = role === 'god_admin' ? adminSelectedCompanyId : appCompany?.id
   const printRef = useRef<HTMLDivElement>(null)
 
   // 데이터
@@ -132,7 +139,11 @@ export default function QuoteCreator() {
   }, [router])
 
   useEffect(() => {
-    if (!effectiveCompanyId) return
+    if (!effectiveCompanyId) {
+      // effectiveCompanyId 없어도 appCompany가 있으면 그대로 사용
+      if (appCompany) setCompany(appCompany)
+      return
+    }
     const fetchData = async () => {
       const [custRes, compRes] = await Promise.all([
         supabase.from('customers').select('*').eq('company_id', effectiveCompanyId).order('name'),
@@ -140,9 +151,10 @@ export default function QuoteCreator() {
       ])
       if (custRes.data) setCustomers(custRes.data)
       if (compRes.data) setCompany(compRes.data)
+      else if (appCompany) setCompany(appCompany) // DB fetch 실패 시 appCompany fallback
     }
     fetchData()
-  }, [effectiveCompanyId])
+  }, [effectiveCompanyId, appCompany])
 
   if (!data) {
     return (
@@ -190,7 +202,7 @@ export default function QuoteCreator() {
     const expiresAt = new Date()
     expiresAt.setDate(expiresAt.getDate() + 30)
 
-    // 확장 데이터 (quote_detail JSONB)
+    // 확장 데이터 (quote_detail JSONB) — 견적서 출력에 필요한 전체 원가분석 포함
     const detailData = {
       manual_customer: customerMode === 'manual' ? manualCustomer : null,
       contract_type: data.contractType,
@@ -199,33 +211,68 @@ export default function QuoteCreator() {
       buyout_price: calc.buyoutPrice,
       factory_price: data.factoryPrice,
       purchase_price: data.purchasePrice,
+      total_acquisition_cost: data.totalAcquisitionCost,
       car_info: {
         brand: car.brand, model: car.model, trim: car.trim,
         year: car.year, fuel: car.fuel, engine_cc: car.engine_cc,
+        mileage: car.mileage,
       },
       cost_breakdown: {
         depreciation: calc.monthlyDepreciation,
         finance: calc.totalMonthlyFinance,
+        loan_interest: calc.monthlyLoanInterest,
+        opportunity_cost: calc.monthlyOpportunityCost,
+        avg_loan_balance: calc.avgLoanBalance,
+        avg_equity_balance: calc.avgEquityBalance,
         insurance: data.monthlyInsuranceCost,
         maintenance: data.monthlyMaintenance,
         tax: calc.monthlyTax,
         risk: calc.monthlyRiskReserve,
+        deposit_discount: calc.monthlyDepositDiscount,
+        prepayment_discount: calc.monthlyPrepaymentDiscount,
         discount: calc.totalDiscount,
       },
+      // 금융 상세
+      loan_amount: data.loanAmount,
+      loan_rate: data.loanRate,
+      investment_rate: data.investmentRate,
+      // 계약 조건
+      term_months: data.termMonths,
       annualMileage: data.annualMileage,
-      deductible: data.deductible,
+      baselineKm: data.baselineKm,
+      deposit: data.deposit,
       prepayment: data.prepayment,
+      deductible: data.deductible,
+      margin: data.margin,
+      // 보험/정비
+      driver_age_group: data.driverAgeGroup,
+      ins_estimate: data.insEstimate,
       maint_package: data.maintPackage,
+      // 초과주행
       excess_mileage_rate: excessMileageRate,
+      // 감가
+      dep_curve_preset: data.depCurvePreset,
+      current_market_value: calc.currentMarketValue,
+      end_market_value: calc.endMarketValue,
+      year_dep: calc.yearDep,
+      year_dep_end: calc.yearDepEnd,
+      total_dep_rate: calc.totalDepRate,
+      total_dep_rate_end: calc.totalDepRateEnd,
+      cost_base: calc.costBase,
+      purchase_discount: calc.purchaseDiscount,
+      // 메타
       note: quoteNote || null,
+      worksheet_id: data.worksheetId || null,
     }
 
     // 먼저 quotes 테이블의 실제 컬럼 조회
     try {
       // 방법 1: 기본 컬럼으로 insert 시도
+      // companyId: sessionStorage에서 전달받은 값 또는 현재 로그인 회사
+      const resolvedCompanyId = data.companyId || effectiveCompanyId
       const basePayload: Record<string, any> = {
-        company_id: data.companyId,
-        car_id: car.id.startsWith('newcar-') ? null : car.id,
+        company_id: resolvedCompanyId,
+        car_id: (!car.id || String(car.id).startsWith('newcar-')) ? null : Number(car.id) || car.id,
         customer_id: customerMode === 'select' ? selectedCustomerId : null,
         start_date: startDate,
         end_date: endDate,
@@ -245,6 +292,7 @@ export default function QuoteCreator() {
         memo: quoteNote || null,
         quote_detail: detailData,
         expires_at: expiresAt.toISOString(),
+        worksheet_id: data.worksheetId || null,
       }
 
       // 전체 시도
@@ -881,7 +929,7 @@ export default function QuoteCreator() {
             <div className="text-center">
               <p className="text-xs text-gray-400 mb-10">임대인 (서명/인)</p>
               <div className="border-t border-gray-300 pt-2">
-                <p className="text-sm font-bold text-gray-700">{company?.name || '렌터카사'}</p>
+                <p className="text-sm font-bold text-gray-700">{company?.name || '당사'}</p>
               </div>
             </div>
             <div className="text-center">
