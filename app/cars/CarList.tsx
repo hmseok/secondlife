@@ -16,6 +16,10 @@ type Car = {
   fuel: string          // 연료
   status: string        // 상태 (available, rented 등)
   purchase_price?: number // 취득가액
+  is_used?: boolean       // 중고차 여부
+  purchase_mileage?: number // 구입 시 주행거리 (km)
+  mileage?: number        // 현재 주행거리
+  is_commercial?: boolean  // 영업용 여부
   created_at: string
 }
 
@@ -281,6 +285,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
                         <th className="p-3 md:p-4">차량번호</th>
                         <th className="p-3 md:p-4">차종</th>
                         <th className="p-3 md:p-4">연식</th>
+                        <th className="p-3 md:p-4 text-center">구분</th>
                         <th className="p-3 md:p-4 text-center">상태</th>
                         <th className="p-3 md:p-4 text-right">취득가액</th>
                         <th className="p-3 md:p-4 text-center">등록일</th>
@@ -303,6 +308,25 @@ const { company, role, adminSelectedCompanyId } = useApp()
                             <td className="p-3 md:p-4 text-xs md:text-sm font-medium text-gray-600">
                                 {car.year}년
                                 <span className="text-[10px] text-gray-400 block">{car.fuel}</span>
+                            </td>
+                            <td className="p-3 md:p-4 text-center">
+                                <div className="flex flex-wrap justify-center gap-1">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold ${
+                                      car.is_used ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                                  }`}>
+                                      {car.is_used ? '중고' : '신차'}
+                                  </span>
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold ${
+                                      car.is_commercial === false ? 'bg-teal-100 text-teal-700' : 'bg-steel-100 text-steel-600'
+                                  }`}>
+                                      {car.is_commercial === false ? '비영업' : '영업'}
+                                  </span>
+                                </div>
+                                {car.is_used && car.purchase_mileage > 0 && (
+                                    <span className="text-[10px] text-gray-400 block mt-0.5">
+                                        구입시 {(car.purchase_mileage / 10000).toFixed(1)}만km
+                                    </span>
+                                )}
                             </td>
                             <td className="p-3 md:p-4 text-center">
                                 <span className={`px-2 md:px-3 py-0.5 md:py-1 rounded-full text-[10px] md:text-xs font-bold ${

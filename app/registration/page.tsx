@@ -314,6 +314,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
   const stats = {
     total: cars.length,
     totalValue: cars.reduce((s, c) => s + (c.purchase_price || 0), 0),
+    totalCost: cars.reduce((s, c) => s + (c.total_cost || c.purchase_price || 0), 0),
     avgValue: cars.length > 0 ? Math.round(cars.reduce((s, c) => s + (c.purchase_price || 0), 0) / cars.length) : 0,
     electric: cars.filter(c => c.fuel_type === '전기').length,
     hybrid: cars.filter(c => (c.fuel_type || '').includes('하이브리드')).length,
@@ -364,8 +365,11 @@ const { company, role, adminSelectedCompanyId } = useApp()
              <p className="text-xl md:text-2xl font-black text-amber-700 mt-1">{recentCars.length}<span className="text-sm text-amber-500 ml-0.5">대</span></p>
            </div>
            <div className="bg-blue-50 p-3 md:p-4 rounded-xl border border-blue-100">
-             <p className="text-xs text-blue-500 font-bold">총 자산가치</p>
+             <p className="text-xs text-blue-500 font-bold">총 취득가액</p>
              <p className="text-lg md:text-xl font-black text-blue-700 mt-1">{f(stats.totalValue)}<span className="text-sm text-blue-400 ml-0.5">원</span></p>
+             {stats.totalCost > stats.totalValue && (
+               <p className="text-[10px] text-emerald-600 font-bold mt-0.5">실투자 {f(stats.totalCost)}원</p>
+             )}
            </div>
            <div className="bg-steel-50 p-3 md:p-4 rounded-xl border border-steel-100">
              <p className="text-xs text-steel-500 font-bold">차량 평균가</p>
@@ -495,7 +499,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
                              <th className="p-3 md:p-5">차량 정보 (번호/모델)</th>
                              <th className="p-3 md:p-5">소유자 / 차대번호</th>
                              <th className="p-3 md:p-5">연식 / 연료</th>
-                             <th className="p-3 md:p-5 text-right">취득가액</th>
+                             <th className="p-3 md:p-5 text-right">취득가액 / 총비용</th>
                              <th className="p-3 md:p-5 text-center">관리</th>
                          </tr>
                      </thead>
@@ -528,11 +532,21 @@ const { company, role, adminSelectedCompanyId } = useApp()
                                  </td>
                                  <td className="p-3 md:p-5">
                                      <div className="flex flex-wrap gap-1">
+                                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.is_used ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{car.is_used ? '중고' : '신차'}</span>
+                                         <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.is_commercial === false ? 'bg-teal-100 text-teal-700' : 'bg-steel-100 text-steel-600'}`}>{car.is_commercial === false ? '비영업' : '영업'}</span>
                                          <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs font-bold">{car.year}년식</span>
                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.fuel_type === '전기' ? 'bg-steel-100 text-steel-600' : 'bg-green-100 text-green-600'}`}>{car.fuel_type || '기타'}</span>
                                      </div>
+                                     {car.is_used && car.purchase_mileage > 0 && (
+                                       <div className="text-[10px] text-gray-400 mt-1">구입시 {(car.purchase_mileage / 10000).toFixed(1)}만km</div>
+                                     )}
                                  </td>
-                                 <td className="p-3 md:p-5 text-right font-bold text-gray-700">{f(car.purchase_price)}원</td>
+                                 <td className="p-3 md:p-5 text-right">
+                                     <div className="font-bold text-gray-700">{f(car.purchase_price)}원</div>
+                                     {car.total_cost > 0 && car.total_cost !== car.purchase_price && (
+                                       <div className="text-xs font-bold text-emerald-600 mt-0.5">총 {f(car.total_cost)}원</div>
+                                     )}
+                                 </td>
                                  <td className="p-3 md:p-5 text-center">
                                      <button onClick={(e) => handleDelete(car.id, e)} className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Icons.Trash /></button>
                                  </td>
@@ -562,12 +576,17 @@ const { company, role, adminSelectedCompanyId } = useApp()
                        <span className="text-steel-600 font-bold">{car.brand}</span> {car.model}
                      </div>
                      <div className="flex gap-1 mt-1">
+                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.is_used ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{car.is_used ? '중고' : '신차'}</span>
+                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.is_commercial === false ? 'bg-teal-100 text-teal-700' : 'bg-steel-100 text-steel-600'}`}>{car.is_commercial === false ? '비영업' : '영업'}</span>
                        {car.year && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-bold">{car.year}년</span>}
                        {car.fuel_type && <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.fuel_type === '전기' ? 'bg-steel-100 text-steel-600' : 'bg-green-100 text-green-600'}`}>{car.fuel_type}</span>}
                      </div>
                    </div>
                    <div className="flex flex-col items-end gap-1 flex-shrink-0">
                      <span className="font-bold text-gray-700 text-sm">{f(car.purchase_price)}원</span>
+                     {car.total_cost > 0 && car.total_cost !== car.purchase_price && (
+                       <span className="text-[10px] font-bold text-emerald-600">총 {f(car.total_cost)}원</span>
+                     )}
                      <button onClick={(e) => handleDelete(car.id, e)} className="p-1.5 text-gray-300 hover:text-red-500 rounded"><Icons.Trash /></button>
                    </div>
                  </div>

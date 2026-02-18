@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* ── Tailwind v4: 소스 경로 명시 (production CSS 누락 방지) ── */
+@source "../app/**/*.{tsx,ts,jsx,js}";
+@source "../components/**/*.{tsx,ts,jsx,js}";
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -210,16 +214,30 @@ button:not(:disabled),
     height: auto !important;
     max-height: none !important;
   }
-  /* 앱 셸 모든 부모 컨테이너 height/overflow 해제 */
+  /* 앱 셸 모든 부모 컨테이너 height/overflow 해제 — 깊은 중첩 대응 */
   body > div,
   body > div > div,
   body > div > div > div,
+  body > div > div > div > div,
+  body > div > div > div > div > div,
+  body > div > div > div > div > div > div,
   main,
-  main > div {
+  main > div,
+  main > div > div {
     overflow: visible !important;
     height: auto !important;
     max-height: none !important;
+    min-height: 0 !important;
     display: block !important;
+    position: static !important;
+  }
+  /* flex/overflow-hidden 강제 해제 */
+  [class*="overflow-hidden"],
+  [class*="h-\\[100dvh\\]"],
+  [class*="h-screen"] {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
   }
   /* 모바일 헤더 인쇄 숨김 */
   .fixed.top-0 {
@@ -233,6 +251,8 @@ button:not(:disabled),
     max-width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
   }
   /* 배경색 보존 */
   .quote-print-area .quote-header-bg {

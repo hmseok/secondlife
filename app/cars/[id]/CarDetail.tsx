@@ -78,7 +78,8 @@ export default function CarDetailPage() {
     const { error } = await supabase.from('cars').update({
         number: car.number, brand: car.brand, model: car.model, trim: car.trim,
         year: car.year, fuel: car.fuel, status: car.status, location: car.location,
-        mileage: car.mileage, purchase_price: car.purchase_price, acq_date: car.acq_date
+        mileage: car.mileage, purchase_price: car.purchase_price, acq_date: car.acq_date,
+        is_used: car.is_used, purchase_mileage: car.purchase_mileage
       }).eq('id', carId)
     setSaving(false)
     if (error) alert('저장 실패: ' + error.message)
@@ -141,6 +142,19 @@ export default function CarDetailPage() {
                     <p className="text-gray-400 text-xs font-bold">주행거리</p>
                     <p className="text-lg font-bold">{car.mileage?.toLocaleString()} km</p>
                  </div>
+              </div>
+              {/* 신차/중고차 구분 */}
+              <div className="mt-4 flex items-center gap-3">
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                  car.is_used ? 'bg-orange-500/20 text-orange-300' : 'bg-blue-500/20 text-blue-300'
+                }`}>
+                  {car.is_used ? '🔄 중고차' : '🆕 신차'}
+                </span>
+                {car.is_used && car.purchase_mileage > 0 && (
+                  <span className="text-xs text-gray-400">
+                    구입시 주행거리: <b className="text-white">{car.purchase_mileage?.toLocaleString()}km</b>
+                  </span>
+                )}
               </div>
            </div>
 

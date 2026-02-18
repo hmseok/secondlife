@@ -71,8 +71,118 @@ export default function RegistrationDetailPage() {
   const [vinLoading, setVinLoading] = useState(false)
   const [vinResult, setVinResult] = useState<any>(null)
 
+  // 💰 비용 관리 상태
+  const [costs, setCosts] = useState<any[]>([])
+  const [costsLoading, setCostsLoading] = useState(false)
+  const [showCostDetail, setShowCostDetail] = useState(false)
+  const [newCostItem, setNewCostItem] = useState({ category: '기타', item_name: '', amount: 0, notes: '' })
+
+  // 기본 비용 항목 템플릿
+  const defaultCostItems = [
+    { category: '매입', item_name: '차량 매입가', sort_order: 1 },
+    { category: '세금', item_name: '취득세', sort_order: 2 },
+    { category: '세금', item_name: '공채 할인비', sort_order: 3 },
+    { category: '등록', item_name: '이전등록비', sort_order: 4 },
+    { category: '등록', item_name: '번호판 비용', sort_order: 5 },
+    { category: '보험', item_name: '보험료', sort_order: 6 },
+    { category: '정비', item_name: '정비/수리비', sort_order: 7 },
+    { category: '기타', item_name: '탁송비', sort_order: 8 },
+    { category: '기타', item_name: '매매알선비', sort_order: 9 },
+  ]
+
+  const costCategories = [
+    { key: '매입', color: 'bg-blue-100 text-blue-700' },
+    { key: '세금', color: 'bg-red-100 text-red-700' },
+    { key: '등록', color: 'bg-purple-100 text-purple-700' },
+    { key: '보험', color: 'bg-green-100 text-green-700' },
+    { key: '정비', color: 'bg-yellow-100 text-yellow-700' },
+    { key: '기타', color: 'bg-gray-100 text-gray-700' },
+  ]
+
+  const getCategoryColor = (cat: string) => costCategories.find(c => c.key === cat)?.color || 'bg-gray-100 text-gray-700'
+
+  // 비용 목록 조회
+  const fetchCosts = async () => {
+    setCostsLoading(true)
+    const { data, error } = await supabase
+      .from('car_costs')
+      .select('*')
+      .eq('car_id', carId)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+    if (!error) setCosts(data || [])
+    setCostsLoading(false)
+  }
+
+  // 기본 항목 자동 생성 (처음 한번만)
+  const initDefaultCosts = async () => {
+    if (costs.length > 0) return  // 이미 항목이 있으면 스킵
+    const items = defaultCostItems.map(item => ({
+      car_id: carId,
+      ...item,
+      amount: item.item_name === '차량 매입가' ? (car.purchase_price || 0) : 0,
+      notes: '',
+    }))
+    const { error } = await supabase.from('car_costs').insert(items)
+    if (!error) fetchCosts()
+  }
+
+  // 비용 금액 수정
+  const handleCostUpdate = async (costId: number, field: string, value: any) => {
+    const { error } = await supabase.from('car_costs').update({ [field]: value, updated_at: new Date().toISOString() }).eq('id', costId)
+    if (!error) {
+      setCosts(prev => prev.map(c => c.id === costId ? { ...c, [field]: value } : c))
+      // total_cost 캐시 업데이트
+      updateTotalCost()
+    }
+  }
+
+  // 사용자 항목 추가
+  const handleAddCostItem = async () => {
+    if (!newCostItem.item_name.trim()) return alert('항목명을 입력해주세요.')
+    const { error } = await supabase.from('car_costs').insert({
+      car_id: carId,
+      ...newCostItem,
+      sort_order: costs.length + 10,
+    })
+    if (!error) {
+      setNewCostItem({ category: '기타', item_name: '', amount: 0, notes: '' })
+      fetchCosts()
+    }
+  }
+
+  // 항목 삭제
+  const handleDeleteCostItem = async (costId: number) => {
+    if (!confirm('이 항목을 삭제하시겠습니까?')) return
+    const { error } = await supabase.from('car_costs').delete().eq('id', costId)
+    if (!error) {
+      setCosts(prev => prev.filter(c => c.id !== costId))
+      updateTotalCost()
+    }
+  }
+
+  // total_cost 캐시 업데이트
+  const updateTotalCost = async () => {
+    const { data } = await supabase.from('car_costs').select('amount').eq('car_id', carId)
+    const total = (data || []).reduce((sum: number, c: any) => sum + (c.amount || 0), 0)
+    await supabase.from('cars').update({ total_cost: total }).eq('id', carId)
+    setCar((prev: any) => ({ ...prev, total_cost: total }))
+  }
+
+  // 카테고리별 소계
+  const costByCategory = costCategories.map(cat => ({
+    ...cat,
+    total: costs.filter(c => c.category === cat.key).reduce((s, c) => s + (c.amount || 0), 0),
+    items: costs.filter(c => c.category === cat.key),
+  })).filter(cat => cat.total > 0 || cat.items.length > 0)
+
+  const totalCost = costs.reduce((s, c) => s + (c.amount || 0), 0)
+
   useEffect(() => {
-    if (carId) fetchCarData()
+    if (carId) {
+      fetchCarData()
+      fetchCosts()
+    }
   }, [carId])
 
   // 초기 로딩 시 모델명 분석하여 트림 찾기
@@ -394,6 +504,81 @@ export default function RegistrationDetailPage() {
                     )}
                 </div>
 
+                {/* 차량 구분 (신차/중고 + 영업용/비영업용) */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                    <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2"><span className="w-1 h-5 bg-steel-600 rounded-full"></span> 차량 구분</h2>
+
+                    {/* 신차 / 중고차 */}
+                    <p className="text-xs font-bold text-gray-400 mb-2 uppercase">차량 상태</p>
+                    <div className="flex items-center gap-3 mb-5">
+                      <button
+                        onClick={() => setCar((prev: any) => ({ ...prev, is_used: false, purchase_mileage: 0 }))}
+                        className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all border-2 ${
+                          !car.is_used
+                            ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-sm'
+                            : 'border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300'
+                        }`}
+                      >
+                        🆕 신차
+                      </button>
+                      <button
+                        onClick={() => setCar((prev: any) => ({ ...prev, is_used: true }))}
+                        className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all border-2 ${
+                          car.is_used
+                            ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-sm'
+                            : 'border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300'
+                        }`}
+                      >
+                        🔄 중고차
+                      </button>
+                    </div>
+                    {car.is_used && (
+                      <div className="mb-5">
+                        <label className="label">구입 시 주행거리 (km)</label>
+                        <input
+                          type="number"
+                          className="input text-right"
+                          placeholder="예: 35000"
+                          value={car.purchase_mileage || ''}
+                          onChange={e => handleChange('purchase_mileage', Number(e.target.value))}
+                        />
+                        {car.purchase_mileage > 0 && (
+                          <p className="text-xs text-gray-400 mt-1 text-right">{(car.purchase_mileage / 10000).toFixed(1)}만km</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 영업용 / 비영업용 */}
+                    <p className="text-xs font-bold text-gray-400 mb-2 uppercase">용도 구분</p>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => setCar((prev: any) => ({ ...prev, is_commercial: true }))}
+                        className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all border-2 ${
+                          car.is_commercial !== false
+                            ? 'border-steel-500 bg-steel-50 text-steel-700 shadow-sm'
+                            : 'border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300'
+                        }`}
+                      >
+                        🏢 영업용
+                      </button>
+                      <button
+                        onClick={() => setCar((prev: any) => ({ ...prev, is_commercial: false }))}
+                        className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all border-2 ${
+                          car.is_commercial === false
+                            ? 'border-teal-500 bg-teal-50 text-teal-700 shadow-sm'
+                            : 'border-gray-200 bg-gray-50 text-gray-400 hover:border-gray-300'
+                        }`}
+                      >
+                        🏠 비영업용
+                      </button>
+                    </div>
+                    {car.is_commercial === false && (
+                      <p className="text-xs text-teal-600 mt-2 bg-teal-50 rounded-lg p-2 border border-teal-100">
+                        비영업용 차량은 보험료, 취득세율 등이 영업용과 다르게 적용됩니다.
+                      </p>
+                    )}
+                </div>
+
                 {/* 제원 */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                     <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2"><span className="w-1 h-5 bg-steel-600 rounded-full"></span> 제원 및 유효기간</h2>
@@ -413,6 +598,165 @@ export default function RegistrationDetailPage() {
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                     <label className="label mb-2 block">비고</label>
                     <textarea className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl resize-none outline-none" value={car.notes || ''} onChange={e=>handleChange('notes', e.target.value)}></textarea>
+                </div>
+
+                {/* 💰 구입비용 관리 */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                    <div className="flex justify-between items-center mb-4 border-b pb-2">
+                      <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span className="w-1 h-5 bg-emerald-500 rounded-full"></span> 구입비용 상세
+                      </h2>
+                      <div className="flex items-center gap-2">
+                        {costs.length === 0 && (
+                          <button
+                            onClick={initDefaultCosts}
+                            className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 transition-colors"
+                          >
+                            기본항목 생성
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setShowCostDetail(!showCostDetail)}
+                          className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg font-bold hover:bg-gray-200 transition-colors"
+                        >
+                          {showCostDetail ? '요약보기' : '상세보기'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 요약 뷰 */}
+                    {!showCostDetail && (
+                      <div>
+                        {costs.length === 0 ? (
+                          <div className="text-center py-8 text-gray-400">
+                            <p className="text-sm">등록된 비용 항목이 없습니다</p>
+                            <p className="text-xs mt-1">"기본항목 생성" 버튼을 눌러 시작하세요</p>
+                          </div>
+                        ) : (
+                          <>
+                            {/* 총 비용 */}
+                            <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-4 mb-4 border border-emerald-100">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm font-bold text-emerald-700">총 구입비용</span>
+                                <span className="text-2xl font-black text-emerald-800">{f(totalCost)}<span className="text-sm text-emerald-500 ml-0.5">원</span></span>
+                              </div>
+                              {car.purchase_price > 0 && totalCost > car.purchase_price && (
+                                <p className="text-xs text-emerald-600 mt-1 text-right">
+                                  취득가액 대비 +{f(totalCost - car.purchase_price)}원 ({((totalCost / car.purchase_price - 1) * 100).toFixed(1)}%)
+                                </p>
+                              )}
+                            </div>
+                            {/* 카테고리별 소계 */}
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                              {costByCategory.map(cat => (
+                                <div key={cat.key} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${cat.color}`}>{cat.key}</span>
+                                  </div>
+                                  <p className="text-sm font-black text-gray-800">{f(cat.total)}원</p>
+                                  <p className="text-[10px] text-gray-400 mt-0.5">{cat.items.length}개 항목</p>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 상세 뷰 */}
+                    {showCostDetail && (
+                      <div>
+                        {costsLoading ? (
+                          <div className="text-center py-8 text-gray-400">로딩 중...</div>
+                        ) : (
+                          <>
+                            {/* 항목 리스트 */}
+                            <div className="space-y-2 mb-5">
+                              {costs.map(cost => (
+                                <div key={cost.id} className="flex items-center gap-2 group">
+                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${getCategoryColor(cost.category)}`}>
+                                    {cost.category}
+                                  </span>
+                                  <span className="text-sm font-bold text-gray-700 shrink-0 w-24 truncate">{cost.item_name}</span>
+                                  <input
+                                    type="text"
+                                    className="flex-1 text-right text-sm font-black text-gray-900 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus:bg-white focus:border-steel-500 outline-none transition-all"
+                                    value={cost.amount ? f(cost.amount) : ''}
+                                    onChange={e => {
+                                      const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0
+                                      setCosts(prev => prev.map(c => c.id === cost.id ? { ...c, amount: val } : c))
+                                    }}
+                                    onBlur={e => {
+                                      const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0
+                                      handleCostUpdate(cost.id, 'amount', val)
+                                    }}
+                                    placeholder="0"
+                                  />
+                                  <span className="text-xs text-gray-400 shrink-0">원</span>
+                                  <input
+                                    type="text"
+                                    className="w-24 text-xs text-gray-500 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-steel-400 outline-none px-1 py-1 transition-colors"
+                                    value={cost.notes || ''}
+                                    onChange={e => setCosts(prev => prev.map(c => c.id === cost.id ? { ...c, notes: e.target.value } : c))}
+                                    onBlur={e => handleCostUpdate(cost.id, 'notes', e.target.value)}
+                                    placeholder="비고"
+                                  />
+                                  <button
+                                    onClick={() => handleDeleteCostItem(cost.id)}
+                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* 합계 */}
+                            {costs.length > 0 && (
+                              <div className="flex items-center gap-2 pt-3 border-t border-gray-200 mb-5">
+                                <span className="text-sm font-bold text-gray-500 flex-1">합계</span>
+                                <span className="text-xl font-black text-emerald-700">{f(totalCost)}</span>
+                                <span className="text-xs text-gray-400 shrink-0">원</span>
+                              </div>
+                            )}
+
+                            {/* 항목 추가 */}
+                            <div className="bg-gray-50 rounded-xl p-4 border border-dashed border-gray-300">
+                              <p className="text-xs font-bold text-gray-500 mb-3">+ 항목 추가</p>
+                              <div className="flex flex-wrap gap-2">
+                                <select
+                                  className="text-xs font-bold bg-white border border-gray-200 rounded-lg px-2 py-2 outline-none"
+                                  value={newCostItem.category}
+                                  onChange={e => setNewCostItem(prev => ({ ...prev, category: e.target.value }))}
+                                >
+                                  {costCategories.map(c => <option key={c.key} value={c.key}>{c.key}</option>)}
+                                </select>
+                                <input
+                                  type="text"
+                                  className="flex-1 min-w-[120px] text-sm bg-white border border-gray-200 rounded-lg px-3 py-2 font-bold outline-none focus:border-steel-500"
+                                  placeholder="항목명"
+                                  value={newCostItem.item_name}
+                                  onChange={e => setNewCostItem(prev => ({ ...prev, item_name: e.target.value }))}
+                                />
+                                <input
+                                  type="text"
+                                  className="w-32 text-sm text-right bg-white border border-gray-200 rounded-lg px-3 py-2 font-bold outline-none focus:border-steel-500"
+                                  placeholder="금액"
+                                  value={newCostItem.amount ? f(newCostItem.amount) : ''}
+                                  onChange={e => setNewCostItem(prev => ({ ...prev, amount: Number(e.target.value.replace(/[^0-9]/g, '')) || 0 }))}
+                                />
+                                <button
+                                  onClick={handleAddCostItem}
+                                  className="bg-steel-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-steel-700 transition-colors"
+                                >
+                                  추가
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                 </div>
             </div>
 

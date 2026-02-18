@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'
 
+// ── 타입 정의 ──────────────────────────────────────────────────────────
 interface InsuranceRow {
   id: number
   vehicle_type: string
@@ -13,473 +14,849 @@ interface InsuranceRow {
   notes: string
 }
 
-interface SearchResult {
-  results: string
-  sources: string[]
-  searched_at: string
+interface PolicyRecord {
+  id: number
+  group_id: number | null
+  vehicle_name: string
+  vehicle_category: string
+  vehicle_number: string
+  engine_cc: number
+  vehicle_value: number
+  fuel_type: string
+  origin: string
+  brand: string
+  insurer: string
+  policy_number: string
+  contract_start: string
+  contract_end: string
+  premium_daein1: number
+  premium_daein2: number
+  premium_daemul: number
+  daemul_limit: number
+  premium_self_body: number
+  premium_uninsured: number
+  premium_own_vehicle: number
+  own_vehicle_deductible_v2v: number
+  own_vehicle_deductible_other: number
+  premium_emergency: number
+  premium_limit_surcharge: number
+  total_premium: number
+  discount_grade: string
+  discount_rate: number
+  membership_history: string
+  membership_factor: number
+  age_limit: string
+  deductible_surcharge: number
+  special_surcharges: string[]
+  source_file: string
+  notes: string
+  is_active: boolean
+  created_at: string
 }
 
-const VEHICLE_TYPES = ['국산 승용', '수입 승용', '전기차', '수입 SUV', '국산 SUV']
-
-// ★ 렌터카 영업용 플릿보험 기준 가이드
-const FLEET_INSURANCE_GUIDE = {
-  coverage: {
-    title: '렌터카 영업용 기본 담보',
-    items: [
-      { name: '대인배상 I', desc: '의무보험, 사망 1.5억/부상 3천만', required: true },
-      { name: '대인배상 II', desc: '무한 (업계 표준)', required: true },
-      { name: '대물배상', desc: '최소 2억 ~ 5억 (대형사 5억)', required: true },
-      { name: '자기신체사고', desc: '사망 1억, 부상 3천만', required: true },
-      { name: '자기차량손해', desc: '자차보험, 면책금 30~100만원', required: true },
-      { name: '무보험차상해', desc: '2억 (선택)', required: false },
-    ],
-  },
-  fleetDiscount: {
-    title: '플릿(다대수) 할인 구조',
-    tiers: [
-      { size: '10대 미만', discount: '없음', note: '개별 가입과 동일' },
-      { size: '10~49대', discount: '10~15%', note: '소규모 플릿' },
-      { size: '50~199대', discount: '15~25%', note: '중규모 플릿' },
-      { size: '200~999대', discount: '25~35%', note: '대규모 플릿' },
-      { size: '1,000대 이상', discount: '35~45%', note: '대형 렌터카사 수준' },
-    ],
-  },
+interface BasePremium {
+  id: number
+  vehicle_usage: string
+  insurer: string
+  daein1: number
+  daein2: number
+  daemul: number
+  daemul_limit: string
+  self_body: number
+  uninsured: number
+  emergency: number
+  limit_surcharge: number
+  base_total: number
 }
 
-// 렌터카 영업용 vs 개인 보험 비교
-const INSURANCE_COMPARISON = [
-  { item: '가입 방식', fleet: '법인 플릿계약 (일괄)', personal: '개인 개별가입' },
-  { item: '보험료 수준', fleet: '개인 대비 60~70%', personal: '100% (기준)' },
-  { item: '운전자 범위', fleet: '누구나 (임차인)', personal: '지정 1~2인' },
-  { item: '사고 할증', fleet: '플릿 전체 경험율 반영', personal: '개인 할증' },
-  { item: '면책금', fleet: '30~100만원 (업체 부담 가능)', personal: '20~50만원' },
-  { item: '대물 한도', fleet: '2억~5억', personal: '1억~3억' },
-]
+interface OwnVehicleRate {
+  id: number
+  origin: string
+  fuel_type: string
+  vehicle_class: string
+  value_min: number
+  value_max: number
+  own_vehicle_rate: number
+  sample_count: number
+  notes: string
+}
 
-// 업계 벤치마크 (렌터카사 규모별)
-const INDUSTRY_BENCHMARKS = [
-  { company: '대형 렌터카사 (1000대+)', coverage: '대인무한, 대물5억, 자손1억, 자차', selfInsurance: '면책 30만원', note: '플릿 40%+ 할인, 손해율 관리 전담팀' },
-  { company: '중형 렌터카사 (100~999대)', coverage: '대인무한, 대물3억, 자손1억, 자차', selfInsurance: '면책 50만원', note: '플릿 20~30% 할인' },
-  { company: '소형 렌터카사 (100대 미만)', coverage: '대인무한, 대물2억, 자손5천, 자차', selfInsurance: '면책 50~100만원', note: '플릿 10~15% 할인, 개별과 큰 차이 없음' },
+interface InsuranceGroup {
+  id: number
+  group_name: string
+  origin: string
+  fuel_type: string
+  brand: string
+  model: string
+  vehicle_class: string
+  avg_own_rate: number
+  avg_total_premium: number
+  avg_vehicle_value: number
+  policy_count: number
+  color: string
+  sort_order: number
+  notes: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ── 포맷 헬퍼 ──────────────────────────────────────────────────────────
+const fmt = (n: number) => n?.toLocaleString('ko-KR') ?? '-'
+const fmtMan = (n: number) => {
+  if (!n) return '-'
+  const man = Math.round(n / 10000)
+  return man >= 100 ? `${(man / 100).toFixed(0)}억` : `${man.toLocaleString()}만`
+}
+const fmtWon = (n: number) => n ? `${fmt(n)}원` : '-'
+const fmtPct = (n: number, d = 2) => n ? `${n.toFixed(d)}%` : '-'
+
+// ── 서브탭 타입 ──────────────────────────────────────────────────────────
+type SubTab = 'rates' | 'records' | 'groups' | 'analysis'
+
+const SUB_TABS: { id: SubTab; label: string; icon: string }[] = [
+  { id: 'rates', label: '기준요율표', icon: '📋' },
+  { id: 'groups', label: '그룹 관리', icon: '🏷️' },
+  { id: 'records', label: '실데이터 기록', icon: '📄' },
+  { id: 'analysis', label: '요율 분석', icon: '📊' },
 ]
 
 export default function InsuranceTab() {
   const supabase = createClientComponentClient()
-
-  const [rows, setRows] = useState<InsuranceRow[]>([])
+  const [subTab, setSubTab] = useState<SubTab>('rates')
   const [loading, setLoading] = useState(true)
+
+  // 데이터
+  const [rateRows, setRateRows] = useState<InsuranceRow[]>([])
+  const [policies, setPolicies] = useState<PolicyRecord[]>([])
+  const [basePremiums, setBasePremiums] = useState<BasePremium[]>([])
+  const [ownRates, setOwnRates] = useState<OwnVehicleRate[]>([])
+  const [groups, setGroups] = useState<InsuranceGroup[]>([])
+
+  // UI 상태
   const [editingCell, setEditingCell] = useState<{ rowId: number; field: string } | null>(null)
   const [editValue, setEditValue] = useState('')
-  const [selectedVehicleType, setSelectedVehicleType] = useState('')
-  const [vehicleValue, setVehicleValue] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult | null>(null)
-  const [searching, setSearching] = useState(false)
-  const [showGuide, setShowGuide] = useState(true)
-  const [showAIPanel, setShowAIPanel] = useState(false)
-  const [showComparison, setShowComparison] = useState(false)
+  const [filterOrigin, setFilterOrigin] = useState<string>('')
+  const [filterFuel, setFilterFuel] = useState<string>('')
+  const [expandedGroup, setExpandedGroup] = useState<number | null>(null)
 
-  const fetchData = async () => {
-    try {
-      setLoading(true)
-      const { data, error } = await supabase.from('insurance_rate_table').select('*').order('id', { ascending: true })
-      if (error) throw error
-      setRows(data || [])
-    } catch (error) {
-      console.error('데이터 로드 실패:', error)
-    } finally {
-      setLoading(false)
+  // ── 데이터 로드 ──────────────────────────────────────────────────────
+  useEffect(() => {
+    loadAll()
+  }, [])
+
+  async function loadAll() {
+    setLoading(true)
+    const [rateRes, policyRes, baseRes, ownRes, groupRes] = await Promise.all([
+      supabase.from('insurance_rate_table').select('*').order('vehicle_type').order('value_min'),
+      supabase.from('insurance_policy_record').select('*').eq('is_active', true).order('created_at', { ascending: false }),
+      supabase.from('insurance_base_premium').select('*').eq('is_active', true),
+      supabase.from('insurance_own_vehicle_rate').select('*').eq('is_active', true).order('origin').order('fuel_type').order('value_min'),
+      supabase.from('insurance_vehicle_group').select('*').eq('is_active', true).order('sort_order'),
+    ])
+    setRateRows(rateRes.data || [])
+    setPolicies(policyRes.data || [])
+    setBasePremiums(baseRes.data || [])
+    setOwnRates(ownRes.data || [])
+    setGroups(groupRes.data || [])
+    setLoading(false)
+  }
+
+  // ── 기준요율 수정 ──────────────────────────────────────────────────
+  async function saveRateCell(rowId: number, field: string, value: string) {
+    const numFields = ['value_min', 'value_max', 'annual_premium']
+    const parsed = numFields.includes(field) ? Number(value.replace(/,/g, '')) : value
+    await supabase.from('insurance_rate_table').update({ [field]: parsed }).eq('id', rowId)
+    setEditingCell(null)
+    loadAll()
+  }
+
+  // ── 자차요율 수정 ──────────────────────────────────────────────────
+  async function saveOwnRate(id: number, field: string, value: string) {
+    const numFields = ['own_vehicle_rate', 'value_min', 'value_max', 'sample_count']
+    const parsed = numFields.includes(field) ? Number(value.replace(/,/g, '')) : value
+    await supabase.from('insurance_own_vehicle_rate').update({ [field]: parsed }).eq('id', id)
+    setEditingCell(null)
+    loadAll()
+  }
+
+  // ── 필터된 정책 ──────────────────────────────────────────────────
+  const filteredPolicies = useMemo(() => {
+    return policies.filter(p => {
+      if (filterOrigin && p.origin !== filterOrigin) return false
+      if (filterFuel && p.fuel_type !== filterFuel) return false
+      return true
+    })
+  }, [policies, filterOrigin, filterFuel])
+
+  // ── 분석 데이터 계산 ─────────────────────────────────────────────
+  const analysisData = useMemo(() => {
+    if (!policies.length) return null
+
+    // 그룹별 통계
+    const groups: Record<string, { records: PolicyRecord[]; avgRate: number; avgTotal: number; avgBase: number }> = {}
+    policies.forEach(p => {
+      const key = `${p.origin}_${p.fuel_type}`
+      if (!groups[key]) groups[key] = { records: [], avgRate: 0, avgTotal: 0, avgBase: 0 }
+      groups[key].records.push(p)
+    })
+
+    Object.entries(groups).forEach(([, g]) => {
+      const recs = g.records
+      g.avgRate = recs.reduce((sum, r) => sum + (r.premium_own_vehicle / r.vehicle_value * 100), 0) / recs.length
+      g.avgTotal = recs.reduce((sum, r) => sum + r.total_premium, 0) / recs.length
+      g.avgBase = recs.reduce((sum, r) => sum + (
+        r.premium_daein1 + r.premium_daein2 + r.premium_daemul +
+        r.premium_self_body + r.premium_uninsured +
+        r.premium_emergency + r.premium_limit_surcharge
+      ), 0) / recs.length
+    })
+
+    // 전체 통계
+    const allRates = policies.map(p => p.premium_own_vehicle / p.vehicle_value * 100)
+    const allTotals = policies.map(p => p.total_premium)
+
+    return {
+      groups,
+      overall: {
+        count: policies.length,
+        avgOwnRate: allRates.reduce((a, b) => a + b, 0) / allRates.length,
+        minOwnRate: Math.min(...allRates),
+        maxOwnRate: Math.max(...allRates),
+        avgTotal: allTotals.reduce((a, b) => a + b, 0) / allTotals.length,
+        minTotal: Math.min(...allTotals),
+        maxTotal: Math.max(...allTotals),
+      }
     }
-  }
+  }, [policies])
 
-  useEffect(() => { fetchData() }, [])
-
-  const handleCellClick = (rowId: number, field: string, value: any) => {
-    setEditingCell({ rowId, field })
-    if (field === 'value_min' || field === 'value_max') {
-      setEditValue(String((value / 10000) || ''))
-    } else {
-      setEditValue(String(value || ''))
-    }
-  }
-
-  const handleCellBlur = async () => {
-    if (!editingCell) return
-    const { rowId, field } = editingCell
-    const row = rows.find(r => r.id === rowId)
-    if (!row) return
-
-    let newValue: any = editValue
-    if (field === 'value_min' || field === 'value_max') newValue = Math.round(parseFloat(editValue) * 10000) || 0
-    else if (field === 'annual_premium') newValue = Math.round(parseFloat(editValue)) || 0
-
-    const oldValue = row[field as keyof InsuranceRow]
-    if (oldValue === newValue) { setEditingCell(null); return }
-
-    try {
-      const { error } = await supabase.from('insurance_rate_table').update({ [field]: newValue }).eq('id', rowId)
-      if (error) throw error
-      setRows(rows.map(r => r.id === rowId ? { ...r, [field]: newValue } : r))
-    } catch (error) {
-      console.error('업데이트 실패:', error)
-    } finally {
-      setEditingCell(null)
-    }
-  }
-
-  const handleAddRow = async () => {
-    try {
-      const newRow = { vehicle_type: '국산 승용', value_min: 10000000, value_max: 20000000, annual_premium: 500000, coverage_desc: '대인무한/대물2억/자손1억/자차', notes: '' }
-      const { data, error } = await supabase.from('insurance_rate_table').insert([newRow]).select()
-      if (error) throw error
-      if (data && data[0]) setRows([...rows, data[0]])
-    } catch (error) {
-      console.error('행 추가 실패:', error)
-    }
-  }
-
-  const handleDeleteRow = async (rowId: number) => {
-    if (!confirm('정말 삭제하시겠습니까?')) return
-    try {
-      const { error } = await supabase.from('insurance_rate_table').delete().eq('id', rowId)
-      if (error) throw error
-      setRows(rows.filter(r => r.id !== rowId))
-    } catch (error) {
-      console.error('삭제 실패:', error)
-    }
-  }
-
-  const formatAmount = (amount: number) => (amount / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 0 }) + '만'
-  const formatPremium = (amount: number) => amount.toLocaleString('ko-KR') + '원'
-
-  const handleSearch = async () => {
-    if (!selectedVehicleType || !vehicleValue) return
-    try {
-      setSearching(true)
-      const vehicleValueWon = Math.round(parseFloat(vehicleValue) * 10000)
-      const response = await fetch('/api/search-pricing-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category: 'insurance', context: { vehicle_type: selectedVehicleType, vehicle_value: vehicleValueWon, insurance_type: '렌터카 영업용 플릿보험' } }),
-      })
-      if (!response.ok) throw new Error('검색 실패')
-      const data: SearchResult = await response.json()
-      setSearchResults(data)
-    } catch (error) {
-      console.error('검색 실패:', error)
-    } finally {
-      setSearching(false)
-    }
-  }
-
-  const getMatchingPremium = () => {
-    if (!selectedVehicleType || !vehicleValue) return null
-    const valueWon = parseFloat(vehicleValue) * 10000
-    return rows.find(r => r.vehicle_type === selectedVehicleType && valueWon >= r.value_min && valueWon <= r.value_max)
-  }
-
-  if (loading) {
-    return <div className="bg-white rounded-2xl shadow-sm p-8 text-center"><p className="text-gray-500">로딩 중...</p></div>
-  }
-
-  const matchedPremium = getMatchingPremium()
+  if (loading) return <div className="text-center py-12 text-steel-400">보험 데이터 로딩 중...</div>
 
   return (
     <div className="space-y-4">
-      {/* 영업용 전용 배너 */}
-      <div className="bg-gradient-to-r from-steel-600 to-steel-800 rounded-2xl p-4 text-white">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-lg">🛡️</span>
-          <h3 className="text-sm font-bold">렌터카 영업용 플릿보험 기준</h3>
-          <span className="ml-auto px-2 py-0.5 bg-white/20 rounded text-[10px] font-semibold">영업용 플릿</span>
-        </div>
-        <p className="text-xs text-white/80 leading-relaxed">
-          렌터카 법인 플릿보험 기준 연간 보험료입니다. 개인보험 대비 30~45% 저렴하며,
-          보유 대수가 많을수록 할인율이 높아집니다. 이 데이터가 렌트가 산출에 직접 반영됩니다.
-        </p>
+      {/* 서브탭 */}
+      <div className="flex gap-1 bg-steel-900 rounded-lg p-1.5">
+        {SUB_TABS.map(tab => (
+          <button key={tab.id} onClick={() => setSubTab(tab.id)}
+            className={`flex-1 py-2.5 px-4 rounded-md text-sm font-bold transition-all ${
+              subTab === tab.id ? 'bg-steel-700 text-white shadow-sm' : 'text-steel-300 hover:text-white'
+            }`}>
+            <span className="mr-1.5">{tab.icon}</span>{tab.label}
+            {tab.id === 'records' && policies.length > 0 && (
+              <span className="ml-1.5 px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-300 text-xs font-bold">{policies.length}</span>
+            )}
+            {tab.id === 'groups' && groups.length > 0 && (
+              <span className="ml-1.5 px-2 py-0.5 rounded-full bg-purple-500/30 text-purple-300 text-xs font-bold">{groups.length}</span>
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* 가이드 */}
-      {showGuide && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm">📋</span>
-              <h3 className="text-xs font-bold text-gray-800">렌터카 영업용 보험 가이드</h3>
-            </div>
-            <button onClick={() => setShowGuide(false)} className="text-xs text-gray-400 hover:text-gray-600">닫기</button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            {/* 기본 담보 구성 */}
-            <div className="bg-steel-50 rounded-lg p-4 border border-steel-100">
-              <p className="text-xs font-bold text-steel-800 mb-2">{FLEET_INSURANCE_GUIDE.coverage.title}</p>
-              <div className="space-y-1.5">
-                {FLEET_INSURANCE_GUIDE.coverage.items.map((item) => (
-                  <div key={item.name} className="flex items-start gap-2 text-xs">
-                    <span className={`mt-0.5 w-4 h-4 rounded-full flex items-center justify-center text-[9px] flex-shrink-0 ${item.required ? 'bg-steel-600 text-white' : 'bg-gray-200 text-gray-500'}`}>
-                      {item.required ? '✓' : '△'}
-                    </span>
-                    <div>
-                      <span className="font-semibold text-gray-800">{item.name}</span>
-                      <span className="text-gray-500 ml-1">{item.desc}</span>
-                    </div>
-                  </div>
-                ))}
+      {/* ━━━━━━━━━━━━ 기준요율표 탭 ━━━━━━━━━━━━ */}
+      {subTab === 'rates' && (
+        <div className="space-y-4">
+          {/* 기본 분담금 기준 */}
+          {basePremiums.length > 0 && (
+            <div className="bg-steel-850 rounded-lg border border-steel-700 overflow-hidden">
+              <div className="px-4 py-3 bg-steel-800 border-b border-steel-700">
+                <h3 className="text-sm font-bold text-white">🏛️ KRMA 공제조합 기본 분담금 (자차 제외)</h3>
+                <p className="text-sm text-steel-300 mt-0.5">실제 청약서 {policies.length}건 분석 기준 — 차량 유형별 거의 고정값</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-steel-800/50 text-steel-200">
+                      <th className="px-3 py-2.5 text-left font-bold">차량유형</th>
+                      <th className="px-3 py-2.5 text-right">대인I</th>
+                      <th className="px-3 py-2.5 text-right">대인II</th>
+                      <th className="px-3 py-2.5 text-right">대물</th>
+                      <th className="px-3 py-2.5 text-right">자기신체</th>
+                      <th className="px-3 py-2.5 text-right">무보험</th>
+                      <th className="px-3 py-2.5 text-right">긴급출동</th>
+                      <th className="px-3 py-2.5 text-right font-bold text-amber-300">기본합계</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {basePremiums.map(bp => (
+                      <tr key={bp.id} className="border-t border-steel-700/50 hover:bg-steel-800/30">
+                        <td className="px-3 py-2.5 font-bold text-white">{bp.vehicle_usage}</td>
+                        <td className="px-3 py-2.5 text-right text-steel-200">{fmt(bp.daein1)}</td>
+                        <td className="px-3 py-2.5 text-right text-steel-200">{fmt(bp.daein2)}</td>
+                        <td className="px-3 py-2.5 text-right text-steel-200">{fmt(bp.daemul)}</td>
+                        <td className="px-3 py-2.5 text-right text-steel-200">{fmt(bp.self_body)}</td>
+                        <td className="px-3 py-2.5 text-right text-steel-200">{fmt(bp.uninsured)}</td>
+                        <td className="px-3 py-2.5 text-right text-steel-200">{fmt(bp.emergency)}</td>
+                        <td className="px-3 py-2.5 text-right font-bold text-amber-300 text-base">{fmtWon(bp.base_total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
+          )}
 
-            {/* 플릿 할인 구조 */}
-            <div className="bg-green-50 rounded-lg p-4 border border-green-100">
-              <p className="text-xs font-bold text-green-800 mb-2">{FLEET_INSURANCE_GUIDE.fleetDiscount.title}</p>
-              <div className="space-y-1.5">
-                {FLEET_INSURANCE_GUIDE.fleetDiscount.tiers.map((tier) => (
-                  <div key={tier.size} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-700">{tier.size}</span>
-                    <div className="text-right">
-                      <span className="font-bold text-green-700">{tier.discount}</span>
-                      <span className="text-gray-400 ml-1 text-[10px]">{tier.note}</span>
-                    </div>
-                  </div>
-                ))}
+          {/* 자차 요율 기준표 */}
+          {ownRates.length > 0 && (
+            <div className="bg-steel-850 rounded-lg border border-steel-700 overflow-hidden">
+              <div className="px-4 py-3 bg-steel-800 border-b border-steel-700">
+                <h3 className="text-sm font-bold text-white">🚗 자차(자기차량공제) 요율표</h3>
+                <p className="text-sm text-steel-300 mt-0.5">원산지 × 연료유형 × 차량가액 구간별 — 보험료의 핵심 변수 (클릭하여 수정)</p>
               </div>
-              <p className="text-[10px] text-gray-500 mt-2 pt-2 border-t border-green-200">
-                ※ 현재 기준표는 중소 렌터카(50~200대) 플릿 기준으로 설정되어 있습니다
-              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-steel-800/50 text-steel-200">
+                      <th className="px-3 py-2.5 text-left font-bold">원산지</th>
+                      <th className="px-3 py-2.5 text-left font-bold">연료</th>
+                      <th className="px-3 py-2.5 text-left font-bold">차종</th>
+                      <th className="px-3 py-2.5 text-right font-bold">차량가 하한</th>
+                      <th className="px-3 py-2.5 text-right font-bold">차량가 상한</th>
+                      <th className="px-3 py-2.5 text-right font-bold text-blue-300">자차요율(%)</th>
+                      <th className="px-3 py-2.5 text-center font-bold">샘플수</th>
+                      <th className="px-3 py-2.5 text-left font-bold">비고</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ownRates.map(r => {
+                      const hasData = r.sample_count > 0
+                      return (
+                        <tr key={r.id} className={`border-t border-steel-700/50 hover:bg-steel-800/30 ${!hasData ? 'opacity-50' : ''}`}>
+                          <td className="px-3 py-2.5">
+                            <span className={`px-2 py-1 rounded text-sm font-bold ${
+                              r.origin === '수입' ? 'bg-purple-500/20 text-purple-300' : 'bg-green-500/20 text-green-300'
+                            }`}>{r.origin}</span>
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className={`px-2 py-1 rounded text-sm font-bold ${
+                              r.fuel_type === '전기' ? 'bg-blue-500/20 text-blue-300' :
+                              r.fuel_type === '하이브리드' ? 'bg-teal-500/20 text-teal-300' :
+                              r.fuel_type === '디젤' ? 'bg-orange-500/20 text-orange-300' :
+                              'bg-steel-600/30 text-steel-200'
+                            }`}>{r.fuel_type}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-steel-200">{r.vehicle_class}</td>
+                          <td className="px-3 py-2.5 text-right text-steel-200">{fmtMan(r.value_min)}</td>
+                          <td className="px-3 py-2.5 text-right text-steel-200">{r.value_max >= 900000000 ? '∞' : fmtMan(r.value_max)}</td>
+                          <td className="px-3 py-2.5 text-right">
+                            {editingCell?.rowId === r.id && editingCell?.field === 'own_vehicle_rate' ? (
+                              <input type="number" step="0.01" value={editValue}
+                                onChange={e => setEditValue(e.target.value)}
+                                onBlur={() => saveOwnRate(r.id, 'own_vehicle_rate', editValue)}
+                                onKeyDown={e => e.key === 'Enter' && saveOwnRate(r.id, 'own_vehicle_rate', editValue)}
+                                className="w-20 bg-steel-700 border border-blue-500 rounded px-2 py-1 text-right text-sm text-white" autoFocus />
+                            ) : (
+                              <span className="font-bold text-blue-300 text-base cursor-pointer hover:underline"
+                                onClick={() => { setEditingCell({ rowId: r.id, field: 'own_vehicle_rate' }); setEditValue(String(r.own_vehicle_rate)) }}>
+                                {fmtPct(r.own_vehicle_rate, 3)}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-center">
+                            <span className={`px-2 py-1 rounded text-sm font-bold ${
+                              hasData ? 'bg-green-500/20 text-green-300' : 'bg-steel-700 text-steel-400'
+                            }`}>{r.sample_count}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-steel-300 max-w-[200px] truncate">{r.notes}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="px-4 py-2.5 bg-steel-800/30 border-t border-steel-700">
+                <p className="text-sm text-steel-200">
+                  💡 총 보험료 = 기본분담금(~92만) + 차량가액 × 자차요율(%) | 샘플수 0 = 추정값 (실데이터 수집 필요)
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* 업계 벤치마크 */}
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-100">
-            <p className="text-xs font-semibold text-gray-600 mb-3">🏢 렌터카사 규모별 보험 기준</p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {INDUSTRY_BENCHMARKS.map((b, i) => (
-                <div key={i} className="bg-white rounded-lg p-3 border border-gray-100 text-xs">
-                  <p className="font-bold text-gray-700 mb-1.5">{b.company}</p>
-                  <p className="text-gray-500 mb-1">담보: {b.coverage}</p>
-                  <p className="text-gray-500 mb-1">면책: {b.selfInsurance}</p>
-                  <p className="text-gray-400 text-[10px]">{b.note}</p>
-                </div>
-              ))}
+          {/* 기존 보험료 기준표 (호환용) */}
+          <div className="bg-steel-850 rounded-lg border border-steel-700 overflow-hidden">
+            <div className="px-4 py-3 bg-steel-800 border-b border-steel-700">
+              <h3 className="text-sm font-bold text-white">📋 차종별 연간보험료 기준표</h3>
+              <p className="text-sm text-steel-300 mt-0.5">실데이터 기반 보정 완료 — 클릭하여 수정 가능</p>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 영업용 vs 개인 비교 (접이식) */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100">
-        <button
-          onClick={() => setShowComparison(!showComparison)}
-          className="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition rounded-2xl"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm">📊</span>
-            <span className="text-xs font-bold text-gray-800">렌터카 플릿보험 vs 개인보험 비교</span>
-          </div>
-          <span className="text-gray-400 text-xs">{showComparison ? '접기 ▲' : '펼치기 ▼'}</span>
-        </button>
-        {showComparison && (
-          <div className="px-4 pb-4">
             <div className="overflow-x-auto">
-              <table className="text-xs">
+              <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b-2 border-steel-200 bg-steel-50">
-                    <th className="text-left py-2 px-3 font-bold text-steel-800">항목</th>
-                    <th className="text-center py-2 px-3 font-bold text-steel-700">렌터카 플릿보험</th>
-                    <th className="text-center py-2 px-3 font-bold text-gray-400">개인보험 (참고)</th>
+                  <tr className="bg-steel-800/50 text-steel-200">
+                    <th className="px-3 py-2.5 text-left font-bold">차종</th>
+                    <th className="px-3 py-2.5 text-right font-bold">차량가 하한</th>
+                    <th className="px-3 py-2.5 text-right font-bold">차량가 상한</th>
+                    <th className="px-3 py-2.5 text-right font-bold text-amber-300">연간보험료</th>
+                    <th className="px-3 py-2.5 text-left font-bold">담보</th>
+                    <th className="px-3 py-2.5 text-left font-bold">비고</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {INSURANCE_COMPARISON.map((row, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="py-2 px-3 font-semibold text-gray-800">{row.item}</td>
-                      <td className="py-2 px-3 text-center text-steel-700 font-bold">{row.fleet}</td>
-                      <td className="py-2 px-3 text-center text-gray-400">{row.personal}</td>
+                <tbody>
+                  {rateRows.map(row => (
+                    <tr key={row.id} className="border-t border-steel-700/50 hover:bg-steel-800/30">
+                      <td className="px-3 py-2.5 font-bold text-white">{row.vehicle_type}</td>
+                      <td className="px-3 py-2.5 text-right text-steel-200">{fmtMan(row.value_min)}</td>
+                      <td className="px-3 py-2.5 text-right text-steel-200">{row.value_max >= 900000000 ? '∞' : fmtMan(row.value_max)}</td>
+                      <td className="px-3 py-2.5 text-right">
+                        {editingCell?.rowId === row.id && editingCell?.field === 'annual_premium' ? (
+                          <input type="text" value={editValue}
+                            onChange={e => setEditValue(e.target.value)}
+                            onBlur={() => saveRateCell(row.id, 'annual_premium', editValue)}
+                            onKeyDown={e => e.key === 'Enter' && saveRateCell(row.id, 'annual_premium', editValue)}
+                            className="w-28 bg-steel-700 border border-amber-500 rounded px-2 py-1 text-right text-sm text-white" autoFocus />
+                        ) : (
+                          <span className="font-bold text-amber-300 text-base cursor-pointer hover:underline"
+                            onClick={() => { setEditingCell({ rowId: row.id, field: 'annual_premium' }); setEditValue(String(row.annual_premium)) }}>
+                            {fmtWon(row.annual_premium)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-steel-300">{row.coverage_desc}</td>
+                      <td className="px-3 py-2.5 text-steel-300 max-w-[200px] truncate">{row.notes}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
-        )}
-      </div>
-
-      {/* 보험료 기준표 (편집) */}
-      <div className="bg-white rounded-2xl shadow-sm overflow-visible border border-gray-100">
-        <div className="p-5 border-b border-gray-100">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">영업용 플릿보험료 기준표 (편집 가능)</h3>
-              <p className="text-xs text-gray-400 mt-0.5">차종·차량가액별 연간 플릿보험료 — 렌트가 산출에 직접 반영</p>
-            </div>
-            <div className="flex gap-2">
-              {!showGuide && (
-                <button onClick={() => setShowGuide(true)} className="px-3 py-1.5 text-xs text-steel-600 bg-steel-50 rounded-lg hover:bg-steel-100">가이드</button>
-              )}
-              <button onClick={() => setShowAIPanel(!showAIPanel)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${showAIPanel ? 'bg-steel-900 text-white' : 'text-steel-600 bg-steel-100 hover:bg-steel-200'}`}>
-                {showAIPanel ? '🔍 AI 검증 닫기' : '🔍 AI 검증'}
-              </button>
-              <button onClick={handleAddRow} className="px-3 py-1.5 bg-steel-600 text-white text-xs font-semibold rounded-lg hover:bg-steel-700">+ 행 추가</button>
-            </div>
-          </div>
         </div>
+      )}
 
-        <div className="overflow-x-auto">
-          <table className="text-xs">
-            <thead className="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">차종</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">하한(만)</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">상한(만)</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">연보험료(플릿)</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">담보 구성</th>
-                <th className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap">비고</th>
-                <th className="px-3 py-2 text-center font-semibold text-gray-600 whitespace-nowrap">삭제</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {rows.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-10 text-center text-gray-400">데이터가 없습니다.</td></tr>
-              ) : (
-                rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-steel-50/30 transition-colors">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {editingCell?.rowId === row.id && editingCell?.field === 'vehicle_type' ? (
-                        <select value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur} autoFocus
-                          className="w-full px-2 py-1 border border-steel-400 rounded text-xs focus:outline-none">
-                          {VEHICLE_TYPES.map((type) => (<option key={type} value={type}>{type}</option>))}
-                        </select>
-                      ) : (
-                        <span onClick={() => handleCellClick(row.id, 'vehicle_type', row.vehicle_type)}
-                          className="cursor-pointer hover:bg-steel-50 px-2 py-1 rounded inline-block font-medium">{row.vehicle_type}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      {editingCell?.rowId === row.id && editingCell?.field === 'value_min' ? (
-                        <input type="number" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur} autoFocus
-                          className="w-20 px-2 py-1 border border-steel-400 rounded text-xs focus:outline-none text-center" placeholder="만원" />
-                      ) : (
-                        <span onClick={() => handleCellClick(row.id, 'value_min', row.value_min)}
-                          className="cursor-pointer hover:bg-steel-50 px-2 py-1 rounded inline-block text-gray-700">{formatAmount(row.value_min)}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      {editingCell?.rowId === row.id && editingCell?.field === 'value_max' ? (
-                        <input type="number" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur} autoFocus
-                          className="w-20 px-2 py-1 border border-steel-400 rounded text-xs focus:outline-none text-center" placeholder="만원" />
-                      ) : (
-                        <span onClick={() => handleCellClick(row.id, 'value_max', row.value_max)}
-                          className="cursor-pointer hover:bg-steel-50 px-2 py-1 rounded inline-block text-gray-700">{formatAmount(row.value_max)}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      {editingCell?.rowId === row.id && editingCell?.field === 'annual_premium' ? (
-                        <input type="number" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur} autoFocus
-                          className="w-24 px-2 py-1 border border-steel-400 rounded text-xs focus:outline-none text-center" />
-                      ) : (
-                        <span onClick={() => handleCellClick(row.id, 'annual_premium', row.annual_premium)}
-                          className="cursor-pointer hover:bg-steel-50 px-2 py-1 rounded inline-block font-bold text-steel-700">{formatPremium(row.annual_premium)}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {editingCell?.rowId === row.id && editingCell?.field === 'coverage_desc' ? (
-                        <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur} autoFocus
-                          className="w-full px-2 py-1 border border-steel-400 rounded text-xs focus:outline-none" />
-                      ) : (
-                        <span onClick={() => handleCellClick(row.id, 'coverage_desc', row.coverage_desc)}
-                          className="cursor-pointer hover:bg-steel-50 px-2 py-1 rounded inline-block text-gray-600">{row.coverage_desc || '—'}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {editingCell?.rowId === row.id && editingCell?.field === 'notes' ? (
-                        <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} onBlur={handleCellBlur} autoFocus
-                          className="w-full px-2 py-1 border border-steel-400 rounded text-xs focus:outline-none" />
-                      ) : (
-                        <span onClick={() => handleCellClick(row.id, 'notes', row.notes)}
-                          className="cursor-pointer hover:bg-steel-50 px-2 py-1 rounded inline-block text-gray-500">{row.notes || '—'}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <button onClick={() => handleDeleteRow(row.id)} className="text-red-400 hover:text-red-600 text-xs">삭제</button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* ━━━━━━━━━━━━ 그룹 관리 탭 ━━━━━━━━━━━━ */}
+      {subTab === 'groups' && (
+        <div className="space-y-4">
+          {/* 그룹 헤더 */}
+          <div className="bg-steel-850 rounded-lg border border-steel-700 overflow-hidden">
+            <div className="px-4 py-3 bg-steel-800 border-b border-steel-700 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-white">🏷️ 보험 차량 그룹 관리</h3>
+                <p className="text-sm text-steel-300 mt-0.5">원산지 × 연료유형 × 모델별 그룹으로 보험료 통계를 관리합니다</p>
+              </div>
+              <span className="text-sm text-steel-200 font-bold">{groups.length}개 그룹 · {policies.length}건 정책</span>
+            </div>
 
-      {/* AI 검증 패널 */}
-      {showAIPanel && (
-        <div className="bg-steel-900 rounded-2xl shadow-sm p-5 text-white">
-          <h3 className="text-sm font-bold mb-1">렌터카 영업용 보험료 검증</h3>
-          <p className="text-[10px] text-steel-400 mb-4">영업용 플릿보험 시장가를 조회하여 기준표 적정성을 확인합니다</p>
+            {groups.length === 0 ? (
+              <div className="text-center py-8 text-steel-200 text-sm">
+                등록된 그룹이 없습니다. SQL 시드 데이터를 먼저 실행해주세요.
+              </div>
+            ) : (
+              <div className="divide-y divide-steel-700/50">
+                {groups.map(g => {
+                  const groupPolicies = policies.filter(p => p.group_id === g.id)
+                  const isExpanded = expandedGroup === g.id
+                  const liveAvgRate = groupPolicies.length > 0
+                    ? groupPolicies.reduce((sum, p) => sum + (p.premium_own_vehicle / p.vehicle_value * 100), 0) / groupPolicies.length
+                    : g.avg_own_rate
+                  const liveAvgPremium = groupPolicies.length > 0
+                    ? groupPolicies.reduce((sum, p) => sum + p.total_premium, 0) / groupPolicies.length
+                    : g.avg_total_premium
+                  const liveAvgValue = groupPolicies.length > 0
+                    ? groupPolicies.reduce((sum, p) => sum + p.vehicle_value, 0) / groupPolicies.length
+                    : g.avg_vehicle_value
 
-          <div className="mb-3">
-            <label className="text-[10px] font-semibold text-steel-300 block mb-1.5">차종</label>
-            <select value={selectedVehicleType} onChange={(e) => setSelectedVehicleType(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg bg-steel-800 border border-steel-700 text-white text-xs focus:outline-none focus:border-steel-500">
-              <option value="">선택하세요</option>
-              {VEHICLE_TYPES.map((type) => (<option key={type} value={type}>{type}</option>))}
-            </select>
+                  return (
+                    <div key={g.id}>
+                      <button
+                        onClick={() => setExpandedGroup(isExpanded ? null : g.id)}
+                        className="w-full px-4 py-3 flex items-center gap-3 hover:bg-steel-800/50 transition-colors text-left"
+                      >
+                        <div className="w-3 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: g.color || '#3b82f6' }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-bold text-white">{g.group_name}</span>
+                            <span className="text-sm px-2 py-0.5 rounded bg-steel-700 text-steel-200">
+                              {g.origin} · {g.fuel_type}
+                            </span>
+                            {g.brand && (
+                              <span className="text-sm text-steel-300">{g.brand} {g.model}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-steel-300">
+                            <span>차급: {g.vehicle_class || '승용'}</span>
+                            {g.notes && <span className="truncate max-w-[300px]">{g.notes}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-5 text-right flex-shrink-0">
+                          <div>
+                            <p className="text-xs text-steel-300">자차요율</p>
+                            <p className="text-base font-bold text-amber-300">{fmtPct(liveAvgRate)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-steel-300">평균보험료</p>
+                            <p className="text-base font-bold text-white">{fmtWon(Math.round(liveAvgPremium))}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-steel-300">평균차량가</p>
+                            <p className="text-base font-bold text-steel-100">{fmtMan(liveAvgValue)}</p>
+                          </div>
+                          <div className="w-10 text-center">
+                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-steel-700 text-sm font-bold text-white">
+                              {groupPolicies.length}
+                            </span>
+                            <p className="text-xs text-steel-300 mt-0.5">건</p>
+                          </div>
+                          <span className={`text-steel-200 text-sm transition-transform ${isExpanded ? 'rotate-180' : ''}`}>▼</span>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="bg-steel-900/50 px-4 py-3 border-t border-steel-700/50">
+                          {groupPolicies.length === 0 ? (
+                            <p className="text-sm text-steel-300 text-center py-3">이 그룹에 연결된 정책 레코드가 없습니다</p>
+                          ) : (
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="text-steel-200 border-b border-steel-700/50">
+                                  <th className="text-left py-2 px-2 font-bold">차량명</th>
+                                  <th className="text-left py-2 px-2 font-bold">차량번호</th>
+                                  <th className="text-right py-2 px-2 font-bold">차량가</th>
+                                  <th className="text-right py-2 px-2 font-bold">자차보험료</th>
+                                  <th className="text-right py-2 px-2 font-bold">자차요율</th>
+                                  <th className="text-right py-2 px-2 font-bold">총보험료</th>
+                                  <th className="text-left py-2 px-2 font-bold">계약기간</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {groupPolicies.map(p => (
+                                  <tr key={p.id} className="border-b border-steel-800/50 hover:bg-steel-800/30">
+                                    <td className="py-2 px-2 font-bold text-white">{p.vehicle_name}</td>
+                                    <td className="py-2 px-2 text-steel-200">{p.vehicle_number || '-'}</td>
+                                    <td className="py-2 px-2 text-right text-steel-200">{fmtMan(p.vehicle_value)}</td>
+                                    <td className="py-2 px-2 text-right text-amber-300">{fmtWon(p.premium_own_vehicle)}</td>
+                                    <td className="py-2 px-2 text-right font-bold text-amber-300">
+                                      {(p.premium_own_vehicle / p.vehicle_value * 100).toFixed(2)}%
+                                    </td>
+                                    <td className="py-2 px-2 text-right font-bold text-white">{fmtWon(p.total_premium)}</td>
+                                    <td className="py-2 px-2 text-steel-300">
+                                      {p.contract_start?.slice(0, 10)} ~ {p.contract_end?.slice(0, 10)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                          {groupPolicies.length > 1 && (
+                            <div className="flex gap-4 mt-2 pt-2 border-t border-steel-700/30 text-sm">
+                              <span className="text-steel-300">그룹 내 요율 범위:</span>
+                              <span className="text-amber-300 font-bold">
+                                {Math.min(...groupPolicies.map(p => p.premium_own_vehicle / p.vehicle_value * 100)).toFixed(2)}%
+                                ~ {Math.max(...groupPolicies.map(p => p.premium_own_vehicle / p.vehicle_value * 100)).toFixed(2)}%
+                              </span>
+                              <span className="text-steel-300 ml-2">보험료 범위:</span>
+                              <span className="text-white font-bold">
+                                {fmtWon(Math.min(...groupPolicies.map(p => p.total_premium)))}
+                                ~ {fmtWon(Math.max(...groupPolicies.map(p => p.total_premium)))}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
-          <div className="mb-3">
-            <label className="text-[10px] font-semibold text-steel-300 block mb-1.5">차량가 (만원)</label>
-            <input type="number" value={vehicleValue} onChange={(e) => setVehicleValue(e.target.value)} placeholder="예: 3000"
-              className="w-full px-3 py-2 rounded-lg bg-steel-800 border border-steel-700 text-white text-xs focus:outline-none focus:border-steel-500 placeholder-steel-500" />
-          </div>
 
-          <button onClick={handleSearch} disabled={searching || !selectedVehicleType || !vehicleValue}
-            className="w-full px-4 py-2.5 bg-steel-600 text-white font-semibold text-xs rounded-lg hover:bg-steel-500 disabled:bg-steel-800 disabled:cursor-not-allowed transition-colors mb-4">
-            {searching ? '보험료 조회 중...' : '🔍 렌터카 플릿보험료 검증'}
-          </button>
+          {/* 미배정 정책 레코드 */}
+          {(() => {
+            const unassigned = policies.filter(p => !p.group_id)
+            if (unassigned.length === 0) return null
+            return (
+              <div className="bg-steel-850 rounded-lg border border-amber-500/30 overflow-hidden">
+                <div className="px-4 py-3 bg-amber-500/10 border-b border-amber-500/20">
+                  <h3 className="text-sm font-bold text-amber-300">⚠️ 미배정 정책 레코드 ({unassigned.length}건)</h3>
+                  <p className="text-sm text-steel-300 mt-0.5">아래 정책 레코드는 그룹이 지정되지 않았습니다</p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-steel-200 border-b border-steel-700">
+                        <th className="text-left py-2 px-3 font-bold">차량명</th>
+                        <th className="text-left py-2 px-3 font-bold">원산지</th>
+                        <th className="text-left py-2 px-3 font-bold">연료</th>
+                        <th className="text-right py-2 px-3 font-bold">차량가</th>
+                        <th className="text-right py-2 px-3 font-bold">총보험료</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unassigned.map(p => (
+                        <tr key={p.id} className="border-b border-steel-800/50">
+                          <td className="py-2 px-3 font-bold text-white">{p.vehicle_name}</td>
+                          <td className="py-2 px-3 text-steel-200">{p.origin}</td>
+                          <td className="py-2 px-3 text-steel-200">{p.fuel_type}</td>
+                          <td className="py-2 px-3 text-right text-steel-200">{fmtMan(p.vehicle_value)}</td>
+                          <td className="py-2 px-3 text-right font-bold text-white">{fmtWon(p.total_premium)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          })()}
 
-          {matchedPremium && (
-            <div className="bg-steel-800 rounded-lg p-3 mb-3 border border-steel-700">
-              <p className="text-[10px] font-semibold text-emerald-400 mb-1.5">현재 기준표 매칭</p>
-              <div className="text-xs text-steel-300 space-y-1">
-                <div className="flex justify-between">
-                  <span>차종</span>
-                  <span className="font-semibold text-white">{matchedPremium.vehicle_type}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>차량가 구간</span>
-                  <span className="text-white">{formatAmount(matchedPremium.value_min)} ~ {formatAmount(matchedPremium.value_max)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>연 보험료 (플릿)</span>
-                  <span className="font-bold text-steel-300">{formatPremium(matchedPremium.annual_premium)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>월 환산</span>
-                  <span className="font-bold text-steel-300">{formatPremium(Math.round(matchedPremium.annual_premium / 12))}/월</span>
-                </div>
+          {/* 그룹별 요약 비교 차트 */}
+          {groups.length > 0 && (
+            <div className="bg-steel-850 rounded-lg border border-steel-700 overflow-hidden">
+              <div className="px-4 py-3 bg-steel-800 border-b border-steel-700">
+                <h3 className="text-sm font-bold text-white">📊 그룹별 자차요율 비교</h3>
+              </div>
+              <div className="p-4 space-y-3">
+                {groups.map(g => {
+                  const groupPolicies = policies.filter(p => p.group_id === g.id)
+                  const rate = groupPolicies.length > 0
+                    ? groupPolicies.reduce((sum, p) => sum + (p.premium_own_vehicle / p.vehicle_value * 100), 0) / groupPolicies.length
+                    : g.avg_own_rate
+                  const maxRate = 3.0
+                  const barW = Math.min(100, (rate / maxRate) * 100)
+                  return (
+                    <div key={g.id} className="flex items-center gap-3">
+                      <span className="text-sm text-steel-200 w-32 truncate text-right font-medium">{g.group_name}</span>
+                      <div className="flex-1 h-7 bg-steel-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full flex items-center justify-end px-3 text-sm font-bold text-white transition-all"
+                          style={{ width: `${barW}%`, backgroundColor: g.color || '#3b82f6' }}
+                        >
+                          {rate.toFixed(2)}%
+                        </div>
+                      </div>
+                      <span className="text-sm text-steel-200 w-8 text-right font-bold">{groupPolicies.length}건</span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
+        </div>
+      )}
 
-          {searchResults && (
-            <div className="bg-steel-800 rounded-lg p-3 border border-steel-700">
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-[10px] font-semibold text-steel-300">검증 결과</h4>
-                <span className="text-[9px] text-steel-500">{searchResults.searched_at}</span>
-              </div>
-              <div className="text-xs text-steel-300 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
-                {searchResults.results}
-              </div>
-              {searchResults.sources.length > 0 && (
-                <div className="mt-2 pt-2 border-t border-steel-700">
-                  <h4 className="text-[10px] font-semibold text-steel-400 mb-1">출처</h4>
-                  {searchResults.sources.map((source, idx) => (
-                    <a key={idx} href={source} target="_blank" rel="noopener noreferrer"
-                      className="text-steel-400 hover:text-steel-300 text-[10px] break-all underline block leading-snug">
-                      {source.length > 60 ? source.substring(0, 60) + '...' : source}
-                    </a>
-                  ))}
-                </div>
-              )}
+      {/* ━━━━━━━━━━━━ 실데이터 기록 탭 ━━━━━━━━━━━━ */}
+      {subTab === 'records' && (
+        <div className="space-y-4">
+          {/* 필터 */}
+          <div className="flex gap-3 items-center">
+            <select value={filterOrigin} onChange={e => setFilterOrigin(e.target.value)}
+              className="bg-steel-800 border border-steel-700 rounded-lg px-3 py-2 text-sm text-white font-medium">
+              <option value="">전체 원산지</option>
+              <option value="국산">국산</option>
+              <option value="수입">수입</option>
+            </select>
+            <select value={filterFuel} onChange={e => setFilterFuel(e.target.value)}
+              className="bg-steel-800 border border-steel-700 rounded-lg px-3 py-2 text-sm text-white font-medium">
+              <option value="">전체 연료</option>
+              <option value="전기">전기</option>
+              <option value="하이브리드">하이브리드</option>
+              <option value="가솔린">가솔린</option>
+              <option value="디젤">디젤</option>
+            </select>
+            <span className="text-sm text-steel-200 ml-auto font-bold">{filteredPolicies.length}건</span>
+          </div>
+
+          {/* 실데이터 카드 목록 */}
+          {filteredPolicies.length === 0 ? (
+            <div className="text-center py-8 text-steel-200 text-sm">
+              등록된 보험 데이터가 없습니다.<br/>
+              <span className="text-sm text-steel-300">보험 등록 페이지에서 청약서를 등록하면 자동으로 누적됩니다.</span>
             </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredPolicies.map(p => {
+                const basePremium = p.premium_daein1 + p.premium_daein2 + p.premium_daemul +
+                  p.premium_self_body + p.premium_uninsured + p.premium_emergency + p.premium_limit_surcharge
+                const ownRate = p.vehicle_value > 0 ? (p.premium_own_vehicle / p.vehicle_value * 100) : 0
+                const premiumRatio = p.vehicle_value > 0 ? (p.total_premium / p.vehicle_value * 100) : 0
+
+                return (
+                  <div key={p.id} className="bg-steel-850 rounded-lg border border-steel-700 overflow-hidden">
+                    {/* 헤더 */}
+                    <div className="px-4 py-2.5 bg-steel-800 flex items-center gap-3">
+                      <span className="font-bold text-base text-white">{p.vehicle_name}</span>
+                      <span className={`px-2 py-1 rounded text-sm font-bold ${
+                        p.origin === '수입' ? 'bg-purple-500/20 text-purple-300' : 'bg-green-500/20 text-green-300'
+                      }`}>{p.origin}</span>
+                      <span className={`px-2 py-1 rounded text-sm font-bold ${
+                        p.fuel_type === '전기' ? 'bg-blue-500/20 text-blue-300' :
+                        p.fuel_type === '하이브리드' ? 'bg-teal-500/20 text-teal-300' :
+                        'bg-steel-600/30 text-steel-200'
+                      }`}>{p.fuel_type}</span>
+                      <span className="text-sm text-steel-200">{p.vehicle_category}</span>
+                      <span className="text-sm text-steel-300 ml-auto">{p.insurer} | {p.policy_number}</span>
+                    </div>
+
+                    {/* 주요 수치 */}
+                    <div className="grid grid-cols-5 gap-3 px-4 py-3">
+                      <div className="text-center">
+                        <div className="text-sm text-steel-300">차량가액</div>
+                        <div className="text-base font-bold text-white">{fmtMan(p.vehicle_value)}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-sm text-steel-300">기본분담금</div>
+                        <div className="text-base font-bold text-steel-100">{fmtMan(basePremium)}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-sm text-steel-300">자차분담금</div>
+                        <div className="text-base font-bold text-blue-300">{fmtMan(p.premium_own_vehicle)}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-sm text-steel-300">자차요율</div>
+                        <div className="text-base font-bold text-blue-300">{fmtPct(ownRate, 2)}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-sm text-steel-300">총분담금</div>
+                        <div className="text-base font-bold text-amber-300">{fmtMan(p.total_premium)}</div>
+                      </div>
+                    </div>
+
+                    {/* 담보별 상세 */}
+                    <div className="px-4 py-2 bg-steel-800/30 border-t border-steel-700 flex flex-wrap gap-x-5 gap-y-1 text-sm text-steel-200">
+                      <span>대인I: {fmt(p.premium_daein1)}</span>
+                      <span>대인II: {fmt(p.premium_daein2)}</span>
+                      <span>대물: {fmt(p.premium_daemul)}</span>
+                      <span>자기신체: {fmt(p.premium_self_body)}</span>
+                      <span>무보험: {fmt(p.premium_uninsured)}</span>
+                      <span>면책: 차대차{fmtMan(p.own_vehicle_deductible_v2v)}/기타{fmtMan(p.own_vehicle_deductible_other)}</span>
+                      <span>등급: {p.discount_grade}({p.discount_rate}%)</span>
+                      {p.special_surcharges?.length > 0 && (
+                        <span className="text-orange-300 font-bold">{p.special_surcharges.join(', ')}</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ━━━━━━━━━━━━ 요율 분석 탭 ━━━━━━━━━━━━ */}
+      {subTab === 'analysis' && (
+        <div className="space-y-4">
+          {!analysisData ? (
+            <div className="text-center py-8 text-steel-200 text-base">분석할 실데이터가 없습니다.</div>
+          ) : (
+            <>
+              {/* 전체 통계 */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="bg-steel-850 rounded-lg border border-steel-700 p-4 text-center">
+                  <div className="text-sm text-steel-300">등록 차량</div>
+                  <div className="text-3xl font-black text-white">{analysisData.overall.count}대</div>
+                </div>
+                <div className="bg-steel-850 rounded-lg border border-steel-700 p-4 text-center">
+                  <div className="text-sm text-steel-300">평균 자차요율</div>
+                  <div className="text-3xl font-black text-blue-300">{fmtPct(analysisData.overall.avgOwnRate)}</div>
+                  <div className="text-sm text-steel-200 mt-1">{fmtPct(analysisData.overall.minOwnRate)} ~ {fmtPct(analysisData.overall.maxOwnRate)}</div>
+                </div>
+                <div className="bg-steel-850 rounded-lg border border-steel-700 p-4 text-center">
+                  <div className="text-sm text-steel-300">평균 총보험료</div>
+                  <div className="text-3xl font-black text-amber-300">{fmtMan(analysisData.overall.avgTotal)}</div>
+                  <div className="text-sm text-steel-200 mt-1">{fmtMan(analysisData.overall.minTotal)} ~ {fmtMan(analysisData.overall.maxTotal)}</div>
+                </div>
+              </div>
+
+              {/* 그룹별 분석 */}
+              <div className="bg-steel-850 rounded-lg border border-steel-700 overflow-hidden">
+                <div className="px-4 py-3 bg-steel-800 border-b border-steel-700">
+                  <h3 className="text-sm font-bold text-white">📊 원산지 × 연료유형별 분석</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-steel-800/50 text-steel-200">
+                        <th className="px-3 py-2.5 text-left font-bold">원산지</th>
+                        <th className="px-3 py-2.5 text-left font-bold">연료</th>
+                        <th className="px-3 py-2.5 text-center font-bold">건수</th>
+                        <th className="px-3 py-2.5 text-right font-bold">평균 자차요율</th>
+                        <th className="px-3 py-2.5 text-right font-bold">평균 기본분담금</th>
+                        <th className="px-3 py-2.5 text-right font-bold">평균 총보험료</th>
+                        <th className="px-3 py-2.5 text-left font-bold">차량 목록</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(analysisData.groups).map(([key, g]) => {
+                        const [origin, fuel] = key.split('_')
+                        return (
+                          <tr key={key} className="border-t border-steel-700/50 hover:bg-steel-800/30">
+                            <td className="px-3 py-2.5">
+                              <span className={`px-2 py-1 rounded text-sm font-bold ${
+                                origin === '수입' ? 'bg-purple-500/20 text-purple-300' : 'bg-green-500/20 text-green-300'
+                              }`}>{origin}</span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className={`px-2 py-1 rounded text-sm font-bold ${
+                                fuel === '전기' ? 'bg-blue-500/20 text-blue-300' :
+                                fuel === '하이브리드' ? 'bg-teal-500/20 text-teal-300' :
+                                'bg-steel-600/30 text-steel-200'
+                              }`}>{fuel}</span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center font-bold text-white text-base">{g.records.length}</td>
+                            <td className="px-3 py-2.5 text-right font-bold text-blue-300 text-base">{fmtPct(g.avgRate)}</td>
+                            <td className="px-3 py-2.5 text-right text-steel-200">{fmtWon(Math.round(g.avgBase))}</td>
+                            <td className="px-3 py-2.5 text-right font-bold text-amber-300 text-base">{fmtWon(Math.round(g.avgTotal))}</td>
+                            <td className="px-3 py-2.5 text-steel-200">
+                              {g.records.map(r => r.vehicle_name).join(', ')}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 차량별 자차요율 비교 차트 */}
+              <div className="bg-steel-850 rounded-lg border border-steel-700 overflow-hidden">
+                <div className="px-4 py-3 bg-steel-800 border-b border-steel-700">
+                  <h3 className="text-sm font-bold text-white">📈 차량별 자차요율 비교</h3>
+                </div>
+                <div className="p-4 space-y-3">
+                  {policies.sort((a, b) => {
+                    const rA = a.premium_own_vehicle / a.vehicle_value * 100
+                    const rB = b.premium_own_vehicle / b.vehicle_value * 100
+                    return rB - rA
+                  }).map(p => {
+                    const rate = p.vehicle_value > 0 ? (p.premium_own_vehicle / p.vehicle_value * 100) : 0
+                    const maxRate = 2.5
+                    const pct = Math.min(100, (rate / maxRate) * 100)
+                    return (
+                      <div key={p.id} className="flex items-center gap-3">
+                        <div className="w-40 text-sm text-steel-200 truncate text-right font-medium">{p.vehicle_name}</div>
+                        <div className="flex-1 bg-steel-800 rounded-full h-6 relative overflow-hidden">
+                          <div className={`h-full rounded-full ${
+                            p.origin === '수입' ? 'bg-purple-500/60' : 'bg-blue-500/60'
+                          }`} style={{ width: `${pct}%` }} />
+                          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-white">
+                            {fmtPct(rate)} ({fmtMan(p.vehicle_value)})
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* 인사이트 카드 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                  <h4 className="text-sm font-bold text-blue-300 mb-2">🔍 핵심 발견</h4>
+                  <ul className="text-sm text-steel-200 space-y-1.5">
+                    <li>• 기본분담금(대인/대물 등)은 차량유형별 거의 고정 (~92만원)</li>
+                    <li>• 보험료 차이의 대부분은 <b className="text-blue-300">자차요율</b>에서 발생</li>
+                    <li>• 수입 전기차(테슬라) 자차요율: 2.16~2.18% (외제차 할증)</li>
+                    <li>• 국산 전기차 자차요율: 1.79~1.96%</li>
+                  </ul>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                  <h4 className="text-sm font-bold text-amber-300 mb-2">📌 데이터 필요 영역</h4>
+                  <ul className="text-sm text-steel-200 space-y-1.5">
+                    {ownRates.filter(r => r.sample_count === 0).length > 0 && (
+                      <li>• 추정값(샘플0) 항목: {ownRates.filter(r => r.sample_count === 0).length}개 — 실데이터 수집 필요</li>
+                    )}
+                    <li>• 가솔린/디젤 차량 데이터 아직 없음</li>
+                    <li>• 수입 일반(비전기) 차량 데이터 필요</li>
+                    <li>• 할인등급별 요율 변동 분석 필요 (현재 전부 11Z)</li>
+                  </ul>
+                </div>
+              </div>
+            </>
           )}
         </div>
       )}

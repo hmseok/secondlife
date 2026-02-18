@@ -1,59 +1,45 @@
-# /db/codes 환경설정 페이지 리뉴얼 플랜
+# 렌트가 산출 — 신규 감가율 테이블 연동 및 산출가 매칭 검증
 
-## 현재 문제
-- `/db/codes/page.tsx`는 "환경설정/코드"라는 이름이지만, 실제로는 레거시 **차량 모델 DB + AI 견적 스캔** 페이지
-- 해당 기능은 이미 `/quotes/pricing` (렌트가 산출 빌더)에서 더 정교하게 구현됨
-- `car_code_models`, `car_code_trims`, `car_code_options`, `lotte_rentcar_db` 레거시 테이블 사용
-- page2~5.tsx도 모두 레거시 백업 파일
+## 현황 분석
 
-## 리뉴얼 방향
-기존 레거시 코드를 제거하고, **실제 "환경설정"** 기능을 하는 페이지로 완전 교체
+### 현재 RentPricingBuilder 감가 로직 (문제점)
+1. `mapToDepCategory()` → "국산 중형 세단" 같은 flat 카테고리 문자열 반환
+2. `depreciation_db` (old) 테이블에서 category 매칭 → depYear1Rate/depYear2Rate 초기값 설정
+3. 실제 계산은 `DEP_CURVE_PRESETS` 하드코딩 3개 곡선 + `DEP_CLASS_MULTIPLIER` 하드코딩 16개 보정계수
+4. 새로 만든 `depreciation_rates` (3축), `depreciation_adjustments` (보정계수) 전혀 연동 안 됨
+5. 산출가와 기준표 매칭 검증 불가
 
-## 새 /db/codes 페이지 구성 — 3개 탭
+## 구현 계획
 
-### 탭 1: 공통 코드 관리 (common_codes 테이블)
-- `common_codes` 테이블 CRUD
-- 그룹별 코드 관리 (group_code → code → name)
-- 드롭다운, 상태값, 차량유형 등 시스템 전체 열거형 데이터 관리
-- 그룹 추가/삭제, 코드 추가/편집/삭제, sort_order 조정
-- 활성/비활성 토글
+### 1단계: mapToDepCategory → mapToDepAxes 3축 전환
+- 반환값: `{ origin, vehicle_class, fuel_type }` (depreciation_rates 테이블 컬럼과 1:1 매칭)
+- 기존 브랜드/모델/가격 판별 로직 유지, 출력만 3축으로 분해
+- `DEP_CLASS_MULTIPLIER` static 맵 제거 → DB rate_1yr~rate_5yr 직접 사용
 
-### 탭 2: 회사 설정 (companies 테이블)
-- 현재 로그인 회사의 기본 정보 편집
-- 회사명, 사업자번호, 대표자, 연락처, 주소
-- 렌터카 관련 설정: 기본 계약기간, 기본 보증금, 기본 마진율
-- 로고/브랜딩 (향후 확장)
+### 2단계: DB fetch 전환
+- `depreciation_db` → `depreciation_rates` + `depreciation_adjustments` 동시 fetch
+- state: `depreciationDB` → `depRates`, `depAdjustments`
 
-### 탭 3: 시스템 모듈 관리 (god_admin 전용)
-- `system_modules` 목록 조회
-- `company_modules` 활성/비활성 토글
-- 각 회사별 모듈 접근 권한 확인
-- 일반 사용자에게는 "현재 활성화된 모듈" 목록만 표시
+### 3단계: DB 기반 동적 감가 곡선 생성
+- rate_1yr(잔존율%)~rate_5yr → 감가율 곡선 자동 변환
+  - 예: rate_1yr=80.0 → 1년차 감가 20%, rate_2yr=68.0 → 2년차 감가 32%
+- 새 프리셋 'db_based' 추가 (기본값) → 기존 3프리셋은 수동 오버라이드용 유지
+- `applyReferenceTableMappings()`에서 3축 매칭 → 동적 곡선 자동 적용
 
-## 구현 파일
+### 4단계: 보정계수 연동
+- `depreciation_adjustments` 3종 (mileage/market_condition/popularity) 연동
+- 주행거리: annualMileage 값 → 자동 매칭 mileage factor
+- 시장상황: is_active=true인 market_condition factor 자동 적용
+- 인기도: UI 드롭다운 추가 (A/B/C등급)
+- calculations useMemo 내 잔존가치에 보정계수 곱셈
 
-### 삭제할 파일
-- `app/db/codes/page2.tsx` ~ `page5.tsx` (백업 파일 삭제)
+### 5단계: UI 업데이트
+- 감가 설정 섹션에 3축 분류 배지 + 보정계수 현황 표시
+- 곡선 프리셋에 '기준표 기반' 옵션 추가
+- 인기도 등급 선택 드롭다운
 
-### 생성/수정할 파일
-1. **`app/db/codes/page.tsx`** — 새 환경설정 메인 (3탭 구조, 기존 파일 완전 교체)
-2. **`app/db/codes/CommonCodesTab.tsx`** — 공통 코드 관리 탭
-3. **`app/db/codes/CompanySettingsTab.tsx`** — 회사 설정 탭
-4. **`app/db/codes/SystemModulesTab.tsx`** — 모듈 관리 탭 (god_admin 전용)
-
-## UI/UX 가이드
-- pricing-standards 페이지와 동일한 탭 UI 패턴 사용
-- 최대 너비 1400px, 가이드 배너 포함
-- 초보자도 이해할 수 있는 설명 텍스트 포함
-- 인라인 편집 + 저장 버튼 패턴 (pricing-standards와 동일)
-
-## 기술 스택
-- `createClientComponentClient` from `@supabase/auth-helpers-nextjs`
-- `useApp()` 훅으로 role, company 정보 접근
-- Tailwind CSS (기존 스타일 패턴 유지)
-- 'use client' 컴포넌트
-
-## 영향 범위
-- `/db/codes` 경로 유지 (네비게이션 변경 불필요)
-- system_modules에 이미 등록됨 (012 SQL)
-- 레거시 테이블(car_code_*, lotte_rentcar_db)은 이 페이지에서 참조하지 않음
+### 6단계: 산출가 매칭 검증
+- 대표 차종 5~6개 검증 (경차/중형/SUV/수입/전기)
+- 3축 매핑 → DB 감가율 → 곡선 변환 → 잔존가치 → 월감가비 → 최종 렌트가
+- 보정계수 적용 전/후 비교
+- TypeScript 빌드 통과 확인

@@ -24,7 +24,9 @@ export default function CarRegisterForm() {
     color: '',    // 공통코드 (WHT, BLK 등)
     mission: '',  // 공통코드 (AUTO, MANUAL)
     mileage: 0,
-    purchase_price: 0
+    purchase_price: 0,
+    is_used: false,           // 중고차 여부
+    purchase_mileage: 0,      // 구입 시 주행거리 (km) — 중고차만 해당
   })
 
   // 3. 페이지 열리자마자 코드값(연료, 색상 등) 불러오기
@@ -162,10 +164,39 @@ export default function CarRegisterForm() {
           </div>
         </div>
 
+        {/* 신차 / 중고차 구분 */}
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-2">차량 구분</label>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => setCar({...car, is_used: false, purchase_mileage: 0})}
+              className={`flex-1 py-3 rounded-lg font-bold text-sm border-2 transition-all ${
+                !car.is_used
+                  ? 'border-blue-500 bg-blue-50 text-blue-700'
+                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+              }`}
+            >
+              🆕 신차
+            </button>
+            <button
+              type="button"
+              onClick={() => setCar({...car, is_used: true})}
+              className={`flex-1 py-3 rounded-lg font-bold text-sm border-2 transition-all ${
+                car.is_used
+                  ? 'border-orange-500 bg-orange-50 text-orange-700'
+                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+              }`}
+            >
+              🔄 중고차
+            </button>
+          </div>
+        </div>
+
         {/* 주행거리 & 매입가 */}
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-bold text-gray-700">주행거리 (km)</label>
+            <label className="block text-sm font-bold text-gray-700">현재 주행거리 (km)</label>
             <input
               type="number"
               className="w-full border p-3 rounded"
@@ -186,6 +217,21 @@ export default function CarRegisterForm() {
             />
           </div>
         </div>
+
+        {/* 중고차 전용: 구입 시 주행거리 */}
+        {car.is_used && (
+          <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+            <label className="block text-sm font-bold text-orange-700 mb-1">🔄 구입 시 주행거리 (km)</label>
+            <p className="text-xs text-orange-600 mb-2">중고차 구입 당시의 주행거리 — 감가/주행 보정 계산에 사용됩니다</p>
+            <input
+              type="number"
+              className="w-full border border-orange-300 p-3 rounded bg-white"
+              placeholder="예: 35000"
+              value={car.purchase_mileage || ''}
+              onChange={e => setCar({...car, purchase_mileage: Number(e.target.value)})}
+            />
+          </div>
+        )}
 
         <button
           onClick={handleSave}

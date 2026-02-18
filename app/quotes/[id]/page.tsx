@@ -242,13 +242,13 @@ export default function QuoteDetailPage() {
 
       {/* ===== 상단 네비게이션 + 액션 바 (인쇄 시 숨김) ===== */}
       <div className="max-w-[900px] mx-auto py-4 px-4 md:py-6 no-print">
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-4 no-print">
           <Link href="/quotes" className="text-gray-400 hover:text-gray-600 text-sm">견적 관리</Link>
           <span className="text-gray-300">/</span>
           <span className="text-steel-600 font-bold text-sm">견적 상세</span>
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-4 no-print">
           <div>
             <h1 className="text-2xl font-black text-gray-900">견적서 #{String(quote.id).slice(0, 8)}</h1>
             <div className="flex items-center gap-2 mt-1">
@@ -283,7 +283,7 @@ export default function QuoteDetailPage() {
         </div>
 
         {linkedContract && (
-          <div className="bg-steel-600 text-white p-4 rounded-2xl shadow-lg mb-4 flex justify-between items-center">
+          <div className="bg-steel-600 text-white p-4 rounded-2xl shadow-lg mb-4 flex justify-between items-center no-print">
             <div>
               <h2 className="font-bold flex items-center gap-2">계약 확정 완료</h2>
               <p className="text-steel-100 text-sm">계약번호: {String(linkedContract.id).slice(0, 8)}</p>
@@ -296,7 +296,7 @@ export default function QuoteDetailPage() {
         )}
 
         {/* 뷰 모드 토글 */}
-        <div className="flex gap-2 mt-2 mb-2">
+        <div className="flex gap-2 mt-2 mb-2 no-print">
           {(['quote', 'analysis'] as const).map(mode => (
             <button key={mode} onClick={() => setViewMode(mode)}
               className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
@@ -313,14 +313,14 @@ export default function QuoteDetailPage() {
           ============================================================ */}
       {viewMode === 'quote' && (
         <div className="max-w-[900px] mx-auto pb-10 px-4">
-          <div ref={printRef} className="bg-white rounded-2xl shadow-xl overflow-hidden print:shadow-none print:rounded-none">
+          <div ref={printRef} className="bg-white rounded-2xl shadow-xl overflow-hidden print:shadow-none print:rounded-none print:overflow-visible">
 
             {/* 헤더 */}
-            <div className="bg-gray-900 text-white px-8 py-6">
+            <div className="bg-gray-900 text-white px-6 py-4 print:px-5 print:py-3">
               <div className="flex justify-between items-start">
                 <div>
-                  <h1 className="text-2xl font-black tracking-tight">장기렌트 견적서</h1>
-                  <p className="text-gray-400 text-sm mt-1">LONG-TERM RENTAL QUOTATION</p>
+                  <h1 className="text-xl font-black tracking-tight">장기렌트 견적서</h1>
+                  <p className="text-gray-400 text-xs mt-0.5">LONG-TERM RENTAL QUOTATION</p>
                 </div>
                 <div className="text-right">
                   <p className="text-gray-400 text-xs">견적일</p>
@@ -335,13 +335,13 @@ export default function QuoteDetailPage() {
               </div>
             </div>
 
-            <div className="px-8 py-6 space-y-7">
+            <div className="px-6 py-4 space-y-4 print:px-5 print:py-3 print:space-y-3">
 
               {/* ── 1. 임대인 / 임차인 ── */}
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">임대인 (렌터카 사업자)</p>
-                  <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-1">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">임대인 (렌터카 사업자)</p>
+                  <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-0.5">
                     <p className="font-black text-base">{company?.name || '당사'}</p>
                     {company?.business_number && <p className="text-gray-500">사업자번호: {company.business_number}</p>}
                     {company?.address && <p className="text-gray-500">{company.address}</p>}
@@ -350,8 +350,8 @@ export default function QuoteDetailPage() {
                   </div>
                 </div>
                 <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">임차인 (고객)</p>
-                  <div className="bg-gray-50 rounded-xl p-4 text-sm space-y-1">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">임차인 (고객)</p>
+                  <div className="bg-gray-50 rounded-lg p-3 text-xs space-y-0.5">
                     <p className="font-black text-base">{customerName}</p>
                     {customerBizNum && <p className="text-gray-500">사업자번호: {customerBizNum}</p>}
                     {customerPhone && <p className="text-gray-500">연락처: {customerPhone}</p>}
@@ -363,34 +363,50 @@ export default function QuoteDetailPage() {
 
               {/* ── 2. 차량 정보 ── */}
               <div>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">차량 정보</p>
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">차량 정보</p>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs">
                     <tbody>
                       <tr className="border-b border-gray-100">
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500 w-28">차종</td>
-                        <td className="px-4 py-2.5 font-black">{displayBrand} {displayModel}</td>
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500 w-28">트림</td>
-                        <td className="px-4 py-2.5 font-bold">{displayTrim || '-'}</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500 w-24">차종</td>
+                        <td className="px-3 py-1.5 font-black">{displayBrand} {displayModel}</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500 w-24">트림</td>
+                        <td className="px-3 py-1.5 font-bold">{displayTrim || '-'}</td>
                       </tr>
                       <tr className="border-b border-gray-100">
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">연식</td>
-                        <td className="px-4 py-2.5">{displayYear}년</td>
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">연료</td>
-                        <td className="px-4 py-2.5">{displayFuel || '-'}</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">연식</td>
+                        <td className="px-3 py-1.5">{displayYear}년</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">연료</td>
+                        <td className="px-3 py-1.5">{displayFuel || '-'}</td>
                       </tr>
                       <tr className="border-b border-gray-100">
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">차량가격</td>
-                        <td className="px-4 py-2.5 font-bold">{f(factoryPrice)}원</td>
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">차량번호</td>
-                        <td className="px-4 py-2.5">{displayNumber || '(출고 전)'}</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">차량가격</td>
+                        <td className="px-3 py-1.5 font-bold">{f(factoryPrice)}원</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">차량번호</td>
+                        <td className="px-3 py-1.5">{displayNumber || '(출고 전)'}</td>
                       </tr>
-                      {carInfo.mileage > 0 && (
+                      <tr className="border-b border-gray-100">
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">구분</td>
+                        <td className="px-3 py-1.5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            carInfo.is_used ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {carInfo.is_used ? '중고차' : '신차'}
+                          </span>
+                        </td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">배기량</td>
+                        <td className="px-3 py-1.5">{carInfo.engine_cc ? `${f(carInfo.engine_cc)}cc` : '-'}</td>
+                      </tr>
+                      {(carInfo.mileage > 0 || carInfo.purchase_mileage > 0) && (
                         <tr>
-                          <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">주행거리</td>
-                          <td className="px-4 py-2.5">{f(carInfo.mileage)}km</td>
-                          <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">배기량</td>
-                          <td className="px-4 py-2.5">{carInfo.engine_cc ? `${f(carInfo.engine_cc)}cc` : '-'}</td>
+                          <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">현재 주행거리</td>
+                          <td className="px-3 py-1.5">{f(carInfo.mileage || 0)}km</td>
+                          <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">
+                            {carInfo.is_used ? '구입시 주행거리' : ''}
+                          </td>
+                          <td className="px-3 py-1.5">
+                            {carInfo.is_used && carInfo.purchase_mileage ? `${f(carInfo.purchase_mileage)}km` : '-'}
+                          </td>
                         </tr>
                       )}
                     </tbody>
@@ -400,35 +416,35 @@ export default function QuoteDetailPage() {
 
               {/* ── 3. 계약 조건 ── */}
               <div>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">계약 조건</p>
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">계약 조건</p>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs">
                     <tbody>
                       <tr className="border-b border-gray-100">
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500 w-28">계약유형</td>
-                        <td className="px-4 py-2.5 font-black">
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500 w-24">계약유형</td>
+                        <td className="px-3 py-1.5 font-black">
                           {contractType === 'buyout' ? '인수형 장기렌트' : '반납형 장기렌트'}
                         </td>
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500 w-28">계약기간</td>
-                        <td className="px-4 py-2.5 font-bold">{termMonths}개월</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500 w-24">계약기간</td>
+                        <td className="px-3 py-1.5 font-bold">{termMonths}개월</td>
                       </tr>
                       <tr className="border-b border-gray-100">
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">시작일</td>
-                        <td className="px-4 py-2.5">{fDate(quote.start_date)}</td>
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">종료일</td>
-                        <td className="px-4 py-2.5">{fDate(quote.end_date)}</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">시작일</td>
+                        <td className="px-3 py-1.5">{fDate(quote.start_date)}</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">종료일</td>
+                        <td className="px-3 py-1.5">{fDate(quote.end_date)}</td>
                       </tr>
                       <tr className="border-b border-gray-100">
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">약정주행</td>
-                        <td className="px-4 py-2.5">연간 {f(annualMileage * 10000)}km (총 {f(totalMileageLimit)}km)</td>
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">정비상품</td>
-                        <td className="px-4 py-2.5 font-bold">{MAINT_PACKAGE_LABELS[maintPackage] || maintPackage}</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">약정주행</td>
+                        <td className="px-3 py-1.5">연간 {f(annualMileage * 10000)}km (총 {f(totalMileageLimit)}km)</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">정비상품</td>
+                        <td className="px-3 py-1.5 font-bold">{MAINT_PACKAGE_LABELS[maintPackage] || maintPackage}</td>
                       </tr>
                       <tr>
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">보험연령</td>
-                        <td className="px-4 py-2.5">만 {driverAgeGroup}</td>
-                        <td className="bg-gray-50 px-4 py-2.5 font-bold text-gray-500">자차 면책금</td>
-                        <td className="px-4 py-2.5 font-bold">
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">보험연령</td>
+                        <td className="px-3 py-1.5">만 {driverAgeGroup}</td>
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">자차 면책금</td>
+                        <td className="px-3 py-1.5 font-bold">
                           {deductible === 0 ? '완전자차 (면책 0원)' : `${f(deductible)}원`}
                         </td>
                       </tr>
@@ -437,127 +453,114 @@ export default function QuoteDetailPage() {
                 </div>
               </div>
 
-              {/* ── 4. 월 렌탈료 안내 (메인 카드) ── */}
-              <div className="border-2 border-gray-900 rounded-2xl overflow-hidden">
-                <div className="bg-gray-900 text-white px-6 py-3">
-                  <p className="font-black text-base">월 렌탈료 안내</p>
+              {/* ── 4. 월 렌탈료 안내 ── */}
+              <div className="border-2 border-gray-900 rounded-lg overflow-hidden">
+                <div className="bg-gray-900 text-white px-3 py-1.5">
+                  <p className="font-black text-xs">월 렌탈료 안내</p>
                 </div>
-                <div className="p-6">
-                  {/* 핵심 3-4 카드 */}
-                  <div className={`grid ${contractType === 'buyout' ? 'grid-cols-4' : 'grid-cols-3'} gap-3 mb-5`}>
-                    <div className="text-center p-4 bg-gray-50 rounded-xl">
-                      <p className="text-[10px] text-gray-400 font-bold mb-1">보증금</p>
-                      <p className="text-lg font-black text-gray-800">{depositAmt === 0 ? '없음' : `${f(depositAmt)}원`}</p>
-                      {depositAmt > 0 && factoryPrice > 0 && <p className="text-[10px] text-gray-400">차량가의 {(depositAmt / factoryPrice * 100).toFixed(0)}%</p>}
-                    </div>
+                <div className="border border-gray-200 rounded-b-lg overflow-hidden">
+                  <table className="w-full text-xs"><tbody>
+                    <tr className="border-b border-gray-100">
+                      <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500 w-28">보증금</td>
+                      <td className="px-3 py-1.5 font-bold text-gray-800">
+                        {depositAmt === 0 ? '없음' : <>{f(depositAmt)}원{factoryPrice > 0 && <span className="text-[10px] text-gray-400 ml-1">(차량가의 {(depositAmt / factoryPrice * 100).toFixed(0)}%)</span>}</>}
+                      </td>
+                    </tr>
                     {prepaymentAmt > 0 && (
-                      <div className="text-center p-4 bg-gray-50 rounded-xl">
-                        <p className="text-[10px] text-gray-400 font-bold mb-1">선납금</p>
-                        <p className="text-lg font-black text-gray-800">{f(prepaymentAmt)}원</p>
-                      </div>
+                      <tr className="border-b border-gray-100">
+                        <td className="bg-gray-50 px-3 py-1.5 font-bold text-gray-500">선납금</td>
+                        <td className="px-3 py-1.5 font-bold text-gray-800">{f(prepaymentAmt)}원 <span className="text-[10px] text-gray-400">(계약 시 1회)</span></td>
+                      </tr>
                     )}
-                    <div className="text-center p-5 bg-blue-50 rounded-xl border-2 border-blue-300">
-                      <p className="text-[10px] text-blue-500 font-bold mb-1">월 렌탈료 (VAT 포함)</p>
-                      <p className="text-3xl font-black text-blue-700">{f(rentWithVAT)}<span className="text-sm">원</span></p>
-                      <p className="text-[10px] text-blue-400 mt-1">공급가 {f(rentFee)} + VAT {f(rentVAT)}</p>
-                    </div>
+                    <tr className="border-b border-gray-100 bg-blue-50">
+                      <td className="px-3 py-2 font-bold text-blue-600">월 렌탈료<br/><span className="text-[9px] font-normal">(VAT 포함)</span></td>
+                      <td className="px-3 py-2">
+                        <span className="text-lg font-black text-blue-700">{f(rentWithVAT)}<span className="text-[10px]">원</span></span>
+                        <span className="text-[10px] text-blue-400 ml-2">공급가 {f(rentFee)} + VAT {f(rentVAT)}</span>
+                      </td>
+                    </tr>
                     {contractType === 'buyout' && (
-                      <div className="text-center p-4 bg-amber-50 rounded-xl border-2 border-amber-200">
-                        <p className="text-[10px] text-amber-600 font-bold mb-1">만기 인수가</p>
-                        <p className="text-lg font-black text-amber-700">{f(buyoutPrice)}<span className="text-sm">원</span></p>
-                        <p className="text-[10px] text-amber-400">잔존가율 {detail.residual_rate || '-'}%</p>
-                      </div>
+                      <tr className="border-b border-gray-100 bg-amber-50">
+                        <td className="px-3 py-1.5 font-bold text-amber-600">만기 인수가</td>
+                        <td className="px-3 py-1.5 font-black text-amber-700 text-sm">{f(buyoutPrice)}<span className="text-[10px]">원</span> <span className="text-[10px] font-normal text-amber-400">잔존가율 {detail.residual_rate || '-'}%</span></td>
+                      </tr>
                     )}
-                  </div>
-
-                  {/* 총 납입금 요약 테이블 */}
-                  <div className="bg-gray-50 rounded-xl p-4">
-                    <table className="w-full text-sm">
-                      <tbody>
-                        <tr className="border-b border-gray-200">
-                          <td className="py-2 text-gray-500">월 렌탈료 (VAT 포함) x {termMonths}개월</td>
-                          <td className="py-2 text-right font-bold">{f(totalPayments)}원</td>
-                        </tr>
-                        {depositAmt > 0 && (
-                          <tr className="border-b border-gray-200">
-                            <td className="py-2 text-gray-500">보증금 (계약 시 납부, 만기 시 환급)</td>
-                            <td className="py-2 text-right font-bold">{f(depositAmt)}원</td>
-                          </tr>
-                        )}
-                        {prepaymentAmt > 0 && (
-                          <tr className="border-b border-gray-200">
-                            <td className="py-2 text-gray-500">선납금 (계약 시 1회)</td>
-                            <td className="py-2 text-right font-bold">{f(prepaymentAmt)}원</td>
-                          </tr>
-                        )}
-                        {contractType === 'buyout' && (
-                          <tr className="border-b border-gray-200">
-                            <td className="py-2 text-amber-600 font-bold">인수가격 (만기 시, 선택)</td>
-                            <td className="py-2 text-right font-black text-amber-600">{f(buyoutPrice)}원</td>
-                          </tr>
-                        )}
-                        <tr>
-                          <td className="py-3 font-black text-base">계약기간 총 비용</td>
-                          <td className="py-3 text-right font-black text-xl text-gray-900">{f(totalWithBuyout)}원</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                    <tr className="border-b border-gray-100">
+                      <td className="bg-gray-50 px-3 py-1.5 text-gray-500">월 렌탈료 x {termMonths}개월</td>
+                      <td className="px-3 py-1.5 text-right font-bold">{f(totalPayments)}원</td>
+                    </tr>
+                    {depositAmt > 0 && (
+                      <tr className="border-b border-gray-100">
+                        <td className="bg-gray-50 px-3 py-1.5 text-gray-500">보증금 (만기 시 환급)</td>
+                        <td className="px-3 py-1.5 text-right font-bold">{f(depositAmt)}원</td>
+                      </tr>
+                    )}
+                    {prepaymentAmt > 0 && (
+                      <tr className="border-b border-gray-100">
+                        <td className="bg-gray-50 px-3 py-1.5 text-gray-500">선납금 (계약 시 1회)</td>
+                        <td className="px-3 py-1.5 text-right font-bold">{f(prepaymentAmt)}원</td>
+                      </tr>
+                    )}
+                    {contractType === 'buyout' && (
+                      <tr className="border-b border-gray-100">
+                        <td className="bg-gray-50 px-3 py-1.5 text-amber-600 font-bold">인수가격 (만기 시, 선택)</td>
+                        <td className="px-3 py-1.5 text-right font-black text-amber-600">{f(buyoutPrice)}원</td>
+                      </tr>
+                    )}
+                    <tr className="bg-gray-50">
+                      <td className="px-3 py-2 font-black text-xs">계약기간 총 비용</td>
+                      <td className="px-3 py-2 text-right font-black text-base text-gray-900">{f(totalWithBuyout)}원</td>
+                    </tr>
+                  </tbody></table>
                 </div>
               </div>
 
               {/* ── 5. 렌탈료 포함 서비스 ── */}
               <div>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">렌탈료 포함 서비스</p>
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">렌탈료 포함 서비스</p>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50 border-b border-gray-200">
-                        <th className="px-4 py-2.5 text-left font-bold text-gray-500 w-32">항목</th>
-                        <th className="px-4 py-2.5 text-center font-bold text-gray-500 w-16">포함</th>
-                        <th className="px-4 py-2.5 text-left font-bold text-gray-500">상세 내용</th>
+                        <th className="px-3 py-1.5 text-left font-bold text-gray-500 w-24">항목</th>
+                        <th className="px-2 py-1.5 text-center font-bold text-gray-500 w-10">포함</th>
+                        <th className="px-3 py-1.5 text-left font-bold text-gray-500">상세 내용</th>
                       </tr>
                     </thead>
                     <tbody>
                       <tr className="border-b border-gray-100">
-                        <td className="px-4 py-2.5 font-bold">자동차보험</td>
-                        <td className="px-4 py-2.5 text-center text-green-600 font-bold text-lg">O</td>
-                        <td className="px-4 py-2.5 text-gray-600">
-                          종합보험 (대인 무한 / 대물 1억 / 자손 1억)
-                          {deductible > 0 ? ` · 자차 면책금 ${f(deductible)}원` : ' · 완전자차 (면책 0원)'}
-                          <br/><span className="text-gray-400 text-xs">운전자 연령: 만 {driverAgeGroup}</span>
+                        <td className="px-3 py-1.5 font-bold">자동차보험</td>
+                        <td className="px-2 py-1.5 text-center text-green-600 font-bold">O</td>
+                        <td className="px-3 py-1.5 text-gray-600">
+                          종합 (대인∞ / 대물1억 / 자손1억) · {deductible > 0 ? `자차 면책 ${f(deductible)}원` : '완전자차'} · 만 {driverAgeGroup}
                         </td>
                       </tr>
                       <tr className="border-b border-gray-100">
-                        <td className="px-4 py-2.5 font-bold">자동차세</td>
-                        <td className="px-4 py-2.5 text-center text-green-600 font-bold text-lg">O</td>
-                        <td className="px-4 py-2.5 text-gray-600">계약기간 내 자동차세 전액 포함 (월 {f(monthlyTax)}원 상당)</td>
+                        <td className="px-3 py-1.5 font-bold">자동차세</td>
+                        <td className="px-2 py-1.5 text-center text-green-600 font-bold">O</td>
+                        <td className="px-3 py-1.5 text-gray-600">계약기간 내 전액 포함 (월 {f(monthlyTax)}원 상당)</td>
                       </tr>
                       <tr className="border-b border-gray-100">
-                        <td className="px-4 py-2.5 font-bold">정비</td>
-                        <td className="px-4 py-2.5 text-center font-bold text-lg">
+                        <td className="px-3 py-1.5 font-bold">정비</td>
+                        <td className="px-2 py-1.5 text-center font-bold">
                           {maintPackage === 'self' ? <span className="text-red-400">X</span> : <span className="text-green-600">O</span>}
                         </td>
-                        <td className="px-4 py-2.5 text-gray-600">
+                        <td className="px-3 py-1.5 text-gray-600">
                           <span className="font-bold text-gray-800">{MAINT_PACKAGE_LABELS[maintPackage]}</span> — {MAINT_PACKAGE_DESC[maintPackage]}
                           {maintPackage !== 'self' && MAINT_ITEMS_MAP[maintPackage] && (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {MAINT_ITEMS_MAP[maintPackage].map((item, i) => (
-                                <span key={i} className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded font-bold">{item}</span>
-                              ))}
-                            </div>
+                            <span className="ml-1 text-[10px] text-green-600">({MAINT_ITEMS_MAP[maintPackage].join(' · ')})</span>
                           )}
                         </td>
                       </tr>
                       <tr className="border-b border-gray-100">
-                        <td className="px-4 py-2.5 font-bold">취득세</td>
-                        <td className="px-4 py-2.5 text-center text-green-600 font-bold text-lg">O</td>
-                        <td className="px-4 py-2.5 text-gray-600">영업용 차량 취득세 4% 포함</td>
+                        <td className="px-3 py-1.5 font-bold">취득세</td>
+                        <td className="px-2 py-1.5 text-center text-green-600 font-bold">O</td>
+                        <td className="px-3 py-1.5 text-gray-600">영업용 차량 취득세 4% 포함</td>
                       </tr>
                       <tr>
-                        <td className="px-4 py-2.5 font-bold">등록비용</td>
-                        <td className="px-4 py-2.5 text-center text-green-600 font-bold text-lg">O</td>
-                        <td className="px-4 py-2.5 text-gray-600">번호판(영업용) · 인지세 · 등록대행비 · 탁송비 포함</td>
+                        <td className="px-3 py-1.5 font-bold">등록비용</td>
+                        <td className="px-2 py-1.5 text-center text-green-600 font-bold">O</td>
+                        <td className="px-3 py-1.5 text-gray-600">번호판(영업용) · 인지세 · 등록대행비 · 탁송비 포함</td>
                       </tr>
                     </tbody>
                   </table>
@@ -566,9 +569,9 @@ export default function QuoteDetailPage() {
 
               {/* ── 6. 약정 조건 상세 ── */}
               <div>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">약정 조건</p>
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">약정 조건</p>
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs">
                     <tbody>
                       <TRow label="계약기간" value={`${termMonths}개월 (${fDate(quote.start_date)} ~ ${fDate(quote.end_date)})`} bold />
                       <TRow label="약정 주행거리" value={`연간 ${f(annualMileage * 10000)}km (계약기간 총 ${f(totalMileageLimit)}km)`} />
@@ -597,23 +600,25 @@ export default function QuoteDetailPage() {
               {/* ── 7. 보증금/선납금 할인 효과 안내 ── */}
               {(depositDiscount > 0 || prepaymentDiscount > 0) && (
                 <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">보증금 · 선납금 할인 효과</p>
-                  <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm space-y-2">
-                    {depositDiscount > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-green-700">보증금 {f(depositAmt)}원 납부 → 월 렌탈료 할인</span>
-                        <span className="font-black text-green-700">-{f(depositDiscount)}원/월</span>
-                      </div>
-                    )}
-                    {prepaymentDiscount > 0 && (
-                      <div className="flex justify-between">
-                        <span className="text-green-700">선납금 {f(prepaymentAmt)}원 납부 → 월 렌탈료 할인</span>
-                        <span className="font-black text-green-700">-{f(prepaymentDiscount)}원/월</span>
-                      </div>
-                    )}
-                    <p className="text-[11px] text-green-600 pt-1 border-t border-green-200">
-                      * 보증금은 계약 만기 시 원금 환급되며, 납부 기간 동안 렌탈료 할인 혜택이 적용됩니다.
-                    </p>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">보증금 · 선납금 할인 효과</p>
+                  <div className="border border-green-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs"><tbody>
+                      {depositDiscount > 0 && (
+                        <tr className="border-b border-green-100 bg-green-50">
+                          <td className="px-3 py-1.5 text-green-700">보증금 {f(depositAmt)}원 납부 → 월 렌탈료 할인</td>
+                          <td className="px-3 py-1.5 text-right font-black text-green-700">-{f(depositDiscount)}원/월</td>
+                        </tr>
+                      )}
+                      {prepaymentDiscount > 0 && (
+                        <tr className="border-b border-green-100 bg-green-50">
+                          <td className="px-3 py-1.5 text-green-700">선납금 {f(prepaymentAmt)}원 납부 → 월 렌탈료 할인</td>
+                          <td className="px-3 py-1.5 text-right font-black text-green-700">-{f(prepaymentDiscount)}원/월</td>
+                        </tr>
+                      )}
+                      <tr>
+                        <td colSpan={2} className="px-3 py-1 text-[10px] text-green-600 bg-green-50/50">* 보증금은 만기 시 원금 환급, 납부 기간 동안 렌탈료 할인 적용</td>
+                      </tr>
+                    </tbody></table>
                   </div>
                 </div>
               )}
@@ -621,43 +626,47 @@ export default function QuoteDetailPage() {
               {/* ── 8. 인수 안내 (인수형만) ── */}
               {contractType === 'buyout' && (
                 <div>
-                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">인수 안내</p>
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-5">
-                    <div className="grid grid-cols-3 gap-4 text-sm mb-3">
-                      <div className="text-center">
-                        <p className="text-amber-600 text-xs font-bold mb-1">인수가격</p>
-                        <p className="font-black text-amber-700 text-xl">{f(buyoutPrice)}원</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-amber-600 text-xs font-bold mb-1">잔존가치율</p>
-                        <p className="font-bold text-gray-700 text-lg">{detail.residual_rate || '-'}%</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-amber-600 text-xs font-bold mb-1">총 투자비용</p>
-                        <p className="font-bold text-gray-700 text-lg">{f(totalWithBuyout)}원</p>
-                      </div>
-                    </div>
-                    <div className="text-xs text-amber-700 space-y-1 border-t border-amber-200 pt-3">
-                      <p>* 계약 만기 시 상기 인수가격으로 차량 소유권을 이전받으실 수 있습니다.</p>
-                      <p>* 인수를 원하지 않으실 경우 차량 반납도 가능합니다.</p>
-                      <p>* 인수 시 취득세(비영업용 7%) 및 이전등록비는 임차인 부담입니다.</p>
-                    </div>
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">인수 안내</p>
+                  <div className="border border-amber-200 rounded-lg overflow-hidden">
+                    <table className="w-full text-xs"><tbody>
+                      <tr className="border-b border-amber-100">
+                        <td className="bg-amber-50 px-3 py-1.5 font-bold text-amber-600 w-28">인수가격</td>
+                        <td className="px-3 py-1.5 font-black text-amber-700 text-sm">{f(buyoutPrice)}원</td>
+                      </tr>
+                      <tr className="border-b border-amber-100">
+                        <td className="bg-amber-50 px-3 py-1.5 font-bold text-amber-600">잔존가치율</td>
+                        <td className="px-3 py-1.5 font-bold text-gray-700">{detail.residual_rate || '-'}%</td>
+                      </tr>
+                      <tr className="border-b border-amber-100">
+                        <td className="bg-amber-50 px-3 py-1.5 font-bold text-amber-600">총 투자비용</td>
+                        <td className="px-3 py-1.5 font-bold text-gray-700">{f(totalWithBuyout)}원</td>
+                      </tr>
+                      <tr>
+                        <td colSpan={2} className="px-3 py-1 text-[10px] text-amber-600 bg-amber-50/50">
+                          * 만기 시 인수가격으로 소유권 이전 가능 · 반납도 가능 · 인수 시 취득세(7%)+이전등록비 임차인 부담
+                        </td>
+                      </tr>
+                    </tbody></table>
                   </div>
                 </div>
               )}
 
               {/* ── 9. 비고 ── */}
               {detail.note && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
-                  <p className="text-xs font-bold text-yellow-700 mb-1">비고</p>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.note}</p>
+                <div className="border border-yellow-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs"><tbody>
+                    <tr>
+                      <td className="bg-yellow-50 px-3 py-1.5 font-bold text-yellow-700 w-16 align-top">비고</td>
+                      <td className="px-3 py-1.5 text-gray-700 whitespace-pre-wrap">{detail.note}</td>
+                    </tr>
+                  </tbody></table>
                 </div>
               )}
 
               {/* ── 10. 유의사항 ── */}
-              <div className="border-t border-gray-200 pt-5">
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">유의사항 및 특약</p>
-                <div className="text-xs text-gray-500 space-y-1.5 leading-relaxed">
+              <div className="border-t border-gray-200 pt-3">
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-1">유의사항 및 특약</p>
+                <div className="text-[11px] text-gray-500 space-y-0.5 leading-relaxed">
                   <p>1. 본 견적서는 발행일로부터 30일간 유효하며, 차량 재고 및 시장 상황에 따라 변동될 수 있습니다.</p>
                   <p>2. 보증금은 계약 종료 시 차량 상태 확인 후 손해액을 공제한 잔액을 환불합니다.</p>
                   {excessMileageRate > 0 && (
@@ -916,9 +925,72 @@ export default function QuoteDetailPage() {
 
       <style jsx global>{`
         @media print {
-          .no-print { display: none !important; }
-          body { background: white; }
-          .no-print-alt { display: block; }
+          /* 페이지 설정 */
+          @page {
+            size: A4;
+            margin: 10mm 8mm 10mm 8mm;
+          }
+
+          /* 기본 리셋 */
+          html, body {
+            background: white !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* 불필요한 UI 요소 숨기기 */
+          .no-print,
+          nav, header, footer,
+          [class*="no-print"] {
+            display: none !important;
+          }
+
+          /* 오버플로 해제 — 이것이 짤림 방지의 핵심 */
+          * {
+            overflow: visible !important;
+          }
+
+          /* 컨테이너 최대폭/패딩/마진 리셋 */
+          .max-w-\\[900px\\],
+          [class*="max-w-"] {
+            max-width: 100% !important;
+          }
+          .shadow-xl, .shadow-lg, .shadow-sm, .shadow {
+            box-shadow: none !important;
+          }
+          .rounded-2xl, .rounded-xl {
+            border-radius: 8px !important;
+          }
+
+          /* 페이지 넘김 제어 */
+          h3, h2, h1 {
+            page-break-after: avoid;
+          }
+          tr, .grid {
+            page-break-inside: avoid;
+          }
+          table {
+            page-break-inside: auto;
+          }
+
+          /* 배경색 인쇄 보장 */
+          .bg-gray-900 {
+            background-color: #111827 !important;
+          }
+          .bg-gray-50 {
+            background-color: #f9fafb !important;
+          }
+          .bg-gray-100 {
+            background-color: #f3f4f6 !important;
+          }
+
+          /* 텍스트 크기 미세 조정 (인쇄 가독성) */
+          body {
+            font-size: 11pt !important;
+            line-height: 1.4 !important;
+          }
         }
       `}</style>
     </div>
