@@ -127,24 +127,25 @@ export default function RegistrationDetailPage() {
 
   // 기본 항목 자동 생성 (신차/중고 구분)
   const initDefaultCosts = async (forceReset = false) => {
-    if (costs.length > 0 && !forceReset) return  // 이미 항목이 있으면 스킵
-    // 초기화 시 기존 항목 삭제
+    if (costs.length > 0 && !forceReset) return
     if (forceReset) {
-      const { error: delErr } = await supabase.from('car_costs').delete().eq('car_id', carId)
-      if (delErr) { alert('기존 항목 삭제 실패: ' + delErr.message); return }
-      setCosts([])  // 로컬 상태도 즉시 클리어
+      const { error: delErr } = await supabase.from('car_costs').delete().eq('car_id', Number(carId))
+      if (delErr) { alert('삭제 실패: ' + delErr.message); return }
+      setCosts([])
+      // 차량매입가(purchase_price)도 0으로 초기화
+      setCar((prev: any) => ({ ...prev, purchase_price: 0 }))
+      await supabase.from('cars').update({ purchase_price: 0 }).eq('id', carId)
     }
     const template = car.is_used ? usedCarCostItems : newCarCostItems
     const items = template.map(item => ({
       car_id: Number(carId),
       ...item,
-      amount: item.category === '차량' ? (Number(car.purchase_price) || 0) : 0,
+      amount: 0,  // 초기화 시 모든 금액 0원
       notes: '',
     }))
     const { error } = await supabase.from('car_costs').insert(items)
     if (error) {
-      alert('비용 항목 생성 실패: ' + error.message)
-      console.error('car_costs insert error:', error)
+      alert('생성 실패: ' + error.message)
     } else {
       await fetchCosts()
       updateTotalCost()
@@ -419,7 +420,7 @@ export default function RegistrationDetailPage() {
   if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-gray-500">데이터 로딩 중...</div>
 
   return (
-    <div className="min-h-screen bg-gray-50/50 py-10 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50/50 py-10 pb-24 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
 
         {/* 헤더 */}
@@ -879,6 +880,39 @@ export default function RegistrationDetailPage() {
                       )
                     })()}
             </div>
+        </div>
+      </div>
+
+      {/* 하단 고정 저장 바 */}
+      <div className="fixed bottom-0 left-0 right-0 z-30">
+        <div className="bg-white/90 backdrop-blur-xl border-t border-gray-100 shadow-[0_-8px_30px_rgba(0,0,0,0.06)]">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-center justify-between gap-4">
+              {/* 좌: 차량 정보 */}
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-steel-100 flex items-center justify-center shrink-0">
+                  <span className="text-sm">🚗</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-gray-900 truncate leading-tight">{car.number}</p>
+                  <p className="text-[11px] text-gray-400 font-medium truncate leading-tight">{baseModelName || car.model || ''}</p>
+                </div>
+              </div>
+
+              {/* 중: 취득원가 */}
+              {totalCost > 0 && (
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
+                  <span className="text-[10px] font-bold text-emerald-500 uppercase">취득원가</span>
+                  <span className="text-sm font-black text-emerald-700">{f(totalCost)}원</span>
+                </div>
+              )}
+
+              {/* 우: 저장 버튼 */}
+              <button onClick={handleSave} className="flex items-center gap-2 bg-steel-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm hover:bg-steel-800 active:scale-[0.97] shadow-md hover:shadow-lg transition-all shrink-0">
+                <Icons.Save /> 저장
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
