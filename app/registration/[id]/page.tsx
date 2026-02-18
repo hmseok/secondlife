@@ -75,23 +75,34 @@ export default function RegistrationDetailPage() {
   const [costs, setCosts] = useState<any[]>([])
   const [costsLoading, setCostsLoading] = useState(false)
   const [showCostDetail, setShowCostDetail] = useState(false)
-  const [newCostItem, setNewCostItem] = useState({ category: '기타', item_name: '', amount: 0, notes: '' })
+  const [newCostItem, setNewCostItem] = useState({ category: '차량', item_name: '', amount: 0, notes: '' })
 
-  // 기본 비용 항목 템플릿
-  const defaultCostItems = [
-    { category: '매입', item_name: '차량 매입가', sort_order: 1 },
+  // 기본 비용 항목 템플릿 — 신차 / 중고차 분리
+  const newCarCostItems = [
+    { category: '차량', item_name: '차량 출고가 (취득가액)', sort_order: 1 },
     { category: '세금', item_name: '취득세', sort_order: 2 },
     { category: '세금', item_name: '공채 할인비', sort_order: 3 },
-    { category: '등록', item_name: '이전등록비', sort_order: 4 },
+    { category: '등록', item_name: '등록비', sort_order: 4 },
     { category: '등록', item_name: '번호판 비용', sort_order: 5 },
-    { category: '보험', item_name: '보험료', sort_order: 6 },
-    { category: '정비', item_name: '정비/수리비', sort_order: 7 },
-    { category: '기타', item_name: '탁송비', sort_order: 8 },
-    { category: '기타', item_name: '매매알선비', sort_order: 9 },
+    { category: '보험', item_name: '보험료 (초기)', sort_order: 6 },
+    { category: '기타', item_name: '탁송비', sort_order: 7 },
   ]
 
+  const usedCarCostItems = [
+    { category: '차량', item_name: '차량 매입가', sort_order: 1 },
+    { category: '세금', item_name: '취득세 (이전)', sort_order: 2 },
+    { category: '등록', item_name: '이전등록비', sort_order: 3 },
+    { category: '등록', item_name: '번호판 비용', sort_order: 4 },
+    { category: '보험', item_name: '보험료 (초기)', sort_order: 5 },
+    { category: '정비', item_name: '정비/수리비', sort_order: 6 },
+    { category: '기타', item_name: '탁송비', sort_order: 7 },
+    { category: '기타', item_name: '매매알선비', sort_order: 8 },
+  ]
+
+  const defaultCostItems = car.is_used ? usedCarCostItems : newCarCostItems
+
   const costCategories = [
-    { key: '매입', color: 'bg-blue-100 text-blue-700' },
+    { key: '차량', color: 'bg-steel-100 text-steel-700' },
     { key: '세금', color: 'bg-red-100 text-red-700' },
     { key: '등록', color: 'bg-purple-100 text-purple-700' },
     { key: '보험', color: 'bg-green-100 text-green-700' },
@@ -114,13 +125,18 @@ export default function RegistrationDetailPage() {
     setCostsLoading(false)
   }
 
-  // 기본 항목 자동 생성 (처음 한번만)
-  const initDefaultCosts = async () => {
-    if (costs.length > 0) return  // 이미 항목이 있으면 스킵
-    const items = defaultCostItems.map(item => ({
+  // 기본 항목 자동 생성 (신차/중고 구분)
+  const initDefaultCosts = async (forceReset = false) => {
+    if (costs.length > 0 && !forceReset) return  // 이미 항목이 있으면 스킵
+    // 초기화 시 기존 항목 삭제
+    if (forceReset && costs.length > 0) {
+      await supabase.from('car_costs').delete().eq('car_id', carId)
+    }
+    const template = car.is_used ? usedCarCostItems : newCarCostItems
+    const items = template.map(item => ({
       car_id: carId,
       ...item,
-      amount: item.item_name === '차량 매입가' ? (car.purchase_price || 0) : 0,
+      amount: item.category === '차량' ? (car.purchase_price || 0) : 0,
       notes: '',
     }))
     const { error } = await supabase.from('car_costs').insert(items)
@@ -591,7 +607,6 @@ export default function RegistrationDetailPage() {
                          <div><label className="label">배기량</label><input className="input text-right" value={car.displacement || ''} onChange={e=>handleChange('displacement', e.target.value)}/></div>
                          <div><label className="label">승차정원</label><input className="input text-right" value={car.capacity || ''} onChange={e=>handleChange('capacity', e.target.value)}/></div>
                     </div>
-                    <div className="mt-5"><label className="label">취득가액</label><input className="input text-right text-xl font-black text-steel-600" value={f(car.purchase_price)} onChange={e=>handleChange('purchase_price', e.target.value.replace(/,/g, ''))}/></div>
                 </div>
 
                 {/* 비고 */}
@@ -600,19 +615,33 @@ export default function RegistrationDetailPage() {
                     <textarea className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-xl resize-none outline-none" value={car.notes || ''} onChange={e=>handleChange('notes', e.target.value)}></textarea>
                 </div>
 
-                {/* 💰 구입비용 관리 */}
+                {/* 💰 취득원가 (신차/중고 통합 비용) */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-                    <div className="flex justify-between items-center mb-4 border-b pb-2">
+                    <div className="flex justify-between items-center mb-3 border-b pb-2">
                       <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                        <span className="w-1 h-5 bg-emerald-500 rounded-full"></span> 구입비용 상세
+                        <span className="w-1 h-5 bg-emerald-500 rounded-full"></span>
+                        취득원가
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${car.is_used ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'}`}>
+                          {car.is_used ? '중고차' : '신차'}
+                        </span>
                       </h2>
                       <div className="flex items-center gap-2">
-                        {costs.length === 0 && (
+                        {costs.length === 0 ? (
                           <button
-                            onClick={initDefaultCosts}
+                            onClick={() => initDefaultCosts()}
                             className="text-xs bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg font-bold hover:bg-emerald-100 transition-colors"
                           >
                             기본항목 생성
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              if (confirm(`현재 항목을 삭제하고 ${car.is_used ? '중고차' : '신차'} 기본항목으로 초기화하시겠습니까?`))
+                                initDefaultCosts(true)
+                            }}
+                            className="text-xs bg-orange-50 text-orange-600 px-3 py-1.5 rounded-lg font-bold hover:bg-orange-100 transition-colors"
+                          >
+                            항목 초기화
                           </button>
                         )}
                         <button
@@ -622,6 +651,30 @@ export default function RegistrationDetailPage() {
                           {showCostDetail ? '요약보기' : '상세보기'}
                         </button>
                       </div>
+                    </div>
+
+                    {/* 차량 기준가 (취득가액 or 매입가) — 구입비용 첫 항목에 자동 반영 */}
+                    <div className="bg-gradient-to-r from-gray-50 to-gray-100/50 rounded-xl p-3 mb-4 border border-gray-200 flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase">{car.is_used ? '중고 매입가' : '등록증 취득가액'}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{car.is_used ? '실제 구입 금액' : '등록증 기재 금액'}</p>
+                      </div>
+                      <input
+                        className="w-48 text-right text-lg font-black text-steel-700 bg-white border border-gray-200 rounded-lg px-3 py-2 focus:border-steel-500 outline-none"
+                        value={f(car.purchase_price)}
+                        onChange={e => {
+                          const val = e.target.value.replace(/,/g, '')
+                          handleChange('purchase_price', val)
+                          // car_costs의 첫 번째 '차량' 카테고리 항목도 동기화
+                          const carCostItem = costs.find(c => c.category === '차량')
+                          if (carCostItem) {
+                            const numVal = Number(val) || 0
+                            setCosts(prev => prev.map(c => c.id === carCostItem.id ? { ...c, amount: numVal } : c))
+                            handleCostUpdate(carCostItem.id, 'amount', numVal)
+                          }
+                        }}
+                        placeholder="0"
+                      />
                     </div>
 
                     {/* 요약 뷰 */}
@@ -637,12 +690,12 @@ export default function RegistrationDetailPage() {
                             {/* 총 비용 */}
                             <div className="bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-4 mb-4 border border-emerald-100">
                               <div className="flex justify-between items-center">
-                                <span className="text-sm font-bold text-emerald-700">총 구입비용</span>
+                                <span className="text-sm font-bold text-emerald-700">총 취득원가</span>
                                 <span className="text-2xl font-black text-emerald-800">{f(totalCost)}<span className="text-sm text-emerald-500 ml-0.5">원</span></span>
                               </div>
                               {car.purchase_price > 0 && totalCost > car.purchase_price && (
                                 <p className="text-xs text-emerald-600 mt-1 text-right">
-                                  취득가액 대비 +{f(totalCost - car.purchase_price)}원 ({((totalCost / car.purchase_price - 1) * 100).toFixed(1)}%)
+                                  {car.is_used ? '매입가' : '출고가'} 대비 부대비용 +{f(totalCost - car.purchase_price)}원 ({((totalCost / car.purchase_price - 1) * 100).toFixed(1)}%)
                                 </p>
                               )}
                             </div>

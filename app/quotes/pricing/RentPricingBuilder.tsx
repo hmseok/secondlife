@@ -1179,6 +1179,18 @@ export default function RentPricingBuilder() {
       .eq('car_id', carId)
     setMarketComps(compData || [])
 
+    // 등록 페이지 구입비용 상세 (car_costs) 합계 로드
+    const { data: costsData } = await supabase
+      .from('car_costs')
+      .select('amount')
+      .eq('car_id', carId)
+    if (costsData && costsData.length > 0) {
+      const costTotal = costsData.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0)
+      if (costTotal > 0) {
+        setTotalAcquisitionCost(costTotal)
+      }
+    }
+
     // 공통 기준 테이블 매핑 적용
     applyReferenceTableMappings(
       {
@@ -1899,10 +1911,14 @@ export default function RentPricingBuilder() {
       ? ((purchasePrice - theoreticalMarketValue) / theoreticalMarketValue * 100)
       : 0
 
-    // 고객 귀책 주행감가 = 종료시 초과 - 구입시 초과 (고객이 추가한 부분만)
+    // ── 고객 귀책 주행감가: 순수하게 계약기간 동안 기준 대비 초과 주행분만
+    // 구입시 주행상태(-4% 등)는 회사가 가져간 것이므로 고객과 무관
+    // 예: 연3만 약정, 기준2만, 3년계약 → (3-2)×3 = 3만km 초과 → 6% 감가
+    const customerDriven10k = termYears * annualMileage          // 고객 계약기간 총주행 (만km)
+    const standardAddition10k = termYears * baselineKm           // 계약기간 기준주행 (만km)
     const customerExcessMileage = isUsedCar
-      ? (excessMileageEnd - purchaseExcessMileage)    // 고객이 변동시킨 초과분
-      : excessMileageEnd                              // 신차는 전체 초과분
+      ? (customerDriven10k - standardAddition10k)                // 중고: 계약기간 초과분만
+      : excessMileageEnd                                         // 신차: 전체 초과분 (기존 로직)
     const customerMileageDep = customerExcessMileage * MILEAGE_DEP_RATE
     // 고객 적용 연식감가 차이분 (구입차령 → 종료차령)
     const customerYearDep = yearDepEnd - purchaseYearDep
@@ -1911,10 +1927,10 @@ export default function RentPricingBuilder() {
       ? (customerYearDep + customerMileageDep)
       : 0  // 신차는 기존 로직 그대로
 
-    // ── 중고차: 잔존가 = 전체 감가 기반 (차량의 실제 시장가치), 단 고객 주행감가만 반영
-    // 중고차 종료시: 연식감가(전체) + 고객귀책 주행감가만
+    // ── 중고차 종료시 감가 (고객 비용 산출용)
+    // 연식감가(전체, 신차부터) + 고객 귀책 주행감가만 (구입시 주행상태는 제외)
     const usedCarEndTotalDep = isUsedCar
-      ? Math.max(0, Math.min(yearDepEnd + (purchaseMileageDep + customerMileageDep), 90))
+      ? Math.max(0, Math.min(yearDepEnd + customerMileageDep, 90))
       : totalDepRateEnd
     const usedCarEndResidualPct = isUsedCar
       ? Math.max(0, Math.min((1 - usedCarEndTotalDep / 100) * adjustmentFactor, 1.0))
@@ -1922,6 +1938,8 @@ export default function RentPricingBuilder() {
     const usedCarEndMarketValue = isUsedCar
       ? Math.round(factoryPrice * usedCarEndResidualPct)
       : endMarketValue
+    // 차량 실제 잔존가 (회사 처분용, 전체 주행감가 포함)
+    const carActualEndMarketValue = endMarketValue
 
     // UI 표시용
     const yearDep = yearDepNow
@@ -1929,11 +1947,9 @@ export default function RentPricingBuilder() {
     const totalDepRate = totalDepRateNow
 
     // 취득원가 기준 월 감가비
-    // 중고차: 구입가 기준 (이미 주행상태 반영된 실투자금)
-    // 신차: 취득원가 또는 매입가
-    const costBase = isUsedCar
-      ? purchasePrice
-      : (totalAcquisitionCost > 0 ? totalAcquisitionCost : purchasePrice)
+    // 등록 페이지 구입비용 상세(car_costs) 합계가 있으면 실투자금으로 사용
+    // 없으면 매입가(purchasePrice)를 기준으로 사용
+    const costBase = totalAcquisitionCost > 0 ? totalAcquisitionCost : purchasePrice
     // 잔존가치 결정
     // 중고차: usedCarEndMarketValue 사용 (전체연식감가 + 고객귀책 주행감가만 반영)
     // 신차: endMarketValue 사용 (전체 감가 반영)
@@ -2093,8 +2109,9 @@ export default function RentPricingBuilder() {
       purchaseMileage10k, purchaseAvgMileage, purchaseExcessMileage,
       purchaseMileageDep, purchaseYearDep, purchaseTotalDep,
       theoreticalMarketValue, purchasePremiumPct,
+      customerDriven10k, standardAddition10k,
       customerExcessMileage, customerMileageDep, customerYearDep, customerTotalDepChange,
-      usedCarEndTotalDep, usedCarEndMarketValue,
+      usedCarEndTotalDep, usedCarEndMarketValue, carActualEndMarketValue,
       // 잔존가치 & 인수
       residualValue, buyoutPrice, costBase,
       // 감가 곡선 참조
@@ -4378,89 +4395,102 @@ export default function RentPricingBuilder() {
                   {/* 매입 분석 */}
                   <div className="mb-3 p-3 bg-white rounded-lg border border-amber-200">
                     <p className="text-[11px] font-bold text-gray-600 mb-2">■ 매입 분석</p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                      <span className="text-gray-400">출고가 (신차)</span>
-                      <span className="text-right font-bold">{factoryPrice.toLocaleString()}원</span>
-                      <span className="text-gray-400">구입 시 차령</span>
-                      <span className="text-right font-bold">{calculations.carAge}년</span>
-                      <span className="text-gray-400">구입 시 연식감가율</span>
-                      <span className="text-right font-bold text-amber-600">{calculations.purchaseYearDep.toFixed(1)}%</span>
-                      <span className="text-gray-400">구입 시 주행거리</span>
-                      <span className="text-right font-bold">{(calculations.purchaseMileage10k * 10000).toLocaleString()}km</span>
-                      <span className="text-gray-400">구입차령 기준주행</span>
-                      <span className="text-right font-bold">{(calculations.purchaseAvgMileage * 10000).toLocaleString()}km</span>
-                      <span className="text-gray-400">구입 시 주행감가</span>
-                      <span className={`text-right font-bold ${calculations.purchaseMileageDep > 0 ? 'text-red-500' : calculations.purchaseMileageDep < 0 ? 'text-blue-500' : 'text-gray-500'}`}>
-                        {calculations.purchaseMileageDep > 0 ? '+' : ''}{calculations.purchaseMileageDep.toFixed(1)}%
-                        {calculations.purchaseExcessMileage < 0 ? ' (저주행)' : calculations.purchaseExcessMileage > 0 ? ' (과주행)' : ''}
-                      </span>
-                      <span className="text-gray-400">구입시점 총감가율</span>
-                      <span className="text-right font-bold text-amber-600">{calculations.purchaseTotalDep.toFixed(1)}%</span>
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-amber-100 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                      <span className="text-gray-400">이론 시장가</span>
-                      <span className="text-right font-bold">{calculations.theoreticalMarketValue.toLocaleString()}원</span>
-                      <span className="text-gray-400">실제 구입가</span>
-                      <span className="text-right font-bold text-blue-600">{purchasePrice.toLocaleString()}원</span>
-                      <span className="text-gray-500 font-bold">시세 대비</span>
-                      <span className={`text-right font-bold ${calculations.purchasePremiumPct < 0 ? 'text-green-600' : calculations.purchasePremiumPct > 0 ? 'text-red-500' : 'text-gray-600'}`}>
-                        {calculations.theoreticalMarketValue > 0 ? `${(purchasePrice / calculations.theoreticalMarketValue * 100).toFixed(1)}%` : '-'}
-                        {calculations.purchasePremiumPct < -1 ? ` (${Math.abs(calculations.purchasePremiumPct).toFixed(1)}% 절감)` : calculations.purchasePremiumPct > 1 ? ` (${calculations.purchasePremiumPct.toFixed(1)}% 프리미엄)` : ' (적정)'}
-                      </span>
-                    </div>
+                    <table className="w-full text-[11px]">
+                      <tbody>
+                        <tr><td className="text-gray-400 py-0.5 pr-2">출고가 (신차)</td><td className="text-right font-bold py-0.5">{factoryPrice.toLocaleString()}원</td></tr>
+                        <tr><td className="text-gray-400 py-0.5 pr-2">중고 매입가</td><td className="text-right font-bold text-blue-600 py-0.5">{purchasePrice.toLocaleString()}원</td></tr>
+                        {totalAcquisitionCost > 0 && totalAcquisitionCost !== purchasePrice && (
+                          <tr><td className="text-gray-400 py-0.5 pr-2">구입비용 합계 (부대비용 포함)</td><td className="text-right font-bold text-blue-700 py-0.5">{totalAcquisitionCost.toLocaleString()}원</td></tr>
+                        )}
+                        <tr className="border-t border-amber-100"><td className="text-gray-400 py-0.5 pr-2 pt-1">구입 시 차령</td><td className="text-right font-bold py-0.5 pt-1">{calculations.carAge}년</td></tr>
+                        <tr><td className="text-gray-400 py-0.5 pr-2">구입 시 연식감가율</td><td className="text-right font-bold text-amber-600 py-0.5">{calculations.purchaseYearDep.toFixed(1)}%</td></tr>
+                        <tr><td className="text-gray-400 py-0.5 pr-2">구입 시 주행거리</td><td className="text-right font-bold py-0.5">{(calculations.purchaseMileage10k * 10000).toLocaleString()}km</td></tr>
+                        <tr><td className="text-gray-400 py-0.5 pr-2">구입차령 기준주행</td><td className="text-right font-bold py-0.5">{(calculations.purchaseAvgMileage * 10000).toLocaleString()}km</td></tr>
+                        <tr>
+                          <td className="text-gray-400 py-0.5 pr-2">구입 시 주행감가</td>
+                          <td className={`text-right font-bold py-0.5 ${calculations.purchaseMileageDep > 0 ? 'text-red-500' : calculations.purchaseMileageDep < 0 ? 'text-blue-500' : 'text-gray-500'}`}>
+                            {calculations.purchaseMileageDep > 0 ? '+' : ''}{calculations.purchaseMileageDep.toFixed(1)}%
+                            {calculations.purchaseExcessMileage < 0 ? ' (저주행)' : calculations.purchaseExcessMileage > 0 ? ' (과주행)' : ''}
+                          </td>
+                        </tr>
+                        <tr><td className="text-gray-400 py-0.5 pr-2">구입시점 총감가율</td><td className="text-right font-bold text-amber-600 py-0.5">{calculations.purchaseTotalDep.toFixed(1)}%</td></tr>
+                        <tr className="border-t border-amber-100">
+                          <td className="text-gray-400 py-0.5 pr-2 pt-1">이론 시장가</td>
+                          <td className="text-right font-bold py-0.5 pt-1">{calculations.theoreticalMarketValue.toLocaleString()}원</td>
+                        </tr>
+                        <tr>
+                          <td className="text-gray-500 font-bold py-0.5 pr-2">시세 대비</td>
+                          <td className={`text-right font-bold py-0.5 ${calculations.purchasePremiumPct < 0 ? 'text-green-600' : calculations.purchasePremiumPct > 0 ? 'text-red-500' : 'text-gray-600'}`}>
+                            {calculations.theoreticalMarketValue > 0 ? `${(purchasePrice / calculations.theoreticalMarketValue * 100).toFixed(1)}%` : '-'}
+                            {calculations.purchasePremiumPct < -1 ? ` (${Math.abs(calculations.purchasePremiumPct).toFixed(1)}% 절감)` : calculations.purchasePremiumPct > 1 ? ` (${calculations.purchasePremiumPct.toFixed(1)}% 프리미엄)` : ' (적정)'}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
 
                   {/* 고객 적용 감가 */}
                   <div className="mb-3 p-3 bg-white rounded-lg border border-amber-200">
                     <p className="text-[11px] font-bold text-gray-600 mb-2">■ 고객 적용 감가 ({termMonths}개월 후)</p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                      {/* 연식감가 */}
-                      <span className="text-gray-500 font-bold col-span-2 mt-1">연식감가</span>
-                      <span className="text-gray-400 pl-2">구입시 → 종료시</span>
-                      <span className="text-right font-bold">{calculations.purchaseYearDep.toFixed(1)}% → {calculations.yearDepEnd.toFixed(1)}%</span>
-                      <span className="text-gray-400 pl-2">고객 적용분</span>
-                      <span className="text-right font-bold text-amber-600">+{calculations.customerYearDep.toFixed(1)}%p</span>
+                    <table className="w-full text-[11px]">
+                      <tbody>
+                        <tr><td colSpan={2} className="text-gray-500 font-bold pt-1 pb-0.5">연식감가</td></tr>
+                        <tr><td className="text-gray-400 pl-2 py-0.5">구입시 → 종료시</td><td className="text-right font-bold py-0.5">{calculations.purchaseYearDep.toFixed(1)}% → {calculations.yearDepEnd.toFixed(1)}%</td></tr>
+                        <tr><td className="text-gray-400 pl-2 py-0.5">고객 적용분</td><td className="text-right font-bold text-amber-600 py-0.5">+{calculations.customerYearDep.toFixed(1)}%p</td></tr>
 
-                      {/* 주행감가 */}
-                      <span className="text-gray-500 font-bold col-span-2 mt-2">주행감가 (고객 귀책분만)</span>
-                      <span className="text-gray-400 pl-2">구입시 초과주행</span>
-                      <span className={`text-right font-bold ${calculations.purchaseExcessMileage > 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                        {calculations.purchaseExcessMileage > 0 ? '+' : ''}{(calculations.purchaseExcessMileage * 10000).toLocaleString()}km
-                      </span>
-                      <span className="text-gray-400 pl-2">종료시 예상주행</span>
-                      <span className="text-right font-bold">{(calculations.projectedMileage10k * 10000).toLocaleString()}km</span>
-                      <span className="text-gray-400 pl-2">종료시 기준주행</span>
-                      <span className="text-right font-bold">{(calculations.avgMileageEnd * 10000).toLocaleString()}km</span>
-                      <span className="text-gray-400 pl-2">종료시 초과주행</span>
-                      <span className={`text-right font-bold ${calculations.excessMileageEnd > 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                        {calculations.excessMileageEnd > 0 ? '+' : ''}{(calculations.excessMileageEnd * 10000).toLocaleString()}km
-                      </span>
-                      <span className="text-gray-400 pl-2 font-bold">고객 귀책 초과분</span>
-                      <span className={`text-right font-bold ${calculations.customerExcessMileage > 0 ? 'text-red-500' : 'text-blue-500'}`}>
-                        {calculations.customerExcessMileage > 0 ? '+' : ''}{(calculations.customerExcessMileage * 10000).toLocaleString()}km
-                      </span>
-                      <span className="text-gray-400 pl-2">고객 주행감가율</span>
-                      <span className={`text-right font-bold ${calculations.customerMileageDep > 0 ? 'text-red-500' : calculations.customerMileageDep < 0 ? 'text-blue-500' : 'text-gray-500'}`}>
-                        {calculations.customerMileageDep > 0 ? '+' : ''}{calculations.customerMileageDep.toFixed(1)}%
-                      </span>
-                    </div>
+                        <tr><td colSpan={2} className="text-gray-500 font-bold pt-2 pb-0.5">주행감가 (계약기간 기준초과분만)</td></tr>
+                        <tr><td className="text-gray-400 pl-2 py-0.5">계약기간 고객주행</td><td className="text-right font-bold py-0.5 whitespace-nowrap">{(calculations.customerDriven10k * 10000).toLocaleString()}km</td></tr>
+                        <tr><td className="text-gray-400 pl-2 py-0.5">계약기간 기준주행</td><td className="text-right font-bold py-0.5 whitespace-nowrap">{(calculations.standardAddition10k * 10000).toLocaleString()}km</td></tr>
+                        <tr>
+                          <td className="text-gray-400 pl-2 py-0.5 font-bold">고객 초과주행</td>
+                          <td className={`text-right font-bold py-0.5 whitespace-nowrap ${calculations.customerExcessMileage > 0 ? 'text-red-500' : calculations.customerExcessMileage < 0 ? 'text-blue-500' : 'text-gray-500'}`}>
+                            {calculations.customerExcessMileage > 0 ? '+' : ''}{(calculations.customerExcessMileage * 10000).toLocaleString()}km
+                          </td>
+                        </tr>
+                        <tr>
+                          <td className="text-gray-400 pl-2 py-0.5">고객 주행감가율</td>
+                          <td className={`text-right font-bold py-0.5 ${calculations.customerMileageDep > 0 ? 'text-red-500' : calculations.customerMileageDep < 0 ? 'text-blue-500' : 'text-gray-500'}`}>
+                            {calculations.customerMileageDep > 0 ? '+' : ''}{calculations.customerMileageDep.toFixed(1)}%
+                          </td>
+                        </tr>
+                        <tr className="border-t border-amber-100">
+                          <td colSpan={2} className="text-gray-400 text-[10px] pt-1 pl-2">
+                            종료시 총 {((calculations.purchaseMileage10k + calculations.customerDriven10k) * 10000).toLocaleString()}km
+                            (구입시 {(calculations.purchaseMileage10k * 10000).toLocaleString()} + 계약 {(calculations.customerDriven10k * 10000).toLocaleString()})
+                            {' '}· 추가부담: {((calculations.purchaseMileage10k + calculations.standardAddition10k) * 10000).toLocaleString()}km 초과시
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </div>
 
                   {/* 종합 월감가비 */}
                   <div className="p-3 bg-amber-100/50 rounded-lg border border-amber-300">
                     <p className="text-[11px] font-bold text-gray-600 mb-2">■ 종합</p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                      <span className="text-gray-400">종료시 총감가율 (차량)</span>
-                      <span className="text-right font-bold">{calculations.usedCarEndTotalDep.toFixed(1)}%</span>
-                      <span className="text-gray-400">종료시 잔존가</span>
-                      <span className="text-right font-bold">{calculations.usedCarEndMarketValue.toLocaleString()}원</span>
-                      <span className="text-gray-400">원가 (구입가)</span>
-                      <span className="text-right font-bold text-blue-600">{purchasePrice.toLocaleString()}원</span>
-                      <span className="text-gray-500 font-bold">계약기간 감가액</span>
-                      <span className="text-right font-bold text-red-500">{(purchasePrice - calculations.usedCarEndMarketValue).toLocaleString()}원</span>
-                      <span className="text-gray-500 font-bold">월 감가비</span>
-                      <span className="text-right font-bold text-red-600 text-sm">{calculations.monthlyDepreciation.toLocaleString()}원</span>
-                    </div>
+                    <table className="w-full text-[11px]">
+                      <tbody>
+                        <tr><td className="text-gray-400 py-0.5">고객 적용 감가율</td><td className="text-right font-bold py-0.5 whitespace-nowrap">연식 {calculations.yearDepEnd.toFixed(1)}% + 주행 {calculations.customerMileageDep > 0 ? '+' : ''}{calculations.customerMileageDep.toFixed(1)}% = {calculations.usedCarEndTotalDep.toFixed(1)}%</td></tr>
+                        <tr><td className="text-gray-400 py-0.5">종료시 잔존가 (고객기준)</td><td className="text-right font-bold py-0.5">{calculations.usedCarEndMarketValue.toLocaleString()}원</td></tr>
+                        <tr><td className="text-gray-400 py-0.5">차량 실제 잔존가 (처분용)</td><td className="text-right font-bold text-gray-500 py-0.5">{calculations.carActualEndMarketValue.toLocaleString()}원</td></tr>
+                        {calculations.usedCarEndMarketValue !== calculations.carActualEndMarketValue && (
+                          <tr>
+                            <td className="text-gray-400 pl-2 py-0.5">회사 손익 (주행상태)</td>
+                            <td className={`text-right font-bold py-0.5 ${calculations.carActualEndMarketValue > calculations.usedCarEndMarketValue ? 'text-green-600' : 'text-red-500'}`}>
+                              {calculations.carActualEndMarketValue > calculations.usedCarEndMarketValue ? '+' : ''}{(calculations.carActualEndMarketValue - calculations.usedCarEndMarketValue).toLocaleString()}원
+                            </td>
+                          </tr>
+                        )}
+                        <tr className="border-t border-amber-200"><td className="text-gray-400 pt-1 py-0.5">원가 ({totalAcquisitionCost > 0 ? '구입비용 합계' : '구입가'})</td><td className="text-right font-bold text-blue-600 pt-1 py-0.5">{calculations.costBase.toLocaleString()}원</td></tr>
+                        {totalAcquisitionCost > 0 && totalAcquisitionCost !== purchasePrice && (
+                          <>
+                            <tr><td className="text-gray-400 pl-2 py-0.5">순수 매입가</td><td className="text-right text-gray-500 py-0.5">{purchasePrice.toLocaleString()}원</td></tr>
+                            <tr><td className="text-gray-400 pl-2 py-0.5">부대비용</td><td className="text-right text-gray-500 py-0.5">+{(totalAcquisitionCost - purchasePrice).toLocaleString()}원</td></tr>
+                          </>
+                        )}
+                        <tr><td className="text-gray-500 font-bold py-0.5">계약기간 감가액</td><td className="text-right font-bold text-red-500 py-0.5">{(calculations.costBase - calculations.effectiveEndMarketValue).toLocaleString()}원</td></tr>
+                        <tr><td className="text-gray-500 font-bold py-0.5">월 감가비</td><td className="text-right font-bold text-red-600 text-sm py-0.5">{calculations.monthlyDepreciation.toLocaleString()}원</td></tr>
+                      </tbody>
+                    </table>
                     <p className="mt-2 text-[10px] text-gray-400">
                       ※ 주행감가는 구입시 주행상태(회사부담)를 제외하고, 고객이 계약기간 동안 기준 대비 추가 주행한 부분만 적용
                     </p>
@@ -5509,9 +5539,14 @@ export default function RentPricingBuilder() {
                   {calculations.isUsedCar && (
                     <div className="pb-2 border-b border-amber-500/30 space-y-1">
                       <div className="flex justify-between text-xs text-amber-400/80">
-                        <span>🔄 중고차 구입가 기준</span>
-                        <span className="font-bold">{f(purchasePrice)}원</span>
+                        <span>🔄 중고차 {totalAcquisitionCost > 0 ? '구입비용' : '구입가'} 기준</span>
+                        <span className="font-bold">{f(calculations.costBase)}원</span>
                       </div>
+                      {totalAcquisitionCost > 0 && totalAcquisitionCost !== purchasePrice && (
+                        <div className="flex justify-between text-[10px] text-gray-600">
+                          <span className="pl-3">매입가 {f(purchasePrice)} + 부대비용 {f(totalAcquisitionCost - purchasePrice)}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between text-xs text-gray-500">
                         <span className="pl-3">잔존가 (종료시)</span>
                         <span className="font-bold text-gray-400">{f(calculations.effectiveEndMarketValue)}원</span>
