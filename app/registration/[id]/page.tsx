@@ -129,18 +129,26 @@ export default function RegistrationDetailPage() {
   const initDefaultCosts = async (forceReset = false) => {
     if (costs.length > 0 && !forceReset) return  // 이미 항목이 있으면 스킵
     // 초기화 시 기존 항목 삭제
-    if (forceReset && costs.length > 0) {
-      await supabase.from('car_costs').delete().eq('car_id', carId)
+    if (forceReset) {
+      const { error: delErr } = await supabase.from('car_costs').delete().eq('car_id', carId)
+      if (delErr) { alert('기존 항목 삭제 실패: ' + delErr.message); return }
+      setCosts([])  // 로컬 상태도 즉시 클리어
     }
     const template = car.is_used ? usedCarCostItems : newCarCostItems
     const items = template.map(item => ({
-      car_id: carId,
+      car_id: Number(carId),
       ...item,
-      amount: item.category === '차량' ? (car.purchase_price || 0) : 0,
+      amount: item.category === '차량' ? (Number(car.purchase_price) || 0) : 0,
       notes: '',
     }))
     const { error } = await supabase.from('car_costs').insert(items)
-    if (!error) fetchCosts()
+    if (error) {
+      alert('비용 항목 생성 실패: ' + error.message)
+      console.error('car_costs insert error:', error)
+    } else {
+      await fetchCosts()
+      updateTotalCost()
+    }
   }
 
   // 비용 금액 수정
@@ -148,6 +156,13 @@ export default function RegistrationDetailPage() {
     const { error } = await supabase.from('car_costs').update({ [field]: value, updated_at: new Date().toISOString() }).eq('id', costId)
     if (!error) {
       setCosts(prev => prev.map(c => c.id === costId ? { ...c, [field]: value } : c))
+      // '차량' 카테고리 금액 변경 시 → cars.purchase_price도 동기화
+      const costItem = costs.find(c => c.id === costId)
+      if (costItem?.category === '차량' && field === 'amount') {
+        const numVal = Number(value) || 0
+        setCar((prev: any) => ({ ...prev, purchase_price: numVal }))
+        supabase.from('cars').update({ purchase_price: numVal }).eq('id', carId)
+      }
       // total_cost 캐시 업데이트
       updateTotalCost()
     }
@@ -653,28 +668,23 @@ export default function RegistrationDetailPage() {
                       </div>
                     </div>
 
-                    {/* 차량 기준가 (취득가액 or 매입가) — 구입비용 첫 항목에 자동 반영 */}
-                    <div className="bg-gradient-to-r from-gray-50 to-gray-100/50 rounded-xl p-3 mb-4 border border-gray-200 flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase">{car.is_used ? '중고 매입가' : '등록증 취득가액'}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{car.is_used ? '실제 구입 금액' : '등록증 기재 금액'}</p>
+                    {/* 요약: 차량가 + 총 취득원가 (하단 비용항목에서 자동 계산) */}
+                    <div className="bg-gradient-to-r from-gray-50 to-gray-100/50 rounded-xl p-3 mb-4 border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase">{car.is_used ? '중고 매입가' : '등록증 취득가액'}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{car.is_used ? '실제 구입 금액 (하단 차량 매입가 항목)' : '등록증 기재 금액 (하단 출고가 항목)'}</p>
+                        </div>
+                        <span className="text-lg font-black text-steel-700">
+                          {f(costs.find(c => c.category === '차량')?.amount || car.purchase_price)}원
+                        </span>
                       </div>
-                      <input
-                        className="w-48 text-right text-lg font-black text-steel-700 bg-white border border-gray-200 rounded-lg px-3 py-2 focus:border-steel-500 outline-none"
-                        value={f(car.purchase_price)}
-                        onChange={e => {
-                          const val = e.target.value.replace(/,/g, '')
-                          handleChange('purchase_price', val)
-                          // car_costs의 첫 번째 '차량' 카테고리 항목도 동기화
-                          const carCostItem = costs.find(c => c.category === '차량')
-                          if (carCostItem) {
-                            const numVal = Number(val) || 0
-                            setCosts(prev => prev.map(c => c.id === carCostItem.id ? { ...c, amount: numVal } : c))
-                            handleCostUpdate(carCostItem.id, 'amount', numVal)
-                          }
-                        }}
-                        placeholder="0"
-                      />
+                      {totalCost > 0 && (
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
+                          <p className="text-[10px] font-bold text-emerald-600 uppercase">총 취득원가</p>
+                          <span className="text-lg font-black text-emerald-700">{f(totalCost)}원</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* 요약 뷰 */}

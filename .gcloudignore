@@ -4,3 +4,7 @@ node_modules
 .next
 README.md
 .DS_Store
+mobile
+sql
+email-templates
+*.md

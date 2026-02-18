@@ -765,6 +765,7 @@ export default function RentPricingBuilder() {
   const [deliveryFee, setDeliveryFee] = useState(350000)
   const [miscFee, setMiscFee] = useState(167000)
   const [totalAcquisitionCost, setTotalAcquisitionCost] = useState(0)
+  const [carCostItems, setCarCostItems] = useState<{category: string, item_name: string, amount: number}[]>([])  // 등록 페이지 비용 항목
   // 🆕 차량등록 지역 (공채매입 계산용)
   const [registrationRegion, setRegistrationRegion] = useState('서울')
 
@@ -1179,16 +1180,20 @@ export default function RentPricingBuilder() {
       .eq('car_id', carId)
     setMarketComps(compData || [])
 
-    // 등록 페이지 구입비용 상세 (car_costs) 합계 로드
+    // 등록 페이지 구입비용 상세 (car_costs) 항목별 로드
     const { data: costsData } = await supabase
       .from('car_costs')
-      .select('amount')
+      .select('category, item_name, amount')
       .eq('car_id', carId)
+      .order('sort_order', { ascending: true })
     if (costsData && costsData.length > 0) {
+      setCarCostItems(costsData.map((c: any) => ({ category: c.category, item_name: c.item_name, amount: Number(c.amount) || 0 })))
       const costTotal = costsData.reduce((sum: number, c: any) => sum + (Number(c.amount) || 0), 0)
       if (costTotal > 0) {
         setTotalAcquisitionCost(costTotal)
       }
+    } else {
+      setCarCostItems([])
     }
 
     // 공통 기준 테이블 매핑 적용
@@ -3995,99 +4000,187 @@ export default function RentPricingBuilder() {
               </div>
             )}
 
-            {/* 1. 출고가 & 매입가 관계 */}
-            <Section icon="🏭" title="출고가 & 매입가 관계">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <InputRow label="출고가 (신차가)" value={factoryPrice} onChange={setFactoryPrice} />
-                  <InputRow label="매입가 (실 구매가)" value={purchasePrice} onChange={setPurchasePrice} />
+            {/* 1. 차량 취득원가 (3단계: 기준가 → 매입가 → 취득원가) */}
+            <Section icon="💰" title={`차량 취득원가 — ${carAgeMode === 'used' ? '중고차' : '신차'}`}>
+              {/* ── STEP 1: 기준가 (가격표/시세) ── */}
+              <div className="mb-1">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-black">1</span>
+                  <span className="text-sm font-bold text-gray-700">{carAgeMode === 'used' ? '시세 (이론적 시장가)' : '가격표 금액 (출고가)'}</span>
+                  <span className="text-[10px] text-gray-400 ml-auto">{carAgeMode === 'used' ? '연식·주행거리 기반 이론가' : '옵션 포함 정가'}</span>
                 </div>
-                <div className="bg-gradient-to-br from-steel-50 to-steel-100/50 rounded-xl p-5 flex flex-col justify-center">
-                  <div className="text-center">
-                    <span className="text-xs text-steel-600 font-bold block mb-1">매입 할인율</span>
-                    <span className="text-4xl font-black text-steel-700">
-                      {calculations.purchaseDiscount.toFixed(1)}%
-                    </span>
-                    <span className="text-sm text-steel-500 block mt-1">
-                      출고가 대비 {f(factoryPrice - purchasePrice)}원 할인
-                    </span>
+                <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <InputRow label={carAgeMode === 'used' ? '신차 출고가 (감가 기준)' : '출고가 (가격표)'} value={factoryPrice} onChange={setFactoryPrice} />
+                    </div>
+                    <div className="text-right pl-4 shrink-0">
+                      {carAgeMode === 'used' && calculations.theoreticalMarketValue > 0 ? (
+                        <>
+                          <p className="text-[10px] text-gray-400">차령 {customCarAge}년 이론 시세</p>
+                          <p className="text-xl font-black text-blue-700">{f(calculations.theoreticalMarketValue)}원</p>
+                          <p className="text-[10px] text-gray-400">감가율 {calculations.purchaseTotalDep.toFixed(1)}%</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[10px] text-gray-400">정가 기준</p>
+                          <p className="text-xl font-black text-blue-700">{f(factoryPrice)}원</p>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-            </Section>
 
-            {/* 🆕 1.5 취득원가 분석 */}
-            <Section icon="📋" title="취득원가 분석 (차량가 + 등록비)">
-              {/* 등록 지역 선택 */}
-              <div className="mb-4 p-4 bg-steel-50/50 rounded-xl border border-steel-100">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-bold text-gray-600">차량 등록 지역</p>
-                  <span className="text-[10px] text-gray-400">
-                    {['서울', '부산', '대구'].includes(registrationRegion)
-                      ? `${registrationRegion}: 도시철도채권 · 영업용 매입 의무`
-                      : `${registrationRegion}: 지역개발채권 · 영업용 매입 면제`}
-                  </span>
+              {/* ── STEP 2: 매입가 (실구매가) ── */}
+              <div className="mb-1">
+                <div className="flex items-center gap-2 mb-3 mt-4">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-white text-xs font-black">2</span>
+                  <span className="text-sm font-bold text-gray-700">{carAgeMode === 'used' ? '매입가 (실구매가)' : '매입가 (실구매가)'}</span>
+                  <span className="text-[10px] text-gray-400 ml-auto">{carAgeMode === 'used' ? '실제 협상/낙찰가' : '할인 반영 실제 결제가'}</span>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {['서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
-                    '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'].map(region => (
-                    <button
-                      key={region}
-                      onClick={() => setRegistrationRegion(region)}
-                      className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-colors
-                        ${registrationRegion === region
-                          ? ['서울', '부산', '대구'].includes(region)
-                            ? 'bg-red-500 text-white'
-                            : 'bg-green-500 text-white'
-                          : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
-                        }`}
-                    >
-                      {region}
-                    </button>
-                  ))}
+                <div className="bg-emerald-50/50 border border-emerald-100 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <InputRow label={carAgeMode === 'used' ? '중고 매입가' : '매입가 (실 구매가)'} value={purchasePrice} onChange={setPurchasePrice} />
+                    </div>
+                    <div className="text-right pl-4 shrink-0">
+                      {carAgeMode === 'used' ? (
+                        calculations.theoreticalMarketValue > 0 ? (
+                          <>
+                            <p className="text-[10px] text-gray-400">시세 대비 매입</p>
+                            <p className={`text-xl font-black ${calculations.purchasePremiumPct <= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {calculations.purchasePremiumPct > 0 ? '+' : ''}{calculations.purchasePremiumPct.toFixed(1)}%
+                            </p>
+                            <p className="text-[10px] text-gray-400">
+                              {calculations.purchasePremiumPct <= 0 ? '시세 이하 매입 👍' : '시세 대비 프리미엄'}
+                            </p>
+                          </>
+                        ) : null
+                      ) : (
+                        factoryPrice > 0 ? (
+                          <>
+                            <p className="text-[10px] text-gray-400">출고가 대비</p>
+                            <p className="text-xl font-black text-emerald-600">
+                              -{calculations.purchaseDiscount.toFixed(1)}%
+                            </p>
+                            <p className="text-[10px] text-gray-400">{f(factoryPrice - purchasePrice)}원 할인</p>
+                          </>
+                        ) : null
+                      )}
+                    </div>
+                  </div>
                 </div>
-                {bondCost === 0 && (
-                  <p className="text-xs text-green-600 font-bold mt-2">
-                    {['서울', '부산', '대구'].includes(registrationRegion)
-                      ? `배기량 ${engineCC || 0}cc → 면제 대상`
-                      : `${registrationRegion} 지역 영업용(렌터카) → 공채매입 면제`}
-                  </p>
-                )}
-                {bondCost > 0 && (
-                  <p className="text-xs text-red-500 font-bold mt-2">
-                    {registrationRegion} 도시철도채권: 영업용 {engineCC >= 2000 ? (registrationRegion === '서울' ? '8%' : '4%') : (registrationRegion === '서울' ? '5%' : '2%')} × 할인매도 후 실부담 {f(bondCost)}원
-                  </p>
-                )}
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-1">
-                  <ResultRow label="차량 매입가" value={purchasePrice} />
-                  <InputRow label={acquisitionTax === 0 && factoryPrice > 0 ? '취득세 (경차 면제)' : '취득세 (영업용 4%)'} value={acquisitionTax} onChange={setAcquisitionTax} sub={acquisitionTax === 0 && factoryPrice > 0 ? '경차 취득세 감면 (지방세특례제한법 제75조)' : '렌터카 대여업 영업용 기준'} />
-                  <InputRow
-                    label={bondCost > 0 ? `공채 실부담 (${registrationRegion})` : `공채 (${registrationRegion})`}
-                    value={bondCost}
-                    onChange={setBondCost}
-                    sub={bondCost > 0
-                      ? `${registrationRegion} 도시철도채권 영업용 · 할인매도 후`
-                      : `영업용 매입 면제`}
-                  />
-                  <InputRow label="탁송료" value={deliveryFee} onChange={setDeliveryFee} />
-                  <InputRow label="기타 (번호판/인지/대행/검사)" value={miscFee} onChange={setMiscFee} />
+              {/* ── STEP 3: 취득원가 (매입가 + 부대비용) ── */}
+              <div>
+                <div className="flex items-center gap-2 mb-3 mt-4">
+                  <span className="flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white text-xs font-black">3</span>
+                  <span className="text-sm font-bold text-gray-700">취득원가 (매입가 + 부대비용)</span>
+                  <span className="text-[10px] text-gray-400 ml-auto">렌트가 산정 원가 기준</span>
                 </div>
-                <div>
-                  <div className="bg-gradient-to-br from-red-50 to-orange-50 border border-red-200 rounded-xl p-5">
-                    <div className="text-center">
-                      <span className="text-xs text-red-500 font-bold block mb-1">실제 취득원가</span>
-                      <span className="text-3xl font-black text-red-700">{f(totalAcquisitionCost)}원</span>
-                      <span className="text-sm text-red-400 block mt-2">
-                        차량가 대비 <b>+{f(totalAcquisitionCost - purchasePrice)}원</b> ({purchasePrice > 0 ? ((totalAcquisitionCost - purchasePrice) / purchasePrice * 100).toFixed(1) : 0}%)
-                      </span>
-                      <p className="text-xs text-gray-500 mt-3 bg-white/60 rounded-lg p-2">
-                        이 금액이 렌트가 산정의 진짜 원가 기준입니다.<br/>
-                        차량가만 기준하면 등록비용분 손실 발생!
-                      </p>
+
+                {/* 등록 지역 선택 */}
+                <div className="mb-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold text-gray-600">차량 등록 지역</p>
+                    <span className="text-[10px] text-gray-400">
+                      {['서울', '부산', '대구'].includes(registrationRegion)
+                        ? `${registrationRegion}: 도시철도채권 · 영업용 매입 의무`
+                        : `${registrationRegion}: 지역개발채권 · 영업용 매입 면제`}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {['서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종',
+                      '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주'].map(region => (
+                      <button
+                        key={region}
+                        onClick={() => setRegistrationRegion(region)}
+                        className={`px-2.5 py-1 text-xs rounded-lg font-bold transition-colors
+                          ${registrationRegion === region
+                            ? ['서울', '부산', '대구'].includes(region)
+                              ? 'bg-red-500 text-white'
+                              : 'bg-green-500 text-white'
+                            : 'bg-white text-gray-500 hover:bg-gray-100 border border-gray-200'
+                          }`}
+                      >
+                        {region}
+                      </button>
+                    ))}
+                  </div>
+                  {bondCost === 0 && (
+                    <p className="text-xs text-green-600 font-bold mt-2">
+                      {['서울', '부산', '대구'].includes(registrationRegion)
+                        ? `배기량 ${engineCC || 0}cc → 면제 대상`
+                        : `${registrationRegion} 지역 영업용(렌터카) → 공채매입 면제`}
+                    </p>
+                  )}
+                  {bondCost > 0 && (
+                    <p className="text-xs text-red-500 font-bold mt-2">
+                      {registrationRegion} 도시철도채권: 영업용 {engineCC >= 2000 ? (registrationRegion === '서울' ? '8%' : '4%') : (registrationRegion === '서울' ? '5%' : '2%')} × 할인매도 후 실부담 {f(bondCost)}원
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    {/* 등록 차량: car_costs 실데이터 읽기전용 / 신차 가격표: 수동 입력 */}
+                    {carCostItems.length > 0 ? (
+                      <>
+                        {carCostItems.filter(c => c.amount > 0).map((item, i) => (
+                          <ResultRow key={i} label={item.item_name} value={item.amount} />
+                        ))}
+                        <div className="pt-1 mt-1 border-t border-gray-200">
+                          <ResultRow label="합계" value={totalAcquisitionCost} highlight />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <ResultRow label="차량 매입가" value={purchasePrice} />
+                        <InputRow label={acquisitionTax === 0 && factoryPrice > 0 ? '취득세 (경차 면제)' : '취득세 (영업용 4%)'} value={acquisitionTax} onChange={setAcquisitionTax} sub={acquisitionTax === 0 && factoryPrice > 0 ? '경차 취득세 감면' : '렌터카 대여업 영업용 기준'} />
+                        <InputRow
+                          label={bondCost > 0 ? `공채 실부담 (${registrationRegion})` : `공채 (${registrationRegion})`}
+                          value={bondCost}
+                          onChange={setBondCost}
+                          sub={bondCost > 0
+                            ? `${registrationRegion} 도시철도채권 영업용 · 할인매도 후`
+                            : `영업용 매입 면제`}
+                        />
+                        <InputRow label="탁송료" value={deliveryFee} onChange={setDeliveryFee} />
+                        <InputRow label="기타 (번호판/인지/대행/검사)" value={miscFee} onChange={setMiscFee} />
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <div className="bg-gradient-to-br from-red-50 to-orange-50 border border-red-200 rounded-xl p-5 flex-1">
+                      <div className="text-center">
+                        <span className="text-xs text-red-500 font-bold block mb-1">실제 취득원가</span>
+                        <span className="text-3xl font-black text-red-700">{f(totalAcquisitionCost)}원</span>
+                        <span className="text-sm text-red-400 block mt-2">
+                          매입가 대비 <b>+{f(totalAcquisitionCost - purchasePrice)}원</b> ({purchasePrice > 0 ? ((totalAcquisitionCost - purchasePrice) / purchasePrice * 100).toFixed(1) : 0}%)
+                        </span>
+                        {carCostItems.length > 0 && (
+                          <p className="text-xs text-emerald-600 mt-2 bg-emerald-50 rounded-lg p-2 font-bold">
+                            등록 페이지 비용 데이터 연동됨
+                          </p>
+                        )}
+                        {carCostItems.length === 0 && (
+                          <p className="text-xs text-gray-500 mt-2 bg-white/60 rounded-lg p-2">
+                            렌트가 산정의 원가 기준
+                          </p>
+                        )}
+                      </div>
                     </div>
+                    {/* 등록 상세 페이지 바로가기 */}
+                    {selectedCar && selectedCar.id && !String(selectedCar.id).startsWith('newcar-') && (
+                      <button
+                        onClick={() => window.open(`/registration/${selectedCar.id}`, '_blank')}
+                        className="w-full py-3 px-4 bg-steel-600 hover:bg-steel-700 text-white rounded-xl font-bold text-sm transition-colors flex items-center justify-center gap-2"
+                      >
+                        <span>📋</span> 등록 상세에서 비용 관리 →
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
