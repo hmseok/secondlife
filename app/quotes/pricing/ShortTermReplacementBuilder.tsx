@@ -1,7 +1,7 @@
 'use client'
 import { supabase } from '../../utils/supabase'
 import { useApp } from '../../context/AppContext'
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 
 // ─── 타입 ───
 interface LotteRate {
@@ -354,6 +354,65 @@ export default function ShortTermReplacementBuilder() {
     loadQuotes()
   }
 
+  // ─── 빠른 견적 계산기 상태 ───
+  const [qcCategory, setQcCategory] = useState<string>('')
+  const [qcVehicle, setQcVehicle] = useState<string>('')
+  const [qcDateMode, setQcDateMode] = useState<'days' | 'range'>('days')
+  const [qcDays, setQcDays] = useState<number>(1)
+  const [qcHours, setQcHours] = useState<number>(0)
+  const [qcStartDate, setQcStartDate] = useState<string>('')
+  const [qcStartTime, setQcStartTime] = useState<string>('09:00')
+  const [qcEndDate, setQcEndDate] = useState<string>('')
+  const [qcEndTime, setQcEndTime] = useState<string>('18:00')
+
+  const RATE_FIELD_LABEL: Record<string, string> = { rate_6hrs: '6시간', rate_10hrs: '10시간', rate_1_3days: '1~3일', rate_4days: '4일', rate_5_6days: '5~6일', rate_7plus_days: '7일+' }
+
+  // 빠른 견적용 카테고리 목록
+  const qcCategories = useMemo(() => [...new Set(lotteRates.map(r => r.lotte_category))], [lotteRates])
+  const qcVehicles = useMemo(() => {
+    if (!qcCategory) return []
+    return lotteRates.filter(r => r.lotte_category === qcCategory)
+  }, [lotteRates, qcCategory])
+  const qcSelectedRate = useMemo(() => {
+    if (!qcVehicle) return null
+    return lotteRates.find(r => r.vehicle_names === qcVehicle) || null
+  }, [lotteRates, qcVehicle])
+
+  // 총 시간 계산 (일+시간 또는 날짜+시간 범위)
+  const qcTotalHours = useMemo(() => {
+    if (qcDateMode === 'days') return qcDays * 24 + qcHours
+    if (qcStartDate && qcEndDate) {
+      const s = new Date(`${qcStartDate}T${qcStartTime || '09:00'}`)
+      const e = new Date(`${qcEndDate}T${qcEndTime || '18:00'}`)
+      const diffMs = e.getTime() - s.getTime()
+      return diffMs > 0 ? diffMs / (1000 * 60 * 60) : 0
+    }
+    return 0
+  }, [qcDateMode, qcDays, qcHours, qcStartDate, qcStartTime, qcEndDate, qcEndTime])
+
+  // 총 시간 → 요율 필드 + 적용 수량 자동 결정
+  const qcAutoRate = useMemo(() => {
+    const h = qcTotalHours
+    if (h <= 0) return { field: 'rate_1_3days', qty: 0, label: '' }
+    if (h <= 6) return { field: 'rate_6hrs', qty: 1, label: '6시간 ×1' }
+    if (h <= 10) return { field: 'rate_10hrs', qty: 1, label: '10시간 ×1' }
+    // 일 단위 계산 (10시간 초과 → 1일, 이후 24시간 단위)
+    const days = Math.ceil(h / 24)
+    if (days <= 3) return { field: 'rate_1_3days', qty: days, label: `1~3일 요율 ×${days}일` }
+    if (days === 4) return { field: 'rate_4days', qty: days, label: `4일 요율 ×${days}일` }
+    if (days <= 6) return { field: 'rate_5_6days', qty: days, label: `5~6일 요율 ×${days}일` }
+    return { field: 'rate_7plus_days', qty: days, label: `7일+ 요율 ×${days}일` }
+  }, [qcTotalHours])
+
+  // 빠른 견적 금액 계산
+  const qcResult = useMemo(() => {
+    if (!qcSelectedRate || qcAutoRate.qty <= 0) return null
+    const baseRate = (qcSelectedRate as any)[qcAutoRate.field] || 0
+    const discountedRate = calcRate(baseRate, globalDiscount)
+    const total = discountedRate * qcAutoRate.qty
+    return { baseRate, discountedRate, qty: qcAutoRate.qty, rateLabel: qcAutoRate.label, rateField: RATE_FIELD_LABEL[qcAutoRate.field], total, totalWithVat: Math.round(total * 1.1) }
+  }, [qcSelectedRate, qcAutoRate, globalDiscount])
+
   // ─── 롯데 카테고리 필터 ───
   const lotteCategories = useMemo(() => {
     const cats = [...new Set(lotteRates.map(r => r.lotte_category))]
@@ -391,31 +450,129 @@ export default function ShortTermReplacementBuilder() {
       {subTab === 'settings' && (
         <div className="space-y-4">
 
-          {/* ─── 할인율 + 정비군 매핑 (상단) ─── */}
-
-          {/* 글로벌 할인율 설정 */}
+          {/* ─── 빠른 견적 계산기 (고객 응대용) + 할인율 통합 ─── */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-gray-50/50 border-b border-gray-100 px-4 py-2.5">
-              <span className="font-bold text-gray-800 text-xs">할인율 설정 <span className="text-[11px] text-gray-400 font-medium ml-1">롯데렌터카 대비 적용 비율</span></span>
+            <div className="bg-gradient-to-r from-steel-50 to-purple-50/30 border-b border-gray-100 px-4 py-2.5 flex items-center justify-between">
+              <span className="font-bold text-gray-800 text-xs">빠른 견적 계산기 <span className="text-[11px] text-gray-400 font-medium ml-1">차종 선택 → 기간 입력 → 예상금액</span></span>
             </div>
-            <div className="p-4">
-              <div className="flex items-center gap-4">
-                <span className="text-xs font-bold text-gray-600 shrink-0">롯데 대비</span>
+            <div className="p-4 space-y-3">
+              {/* 할인율 슬라이더 (인라인) */}
+              <div className="flex items-center gap-3 bg-purple-50/50 rounded-xl px-3 py-2">
+                <span className="text-xs font-bold text-purple-700 shrink-0">할인율</span>
                 <input type="range" min={10} max={100} step={5} value={globalDiscount}
                   onChange={e => applyGlobalDiscount(Number(e.target.value))}
-                  className="flex-1 h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-purple-600" />
+                  className="flex-1 h-1.5 bg-purple-200 rounded-lg appearance-none cursor-pointer accent-purple-600" />
                 <div className="flex items-center gap-1">
                   <input type="number" min={1} max={100} value={globalDiscount}
                     onChange={e => applyGlobalDiscount(Number(e.target.value))}
-                    className="w-14 border border-gray-200 px-2 py-1 rounded-lg text-center font-bold text-purple-700 text-sm focus:border-purple-500 outline-none" />
-                  <span className="text-sm font-bold text-gray-400">%</span>
+                    className="w-12 border border-purple-200 px-1.5 py-0.5 rounded-lg text-center font-bold text-purple-700 text-xs focus:border-purple-500 outline-none bg-white" />
+                  <span className="text-xs font-bold text-purple-400">%</span>
+                </div>
+                <span className="text-[10px] text-purple-400 font-bold shrink-0">롯데 대비</span>
+              </div>
+
+              {/* 1행: 카테고리 + 차종 선택 */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 mb-1">카테고리</label>
+                  <select value={qcCategory} onChange={e => { setQcCategory(e.target.value); setQcVehicle('') }}
+                    className="w-full border border-gray-200 px-2.5 py-1.5 rounded-lg font-bold text-xs focus:border-steel-500 outline-none bg-white">
+                    <option value="">선택하세요</option>
+                    {qcCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-400 mb-1">차종</label>
+                  <select value={qcVehicle} onChange={e => setQcVehicle(e.target.value)}
+                    className="w-full border border-gray-200 px-2.5 py-1.5 rounded-lg font-bold text-xs focus:border-steel-500 outline-none bg-white" disabled={!qcCategory}>
+                    <option value="">선택하세요</option>
+                    {qcVehicles.map((v, i) => <option key={i} value={v.vehicle_names}>{v.vehicle_names} ({v.service_group})</option>)}
+                  </select>
                 </div>
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">
-                예시: 롯데 1일 10만원 → 턴키 <span className="font-bold text-purple-600">{f(calcRate(100000, globalDiscount))}원</span>/일
-              </p>
+
+              {/* 2행: 사용 기간 (일+시간 또는 날짜+시간) — 요율은 자동 결정 */}
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <label className="text-[11px] font-bold text-gray-400">사용 기간</label>
+                  <div className="flex gap-1">
+                    <button onClick={() => setQcDateMode('days')}
+                      className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors ${qcDateMode === 'days' ? 'bg-steel-600 text-white' : 'bg-gray-100 text-gray-400'}`}>일/시간 입력</button>
+                    <button onClick={() => setQcDateMode('range')}
+                      className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors ${qcDateMode === 'range' ? 'bg-steel-600 text-white' : 'bg-gray-100 text-gray-400'}`}>날짜/시간 선택</button>
+                  </div>
+                  {qcAutoRate.qty > 0 && (
+                    <span className="text-[10px] font-bold text-steel-500 bg-steel-50 px-1.5 py-0.5 rounded ml-auto">자동 적용: {qcAutoRate.label}</span>
+                  )}
+                </div>
+                {qcDateMode === 'days' ? (
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} max={365} value={qcDays} onChange={e => setQcDays(Number(e.target.value))}
+                      className="w-16 border border-gray-200 px-2 py-1.5 rounded-lg font-bold text-xs text-center focus:border-steel-500 outline-none" />
+                    <span className="text-xs font-bold text-gray-400">일</span>
+                    <input type="number" min={0} max={23} value={qcHours} onChange={e => setQcHours(Number(e.target.value))}
+                      className="w-16 border border-gray-200 px-2 py-1.5 rounded-lg font-bold text-xs text-center focus:border-steel-500 outline-none" />
+                    <span className="text-xs font-bold text-gray-400">시간</span>
+                    <span className="text-[10px] text-gray-300 ml-1">= 총 {qcTotalHours > 0 ? (qcTotalHours < 24 ? `${qcTotalHours}시간` : `${Math.floor(qcTotalHours / 24)}일 ${Math.round(qcTotalHours % 24)}시간`) : '0'}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <input type="date" value={qcStartDate} onChange={e => setQcStartDate(e.target.value)}
+                      className="border border-gray-200 px-2 py-1.5 rounded-lg font-bold text-xs focus:border-steel-500 outline-none" />
+                    <input type="time" value={qcStartTime} onChange={e => setQcStartTime(e.target.value)}
+                      className="w-24 border border-gray-200 px-2 py-1.5 rounded-lg font-bold text-xs focus:border-steel-500 outline-none" />
+                    <span className="text-xs text-gray-400 font-bold">~</span>
+                    <input type="date" value={qcEndDate} onChange={e => setQcEndDate(e.target.value)}
+                      className="border border-gray-200 px-2 py-1.5 rounded-lg font-bold text-xs focus:border-steel-500 outline-none" />
+                    <input type="time" value={qcEndTime} onChange={e => setQcEndTime(e.target.value)}
+                      className="w-24 border border-gray-200 px-2 py-1.5 rounded-lg font-bold text-xs focus:border-steel-500 outline-none" />
+                    {qcTotalHours > 0 && (
+                      <span className="text-[10px] text-gray-300 font-bold ml-1">= 총 {qcTotalHours < 24 ? `${Math.round(qcTotalHours)}시간` : `${Math.floor(qcTotalHours / 24)}일 ${Math.round(qcTotalHours % 24)}시간`}</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 결과 표시 */}
+              {qcResult && qcSelectedRate && (
+                <div className="bg-gradient-to-r from-steel-50 to-purple-50/50 rounded-xl p-3 border border-steel-200/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-xs text-gray-500">
+                      <span className="font-bold text-gray-700">{qcSelectedRate.lotte_category}</span>
+                      <span className="mx-1">·</span>
+                      <span className="text-[11px]">{qcSelectedRate.vehicle_names.length > 30 ? qcSelectedRate.vehicle_names.slice(0, 30) + '...' : qcSelectedRate.vehicle_names}</span>
+                      <span className="mx-1">·</span>
+                      <span className="bg-steel-100 text-steel-700 text-[10px] font-bold px-1 py-0.5 rounded">{qcSelectedRate.service_group}</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded">{qcResult.rateField} 요율 적용</span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 text-center">
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold">롯데 기준</div>
+                      <div className="text-xs font-bold text-red-500 line-through">{f(qcResult.baseRate)}원</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold">할인({globalDiscount}%)</div>
+                      <div className="text-xs font-black text-purple-600">{f(qcResult.discountedRate)}원</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold">{qcResult.rateLabel}</div>
+                      <div className="text-sm font-black text-steel-700">{f(qcResult.total)}원</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-gray-400 font-bold">VAT 포함</div>
+                      <div className="text-sm font-black text-steel-900">{f(qcResult.totalWithVat)}원</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {!qcSelectedRate && (
+                <div className="text-center py-2 text-[11px] text-gray-300 font-bold">카테고리와 차종을 선택하면 예상금액이 표시됩니다</div>
+              )}
             </div>
           </div>
+
+          {/* ─── 할인율 + 정비군 매핑 ─── */}
 
           {/* 정비군별 요율 매핑 */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -448,12 +605,12 @@ export default function ShortTermReplacementBuilder() {
                     const computed = r.calc_method === 'auto' ? calcRate(r.lotte_base_rate, r.discount_percent) : r.daily_rate
                     const isRvStart = r.service_group === '8군' && (i === 0 || rates[i - 1]?.service_group !== '8군')
                     return (
-                      <>{isRvStart && (
-                        <tr key="rv-divider" className="bg-amber-50/50">
+                      <React.Fragment key={r.id || `rate-${i}`}>{isRvStart && (
+                        <tr className="bg-amber-50/50">
                           <td colSpan={7} className="px-4 py-1 text-xs font-bold text-amber-600">RV · SUV · 승합</td>
                         </tr>
                       )}
-                      <tr key={r.id || i} className="border-t border-gray-100 hover:bg-steel-50/30 whitespace-nowrap">
+                      <tr className="border-t border-gray-100 hover:bg-steel-50/30 whitespace-nowrap">
                         <td className="py-1.5 px-3 pl-4"><span className="bg-steel-100 text-steel-700 text-xs font-bold px-1.5 py-0.5 rounded">{r.service_group}</span></td>
                         <td className="py-1.5 px-3">
                           {rateEditMode ? (
@@ -511,7 +668,7 @@ export default function ShortTermReplacementBuilder() {
                           )}
                         </td>
                       </tr>
-                      </>
+                      </React.Fragment>
                     )
                   })}
                 </tbody>
@@ -565,17 +722,17 @@ export default function ShortTermReplacementBuilder() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full" style={{minWidth:900}}>
+            <table className="w-full">
               <thead><tr className="text-gray-400 whitespace-nowrap">
                 <th className="py-1.5 px-3 pl-4 text-left text-xs font-bold">카테고리</th>
-                <th className="py-1.5 px-3 text-left text-xs font-bold" style={{minWidth:180}}>차종</th>
+                <th className="py-1.5 px-3 text-left text-xs font-bold">차종</th>
                 <th className="py-1.5 pr-3 text-right text-xs font-bold text-orange-400">6시간</th>
                 <th className="py-1.5 pr-3 text-right text-xs font-bold text-orange-400">10시간</th>
                 <th className="py-1.5 pr-3 text-right text-xs font-bold text-red-400">1~3일</th>
                 <th className="py-1.5 pr-3 text-right text-xs font-bold">4일</th>
                 <th className="py-1.5 pr-3 text-right text-xs font-bold">5~6일</th>
                 <th className="py-1.5 pr-3 text-right text-xs font-bold">7일+</th>
-                <th className="py-1.5 pr-3 text-right text-xs font-bold text-purple-500">턴키({globalDiscount}%)</th>
+                <th className="py-1.5 pr-3 text-right text-xs font-bold text-purple-500">할인율({globalDiscount}%)</th>
                 <th className="py-1.5 px-3 pr-4 text-center text-xs font-bold text-steel-600">매핑</th>
                 {lotteEditMode && <th className="py-1.5 px-2 pr-4 text-center text-xs font-bold"></th>}
               </tr></thead>
@@ -583,8 +740,8 @@ export default function ShortTermReplacementBuilder() {
                 {filteredLotteRates.map((lr, i) => {
                   const realIdx = lotteRates.findIndex(r => r.id === lr.id || (r.lotte_category === lr.lotte_category && r.vehicle_names === lr.vehicle_names))
                   return (
-                    <tr key={lr.id || i} className="border-t border-gray-100 hover:bg-gray-50/50 whitespace-nowrap">
-                      <td className="py-1.5 px-3 pl-4">
+                    <tr key={lr.id || i} className="border-t border-gray-100 hover:bg-gray-50/50">
+                      <td className="py-1.5 px-3 pl-4 whitespace-nowrap">
                         {lotteEditMode ? (
                           <select className="border border-gray-200 px-1 py-0.5 rounded text-xs font-bold w-full" value={lr.lotte_category}
                             onChange={e => { const n = [...lotteRates]; n[realIdx] = { ...n[realIdx], lotte_category: e.target.value }; setLotteRates(n) }}>
@@ -603,7 +760,7 @@ export default function ShortTermReplacementBuilder() {
                         )}
                       </td>
                       {(['rate_6hrs', 'rate_10hrs', 'rate_1_3days', 'rate_4days', 'rate_5_6days', 'rate_7plus_days'] as const).map((field, fi) => (
-                        <td key={field} className="py-1.5 pr-3 text-right">
+                        <td key={field} className="py-1.5 pr-3 text-right whitespace-nowrap">
                           {lotteEditMode ? (
                             <input className="w-16 border border-gray-200 px-1.5 py-0.5 rounded text-xs font-bold text-right"
                               value={f((lr as any)[field])}
@@ -613,10 +770,10 @@ export default function ShortTermReplacementBuilder() {
                           )}
                         </td>
                       ))}
-                      <td className="py-1.5 pr-3 text-right">
+                      <td className="py-1.5 pr-3 text-right whitespace-nowrap">
                         <span className="text-xs font-black text-purple-600">{f(calcRate(lr.rate_1_3days, globalDiscount))}</span>
                       </td>
-                      <td className="py-1.5 px-3 pr-4 text-center">
+                      <td className="py-1.5 px-3 pr-4 text-center whitespace-nowrap">
                         {lotteEditMode ? (
                           <select className="border border-gray-200 px-1 py-0.5 rounded text-xs font-bold" value={lr.service_group}
                             onChange={e => { const n = [...lotteRates]; n[realIdx] = { ...n[realIdx], service_group: e.target.value }; setLotteRates(n) }}>
@@ -711,12 +868,12 @@ export default function ShortTermReplacementBuilder() {
                       const dr = r.calc_method === 'auto' ? calcRate(r.lotte_base_rate, r.discount_percent) : r.daily_rate
                       const isRvStart = r.service_group === '8군' && (i === 0 || rates[i - 1]?.service_group !== '8군')
                       return (
-                        <>{isRvStart && (
-                          <tr key="rv-sep" className="bg-amber-50/50">
+                        <React.Fragment key={r.id || `q-${i}`}>{isRvStart && (
+                          <tr className="bg-amber-50/50">
                             <td colSpan={4 + customDays.length} className="px-4 py-1 text-[11px] font-bold text-amber-600">RV · SUV · 승합</td>
                           </tr>
                         )}
-                        <tr key={r.id || i} className="border-t border-gray-100 hover:bg-steel-50/30">
+                        <tr className="border-t border-gray-100 hover:bg-steel-50/30">
                           <td className="py-1.5 px-3 pl-4">
                             <span className="bg-steel-100 text-steel-700 text-xs font-bold px-1.5 py-0.5 rounded">{r.service_group}</span>
                           </td>
@@ -745,7 +902,7 @@ export default function ShortTermReplacementBuilder() {
                             )
                           })}
                         </tr>
-                        </>
+                        </React.Fragment>
                       )
                     })}
                   </tbody>
