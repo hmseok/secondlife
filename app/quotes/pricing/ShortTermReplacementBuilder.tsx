@@ -460,23 +460,32 @@ export default function ShortTermReplacementBuilder() {
     return { parts, label }
   }, [qcDateMode, qcDays, qcHours, qcTotalHours, qcStartDate, qcEndDate])
 
-  // 빠른 견적 금액 계산 (복합 요율)
+  // 빠른 견적 금액 계산 (복합 요율) — 영수증 형태 상세 내역
   const qcResult = useMemo(() => {
     if (!qcSelectedRate || qcCalcBreakdown.parts.length === 0) return null
     let totalBase = 0, totalDisc = 0
-    const details: string[] = []
+    const lines: { label: string; rateType: string; unitBase: number; unitDisc: number; qty: number; subtotalBase: number; subtotalDisc: number }[] = []
     for (const part of qcCalcBreakdown.parts) {
       const base = (qcSelectedRate as any)[part.field] || 0
       const disc = calcRate(base, globalDiscount)
+      const sub = disc * part.qty
       totalBase += base * part.qty
-      totalDisc += disc * part.qty
-      details.push(`${RATE_FIELD_LABEL[part.field]} ${f(disc)}원${part.qty > 1 ? ` ×${part.qty}` : ''}`)
+      totalDisc += sub
+      lines.push({
+        label: RATE_FIELD_LABEL[part.field],
+        rateType: part.field,
+        unitBase: base,
+        unitDisc: disc,
+        qty: part.qty,
+        subtotalBase: base * part.qty,
+        subtotalDisc: sub,
+      })
     }
+    const discountAmount = totalBase - totalDisc
+    const vat = Math.round(totalDisc * 0.1)
     return {
-      baseTotal: totalBase, discTotal: totalDisc,
-      rateLabel: qcCalcBreakdown.label,
-      details: details.join(' + '),
-      totalWithVat: Math.round(totalDisc * 1.1)
+      lines, totalBase, totalDisc, discountAmount, vat,
+      totalWithVat: totalDisc + vat,
     }
   }, [qcSelectedRate, qcCalcBreakdown, globalDiscount])
 
@@ -600,34 +609,70 @@ export default function ShortTermReplacementBuilder() {
                 )}
               </div>
 
-              {/* 결과 표시 */}
+              {/* 결과 표시 — 영수증 스타일 */}
               {qcResult && qcSelectedRate && (
-                <div className="bg-gradient-to-r from-steel-50 to-purple-50/50 rounded-xl p-4 border border-steel-200/50">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="text-sm text-gray-500">
-                      <span className="font-bold text-gray-700">{qcSelectedRate.lotte_category}</span>
-                      <span className="mx-1.5">·</span>
-                      <span className="text-xs">{qcSelectedRate.vehicle_names.length > 30 ? qcSelectedRate.vehicle_names.slice(0, 30) + '...' : qcSelectedRate.vehicle_names}</span>
-                      <span className="mx-1.5">·</span>
-                      <span className="bg-steel-100 text-steel-700 text-xs font-bold px-1.5 py-0.5 rounded">{qcSelectedRate.service_group}</span>
+                <div className="bg-gradient-to-r from-steel-50 to-purple-50/30 rounded-xl border border-steel-200/50 overflow-hidden">
+                  {/* 차종 정보 */}
+                  <div className="px-4 py-2.5 border-b border-steel-200/30 bg-white/40">
+                    <div className="text-sm text-gray-600">
+                      <span className="font-bold text-gray-800">{qcSelectedRate.lotte_category}</span>
+                      <span className="mx-1.5 text-gray-300">|</span>
+                      <span>{qcSelectedRate.vehicle_names.length > 40 ? qcSelectedRate.vehicle_names.slice(0, 40) + '...' : qcSelectedRate.vehicle_names}</span>
+                      <span className="ml-2 bg-steel-100 text-steel-700 text-xs font-bold px-1.5 py-0.5 rounded">{qcSelectedRate.service_group}</span>
                     </div>
                   </div>
-                  <div className="text-xs font-bold text-steel-500 mb-2 bg-white/60 rounded-lg px-3 py-1.5">{qcResult.rateLabel}</div>
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <div>
-                      <div className="text-xs text-gray-400 font-bold mb-1">롯데 기준 합계</div>
-                      <div className="text-sm font-bold text-red-500 line-through">{f(qcResult.baseTotal)}원</div>
+
+                  {/* 상세 내역 테이블 */}
+                  <div className="px-4 py-3">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-xs text-gray-400 font-bold">
+                          <th className="text-left pb-1.5">적용 항목</th>
+                          <th className="text-right pb-1.5">롯데 단가</th>
+                          <th className="text-right pb-1.5">할인 단가</th>
+                          <th className="text-center pb-1.5">수량</th>
+                          <th className="text-right pb-1.5">소계</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {qcResult.lines.map((line, li) => (
+                          <tr key={li} className="text-sm border-t border-gray-200/50">
+                            <td className="py-1.5 font-bold text-gray-700">{line.label} 요율</td>
+                            <td className="py-1.5 text-right text-red-400 line-through">{f(line.unitBase)}원</td>
+                            <td className="py-1.5 text-right font-bold text-purple-600">{f(line.unitDisc)}원</td>
+                            <td className="py-1.5 text-center text-gray-500">×{line.qty}{line.qty > 1 ? '일' : ''}</td>
+                            <td className="py-1.5 text-right font-bold text-gray-800">{f(line.subtotalDisc)}원</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* 합계 영역 */}
+                  <div className="px-4 py-3 border-t border-steel-200/50 bg-white/30 space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">롯데 정상가 합계</span>
+                      <span className="text-red-400 line-through">{f(qcResult.totalBase)}원</span>
                     </div>
-                    <div>
-                      <div className="text-xs text-gray-400 font-bold mb-1">할인({globalDiscount}%) 합계</div>
-                      <div className="text-base font-black text-steel-700">{f(qcResult.discTotal)}원</div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-purple-500 font-bold">할인 ({globalDiscount}%) 적용</span>
+                      <span className="text-purple-600 font-bold">-{f(qcResult.discountAmount)}원</span>
                     </div>
-                    <div>
-                      <div className="text-xs text-gray-400 font-bold mb-1">VAT 포함</div>
-                      <div className="text-lg font-black text-steel-900">{f(qcResult.totalWithVat)}원</div>
+                    <div className="flex justify-between text-sm border-t border-gray-200/50 pt-1.5">
+                      <span className="text-gray-500 font-bold">공급가액</span>
+                      <span className="font-black text-gray-800">{f(qcResult.totalDisc)}원</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-400">VAT (10%)</span>
+                      <span className="text-gray-500">{f(qcResult.vat)}원</span>
                     </div>
                   </div>
-                  <div className="text-xs text-gray-400 mt-2 text-center">{qcResult.details}</div>
+
+                  {/* 최종 금액 */}
+                  <div className="px-4 py-3 bg-steel-600 flex justify-between items-center">
+                    <span className="text-sm font-bold text-steel-200">최종 금액 (VAT 포함)</span>
+                    <span className="text-xl font-black text-white">{f(qcResult.totalWithVat)}원</span>
+                  </div>
                 </div>
               )}
               {!qcSelectedRate && (
