@@ -77,6 +77,9 @@ export default function RegistrationDetailPage() {
   const [showCostDetail, setShowCostDetail] = useState(false)
   const [newCostItem, setNewCostItem] = useState({ category: '차량', item_name: '', amount: 0, notes: '' })
 
+  // 💰 자금조달 (대출 연동) 상태
+  const [linkedLoans, setLinkedLoans] = useState<any[]>([])
+
   // 기본 비용 항목 템플릿 — 신차 / 중고차 분리
   const newCarCostItems = [
     { category: '차량', item_name: '차량 출고가 (취득가액)', sort_order: 1 },
@@ -123,6 +126,16 @@ export default function RegistrationDetailPage() {
       .order('created_at', { ascending: true })
     if (!error) setCosts(data || [])
     setCostsLoading(false)
+  }
+
+  // 대출 목록 조회
+  const fetchLinkedLoans = async () => {
+    const { data } = await supabase
+      .from('loans')
+      .select('*')
+      .eq('car_id', carId)
+      .order('created_at', { ascending: false })
+    setLinkedLoans(data || [])
   }
 
   // 기본 항목 자동 생성 (신차/중고 구분)
@@ -214,6 +227,7 @@ export default function RegistrationDetailPage() {
     if (carId) {
       fetchCarData()
       fetchCosts()
+      fetchLinkedLoans()
     }
   }, [carId])
 
@@ -734,53 +748,76 @@ export default function RegistrationDetailPage() {
                           <div className="text-center py-8 text-gray-400">로딩 중...</div>
                         ) : (
                           <>
-                            {/* 항목 리스트 */}
-                            <div className="space-y-2 mb-5">
-                              {costs.map(cost => (
-                                <div key={cost.id} className="flex items-center gap-2 group">
-                                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold shrink-0 ${getCategoryColor(cost.category)}`}>
-                                    {cost.category}
-                                  </span>
-                                  <span className="text-sm font-bold text-gray-700 shrink-0 w-24 truncate">{cost.item_name}</span>
-                                  <input
-                                    type="text"
-                                    className="flex-1 text-right text-sm font-black text-gray-900 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 focus:bg-white focus:border-steel-500 outline-none transition-all"
-                                    value={cost.amount ? f(cost.amount) : ''}
-                                    onChange={e => {
-                                      const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0
-                                      setCosts(prev => prev.map(c => c.id === cost.id ? { ...c, amount: val } : c))
-                                    }}
-                                    onBlur={e => {
-                                      const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0
-                                      handleCostUpdate(cost.id, 'amount', val)
-                                    }}
-                                    placeholder="0"
-                                  />
-                                  <span className="text-xs text-gray-400 shrink-0">원</span>
-                                  <input
-                                    type="text"
-                                    className="w-24 text-xs text-gray-500 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-steel-400 outline-none px-1 py-1 transition-colors"
-                                    value={cost.notes || ''}
-                                    onChange={e => setCosts(prev => prev.map(c => c.id === cost.id ? { ...c, notes: e.target.value } : c))}
-                                    onBlur={e => handleCostUpdate(cost.id, 'notes', e.target.value)}
-                                    placeholder="비고"
-                                  />
-                                  <button
-                                    onClick={() => handleDeleteCostItem(cost.id)}
-                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
+                            {/* 항목 리스트 — 테이블 정렬 */}
+                            <table className="w-full mb-5">
+                              <thead>
+                                <tr className="border-b border-gray-200">
+                                  <th className="text-left text-[10px] font-bold text-gray-400 uppercase pb-2 pl-1">구분</th>
+                                  <th className="text-left text-[10px] font-bold text-gray-400 uppercase pb-2">항목명</th>
+                                  <th className="text-right text-[10px] font-bold text-gray-400 uppercase pb-2">금액</th>
+                                  <th className="text-left text-[10px] font-bold text-gray-400 uppercase pb-2 pl-3">비고</th>
+                                  <th className="w-6"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {costs.map(cost => (
+                                  <tr key={cost.id} className="group border-b border-gray-100 last:border-0">
+                                    <td className="py-1.5 pl-1 w-12">
+                                      <span className={`inline-block w-10 text-center py-0.5 rounded text-[10px] font-bold ${getCategoryColor(cost.category)}`}>
+                                        {cost.category}
+                                      </span>
+                                    </td>
+                                    <td className="py-1.5">
+                                      <span className="text-sm font-bold text-gray-800">{cost.item_name}</span>
+                                    </td>
+                                    <td className="py-1.5 w-44">
+                                      <div className="flex items-center justify-end gap-1">
+                                        <input
+                                          type="text"
+                                          className="w-36 text-right text-xs font-bold text-gray-600 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 focus:bg-white focus:border-steel-500 outline-none transition-all"
+                                          value={cost.amount ? f(cost.amount) : ''}
+                                          onChange={e => {
+                                            const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0
+                                            setCosts(prev => prev.map(c => c.id === cost.id ? { ...c, amount: val } : c))
+                                          }}
+                                          onBlur={e => {
+                                            const val = Number(e.target.value.replace(/[^0-9]/g, '')) || 0
+                                            handleCostUpdate(cost.id, 'amount', val)
+                                          }}
+                                          placeholder="0"
+                                        />
+                                        <span className="text-xs text-gray-400">원</span>
+                                      </div>
+                                    </td>
+                                    <td className="py-1.5 pl-3 w-28">
+                                      <input
+                                        type="text"
+                                        className="w-full text-xs text-gray-500 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-steel-400 outline-none px-1 py-1 transition-colors"
+                                        value={cost.notes || ''}
+                                        onChange={e => setCosts(prev => prev.map(c => c.id === cost.id ? { ...c, notes: e.target.value } : c))}
+                                        onBlur={e => handleCostUpdate(cost.id, 'notes', e.target.value)}
+                                        placeholder="비고"
+                                      />
+                                    </td>
+                                    <td className="py-1.5 w-6">
+                                      <button
+                                        onClick={() => handleDeleteCostItem(cost.id)}
+                                        className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1"
+                                      >
+                                        ×
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
 
                             {/* 합계 */}
                             {costs.length > 0 && (
-                              <div className="flex items-center gap-2 pt-3 border-t border-gray-200 mb-5">
-                                <span className="text-sm font-bold text-gray-500 flex-1">합계</span>
-                                <span className="text-xl font-black text-emerald-700">{f(totalCost)}</span>
-                                <span className="text-xs text-gray-400 shrink-0">원</span>
+                              <div className="flex items-center pt-3 border-t-2 border-gray-300 mb-5">
+                                <span className="text-sm font-extrabold text-gray-500 uppercase">합계</span>
+                                <span className="text-xl font-black text-emerald-700 ml-auto">{f(totalCost)}</span>
+                                <span className="text-xs text-gray-400 ml-1">원</span>
                               </div>
                             )}
 
@@ -821,6 +858,70 @@ export default function RegistrationDetailPage() {
                         )}
                       </div>
                     )}
+                </div>
+
+                {/* 🏦 자금조달 (대출 연동) */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                  <div className="flex justify-between items-center mb-3 border-b pb-2">
+                    <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                      <span className="w-1 h-5 bg-indigo-500 rounded-full"></span>
+                      자금조달
+                    </h2>
+                    <button
+                      onClick={() => router.push(`/loans/new?car_id=${carId}`)}
+                      className="text-xs bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg font-bold hover:bg-indigo-100 transition-colors"
+                    >
+                      + 대출 등록
+                    </button>
+                  </div>
+
+                  {linkedLoans.length > 0 ? (
+                    <div className="space-y-3">
+                      {linkedLoans.map((loan: any) => (
+                        <div key={loan.id} className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-bold text-indigo-900">{loan.finance_name}</span>
+                              <span className="text-[10px] bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded font-bold">{loan.type}</span>
+                            </div>
+                            <span className="text-xs text-gray-400">{loan.months}개월 · {loan.interest_rate}%</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase">선수금</p>
+                              <p className="text-sm font-black text-gray-800">
+                                {(loan.deposit || 0).toLocaleString()}원
+                                {loan.advance_rate > 0 && <span className="text-[10px] text-indigo-500 ml-1">({loan.advance_rate}%)</span>}
+                              </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase">대출금</p>
+                              <p className="text-sm font-black text-gray-800">{(loan.total_amount || 0).toLocaleString()}원</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase">월 납입금</p>
+                              <p className="text-sm font-black text-red-600">{(loan.monthly_payment || 0).toLocaleString()}원</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border border-indigo-100">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase">고객 초기납입금</p>
+                              <p className="text-sm font-black text-gray-800">{(loan.customer_initial_payment || 0).toLocaleString()}원</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => router.push(`/loans/${loan.id}`)}
+                            className="mt-3 w-full py-2 text-xs font-bold text-indigo-600 bg-indigo-100 hover:bg-indigo-200 rounded-lg transition-colors"
+                          >
+                            대출 상세보기 →
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 p-6 rounded-xl border border-dashed border-gray-300 text-center">
+                      <p className="text-sm text-gray-400 mb-2">연동된 대출 정보가 없습니다</p>
+                      <p className="text-xs text-gray-300">대출/금융 관리에서 이 차량에 대한 금융 정보를 등록하세요</p>
+                    </div>
+                  )}
                 </div>
             </div>
 
