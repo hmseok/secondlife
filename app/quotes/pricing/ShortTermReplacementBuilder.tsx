@@ -123,30 +123,17 @@ const LOTTE_DEFAULT_DATA: Omit<LotteRate, 'id'>[] = [
   { lotte_category: '전기차', vehicle_names: 'TESLA MODEL X', rate_6hrs: 460000, rate_10hrs: 613000, rate_1_3days: 766000, rate_4days: 689400, rate_5_6days: 651100, rate_7plus_days: 612800, service_group: '10군', sort_order: 54 },
 ]
 
-// ─── 정비군 분류 기준 (거래처 공통 기준) ───
-const SERVICE_GROUP_DEFS = [
-  { group: '1군', type: '승용', displacement: '1,000cc 이하', desc: '경차 (스파크, 모닝 등)' },
-  { group: '2군', type: '승용', displacement: '1,600cc 이하', desc: '소형 (아반떼 등)' },
-  { group: '3군', type: '승용', displacement: '2,000cc 이하', desc: '중형 (쏘나타, K5 등)' },
-  { group: '4군', type: '승용', displacement: '3,500cc 이하', desc: '준대형 (그랜저, K8 등)' },
-  { group: '5군', type: '승용', displacement: '3,800cc 이하', desc: '대형 (G80, K9 등)' },
-  { group: '6군', type: '승용', displacement: '5,000cc 이하', desc: '초대형 (G90, 에쿠스 등)' },
-  { group: '8군', type: 'RV·SUV·승합', displacement: '2,000cc 미만', desc: '소형SUV (투싼, 코나, 셀토스 등)' },
-  { group: '9군', type: 'RV·SUV·승합', displacement: '2,000cc 이상', desc: '중대형SUV/승합 (쏘렌토, 카니발 등)' },
-  { group: '10군', type: 'RV·SUV·승합', displacement: '프리미엄', desc: '프리미엄SUV (팰리세이드, GV80 등)' },
-]
-
-// ─── 기본 정비군 (롯데 기준 매핑) — 10군 체계 (7군 없음) ───
+// ─── 기본 정비군 (롯데 기준 매핑) — 10군 체계 (7군 없음), 전기차 제외 평균 ───
 const DEFAULT_GROUPS: Omit<RateRow, 'id'>[] = [
   { service_group: '1군', vehicle_class: '경차', displacement_range: '1,000cc 이하', daily_rate: 0, lotte_base_rate: 122000, discount_percent: 40, calc_method: 'auto', sort_order: 1, is_active: true },
   { service_group: '2군', vehicle_class: '소형 승용', displacement_range: '1,600cc 이하', daily_rate: 0, lotte_base_rate: 159000, discount_percent: 40, calc_method: 'auto', sort_order: 2, is_active: true },
   { service_group: '3군', vehicle_class: '중형 승용', displacement_range: '2,000cc 이하', daily_rate: 0, lotte_base_rate: 263000, discount_percent: 40, calc_method: 'auto', sort_order: 3, is_active: true },
   { service_group: '4군', vehicle_class: '준대형 승용', displacement_range: '3,500cc 이하', daily_rate: 0, lotte_base_rate: 351000, discount_percent: 40, calc_method: 'auto', sort_order: 4, is_active: true },
-  { service_group: '5군', vehicle_class: '대형 승용', displacement_range: '3,800cc 이하', daily_rate: 0, lotte_base_rate: 449000, discount_percent: 40, calc_method: 'auto', sort_order: 5, is_active: true },
-  { service_group: '6군', vehicle_class: '초대형 승용', displacement_range: '5,000cc 이하', daily_rate: 0, lotte_base_rate: 570000, discount_percent: 40, calc_method: 'auto', sort_order: 6, is_active: true },
+  { service_group: '5군', vehicle_class: '대형 승용', displacement_range: '3,800cc 이하', daily_rate: 0, lotte_base_rate: 476000, discount_percent: 40, calc_method: 'auto', sort_order: 5, is_active: true },
+  { service_group: '6군', vehicle_class: '초대형 승용', displacement_range: '5,000cc 이하', daily_rate: 0, lotte_base_rate: 634000, discount_percent: 40, calc_method: 'auto', sort_order: 6, is_active: true },
   { service_group: '8군', vehicle_class: 'RV·SUV·승합 (소형)', displacement_range: '2,000cc 미만', daily_rate: 0, lotte_base_rate: 240000, discount_percent: 40, calc_method: 'auto', sort_order: 8, is_active: true },
-  { service_group: '9군', vehicle_class: 'RV·SUV·승합 (중대형)', displacement_range: '2,000cc 이상', daily_rate: 0, lotte_base_rate: 405000, discount_percent: 40, calc_method: 'auto', sort_order: 9, is_active: true },
-  { service_group: '10군', vehicle_class: 'RV·SUV·승합 (프리미엄)', displacement_range: '프리미엄', daily_rate: 0, lotte_base_rate: 575000, discount_percent: 40, calc_method: 'auto', sort_order: 10, is_active: true },
+  { service_group: '9군', vehicle_class: 'RV·SUV·승합 (중대형)', displacement_range: '2,000cc 이상', daily_rate: 0, lotte_base_rate: 387000, discount_percent: 40, calc_method: 'auto', sort_order: 9, is_active: true },
+  { service_group: '10군', vehicle_class: 'RV·SUV·승합 (프리미엄)', displacement_range: '프리미엄', daily_rate: 0, lotte_base_rate: 615000, discount_percent: 40, calc_method: 'auto', sort_order: 10, is_active: true },
 ]
 
 const ALL_GROUPS = ['1군', '2군', '3군', '4군', '5군', '6군', '8군', '9군', '10군']
@@ -537,37 +524,10 @@ export default function ShortTermReplacementBuilder() {
           {/* 정비군 분류 기준표 */}
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
             <button onClick={() => setLotteOpen(!lotteOpen)} className="w-full bg-gray-50/50 border-b border-gray-100 px-4 py-2.5 flex items-center justify-between hover:bg-gray-100/50 transition-colors">
-              <span className="font-bold text-gray-800 text-xs flex items-center gap-2">롯데렌터카 참고 자료 <span className="text-[11px] text-gray-400 font-medium">정비군 기준 + 공식 요금표</span></span>
+              <span className="font-bold text-gray-800 text-xs flex items-center gap-2">롯데렌터카 공식 요금표 <span className="text-[11px] text-gray-400 font-medium">{lotteUpdateDate} 기준 · 내륙</span></span>
               <span className={`text-gray-400 text-xs transition-transform ${lotteOpen ? 'rotate-180' : ''}`}>▼</span>
             </button>
           {lotteOpen && (<>
-
-        {/* 정비군 분류 기준표 */}
-        <div className="border-b border-gray-100">
-          <div className="bg-gray-50/30 px-4 py-2 border-b border-gray-100">
-            <span className="font-bold text-gray-600 text-xs">정비군 분류 기준 <span className="text-[11px] text-gray-400 font-medium">10군 체계 · 7군 없음</span></span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead><tr className="text-gray-400 whitespace-nowrap">
-                <th className="py-1.5 px-3 pl-4 text-left text-xs font-bold">정비군</th>
-                <th className="py-1.5 px-3 text-left text-xs font-bold">구분</th>
-                <th className="py-1.5 px-3 text-left text-xs font-bold">배기량</th>
-                <th className="py-1.5 px-3 text-left text-xs font-bold">대표 차종</th>
-              </tr></thead>
-              <tbody>
-                {SERVICE_GROUP_DEFS.map(g => (
-                  <tr key={g.group} className="border-t border-gray-100 whitespace-nowrap">
-                    <td className="py-1.5 px-3 pl-4"><span className="bg-steel-100 text-steel-700 text-xs font-bold px-1.5 py-0.5 rounded">{g.group}</span></td>
-                    <td className="py-1.5 px-3"><span className={`text-xs font-bold px-1.5 py-0.5 rounded ${g.type === '승용' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>{g.type}</span></td>
-                    <td className="py-1.5 px-3 text-xs font-bold text-gray-600">{g.displacement}</td>
-                    <td className="py-1.5 px-3 text-xs text-gray-400">{g.desc}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
         {/* 롯데 기준 요금 */}
         <div>
@@ -605,19 +565,19 @@ export default function ShortTermReplacementBuilder() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed">
+            <table className="w-full" style={{minWidth:900}}>
               <thead><tr className="text-gray-400 whitespace-nowrap">
-                <th className="py-1.5 px-3 pl-4 text-left text-xs font-bold" style={{width:80}}>카테고리</th>
-                <th className="py-1.5 px-3 text-left text-xs font-bold" style={{width:'auto'}}>차종</th>
-                <th className="py-1.5 pr-3 text-right text-xs font-bold text-orange-400" style={{width:72}}>6시간</th>
-                <th className="py-1.5 pr-3 text-right text-xs font-bold text-orange-400" style={{width:72}}>10시간</th>
-                <th className="py-1.5 pr-3 text-right text-xs font-bold text-red-400" style={{width:80}}>1~3일</th>
-                <th className="py-1.5 pr-3 text-right text-xs font-bold" style={{width:72}}>4일</th>
-                <th className="py-1.5 pr-3 text-right text-xs font-bold" style={{width:72}}>5~6일</th>
-                <th className="py-1.5 pr-3 text-right text-xs font-bold" style={{width:72}}>7일+</th>
-                <th className="py-1.5 pr-3 text-right text-xs font-bold text-purple-500" style={{width:80}}>턴키({globalDiscount}%)</th>
-                <th className="py-1.5 px-3 text-center text-xs font-bold text-steel-600" style={{width:56}}>매핑</th>
-                {lotteEditMode && <th className="py-1.5 px-2 text-center text-xs font-bold" style={{width:32}}></th>}
+                <th className="py-1.5 px-3 pl-4 text-left text-xs font-bold">카테고리</th>
+                <th className="py-1.5 px-3 text-left text-xs font-bold" style={{minWidth:180}}>차종</th>
+                <th className="py-1.5 pr-3 text-right text-xs font-bold text-orange-400">6시간</th>
+                <th className="py-1.5 pr-3 text-right text-xs font-bold text-orange-400">10시간</th>
+                <th className="py-1.5 pr-3 text-right text-xs font-bold text-red-400">1~3일</th>
+                <th className="py-1.5 pr-3 text-right text-xs font-bold">4일</th>
+                <th className="py-1.5 pr-3 text-right text-xs font-bold">5~6일</th>
+                <th className="py-1.5 pr-3 text-right text-xs font-bold">7일+</th>
+                <th className="py-1.5 pr-3 text-right text-xs font-bold text-purple-500">턴키({globalDiscount}%)</th>
+                <th className="py-1.5 px-3 pr-4 text-center text-xs font-bold text-steel-600">매핑</th>
+                {lotteEditMode && <th className="py-1.5 px-2 pr-4 text-center text-xs font-bold"></th>}
               </tr></thead>
               <tbody>
                 {filteredLotteRates.map((lr, i) => {
@@ -656,7 +616,7 @@ export default function ShortTermReplacementBuilder() {
                       <td className="py-1.5 pr-3 text-right">
                         <span className="text-xs font-black text-purple-600">{f(calcRate(lr.rate_1_3days, globalDiscount))}</span>
                       </td>
-                      <td className="py-1.5 px-3 text-center">
+                      <td className="py-1.5 px-3 pr-4 text-center">
                         {lotteEditMode ? (
                           <select className="border border-gray-200 px-1 py-0.5 rounded text-xs font-bold" value={lr.service_group}
                             onChange={e => { const n = [...lotteRates]; n[realIdx] = { ...n[realIdx], service_group: e.target.value }; setLotteRates(n) }}>
@@ -667,7 +627,7 @@ export default function ShortTermReplacementBuilder() {
                         )}
                       </td>
                       {lotteEditMode && (
-                        <td className="py-1.5 px-2 text-center">
+                        <td className="py-1.5 px-2 pr-4 text-center">
                           <button onClick={() => { const n = [...lotteRates]; n.splice(realIdx, 1); setLotteRates(n) }}
                             className="text-gray-300 hover:text-red-500 text-sm">&times;</button>
                         </td>
