@@ -305,9 +305,10 @@ export default function LoanDetailPage() {
         {/* 좌측: 상세 폼 */}
         <div className="lg:col-span-7 space-y-6">
 
-          {/* ─── 첨부파일 & AI 인식 (최상단) ─── */}
+          {/* ─── 첨부파일 & AI 인식 (기존 대출만 표시) ─── */}
+          {!isNew && (
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
-            <SectionHeader color="bg-purple-600" title="견적서 업로드" sub="AI가 자동으로 인식합니다" />
+            <SectionHeader color="bg-purple-600" title="첨부파일" sub="견적서 / 계약서" />
 
             <div
               onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
@@ -376,6 +377,7 @@ export default function LoanDetailPage() {
               </button>
             )}
           </div>
+          )}
 
           {/* ─── 기본 계약 정보 ─── */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
