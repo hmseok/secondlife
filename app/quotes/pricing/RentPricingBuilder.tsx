@@ -147,8 +147,17 @@ function mapToDepAxes(brand: string, model: string, fuelType?: string, purchaseP
       vc = '중형_SUV'
     else vc = '중형_세단'
   } else {
-    // 국산차
-    if (m.includes('팰리세이드') || m.includes('쏘렌토') || m.includes('모하비') || m.includes('EV9'))
+    // 국산차 — EV 모델별 차급 매핑 우선 적용
+    if (m.includes('EV9'))
+      vc = '대형_SUV'
+    else if (m.includes('EV6') || m.includes('아이오닉5') || m.includes('IONIQ 5') || m.includes('아이오닉6') || m.includes('IONIQ 6'))
+      vc = '중형_SUV'   // 아이오닉5/EV6는 CUV — 중형_SUV 매핑
+    else if (m.includes('EV4') || m.includes('EV3') || m.includes('코나 일렉트릭') || m.includes('KONA ELECTRIC') || m.includes('니로') || m.includes('NIRO'))
+      vc = '소형_SUV'   // EV3, EV4, 코나EV, 니로EV — 소형 SUV
+    else if (m.includes('EV5'))
+      vc = '중형_SUV'
+    // ── 일반 내연기관/하이브리드 국산차 ──
+    else if (m.includes('팰리세이드') || m.includes('쏘렌토') || m.includes('모하비'))
       vc = '대형_SUV'
     else if (m.includes('투싼') || m.includes('스포티지') || m.includes('싼타페') || m.includes('SANTA'))
       vc = '중형_SUV'
@@ -502,24 +511,51 @@ function buildCurveFromDbRates(dbRecord: any): number[] {
   return curve
 }
 
-// 차종 클래스별 감가 보정 계수 (1.0 = 표준 기준)
+// 차종 클래스별 감가 보정 계수 (프리셋 곡선 사용 시만 적용, DB 기반은 1.0)
+// ※ DB 기반(db_based)에서는 depreciation_rates 테이블에 3축별 잔존율이 이미 반영되어 있으므로
+//   이 테이블은 무시됨. standard/conservative 등 하드코딩 곡선 사용 시에만 활용.
+// 키는 effectiveAxes.label 형식: "{origin} {vehicle_class} {fuel_type}" (예: "국산 중형 세단 전기")
 const DEP_CLASS_MULTIPLIER: Record<string, { label: string; mult: number }> = {
-  '국산 경차':        { label: '국산 경차', mult: 1.05 },
-  '국산 소형 세단':    { label: '국산 소형 세단', mult: 0.95 },
-  '국산 준중형 세단':   { label: '국산 준중형 세단', mult: 0.90 },
-  '국산 중형 세단':    { label: '국산 중형 세단', mult: 1.0 },
-  '국산 대형 세단':    { label: '국산 대형 세단', mult: 1.10 },
-  '국산 소형 SUV':    { label: '국산 소형 SUV', mult: 0.85 },
-  '국산 중형 SUV':    { label: '국산 중형 SUV', mult: 0.85 },
-  '국산 대형 SUV':    { label: '국산 대형 SUV', mult: 0.90 },
-  '국산 MPV/미니밴':   { label: '국산 MPV/미니밴', mult: 0.95 },
-  '수입 중형 세단':    { label: '수입 중형 세단', mult: 1.15 },
-  '수입 대형 세단':    { label: '수입 대형 세단', mult: 1.25 },
-  '수입 중형 SUV':    { label: '수입 중형 SUV', mult: 1.0 },
-  '수입 프리미엄':     { label: '수입 프리미엄', mult: 1.20 },
-  '전기차 국산':      { label: '전기차 국산', mult: 0.90 },
-  '전기차 수입':      { label: '전기차 수입', mult: 1.05 },
-  '하이브리드':       { label: '하이브리드', mult: 0.85 },
+  // ── 국산 내연기관 ──
+  '국산 경차':         { label: '국산 경차', mult: 1.05 },
+  '국산 소형 세단':     { label: '국산 소형 세단', mult: 0.95 },
+  '국산 준중형 세단':    { label: '국산 준중형 세단', mult: 0.90 },
+  '국산 중형 세단':     { label: '국산 중형 세단', mult: 1.0 },
+  '국산 대형 세단':     { label: '국산 대형 세단', mult: 1.10 },
+  '국산 소형 SUV':     { label: '국산 소형 SUV', mult: 0.85 },
+  '국산 중형 SUV':     { label: '국산 중형 SUV', mult: 0.85 },
+  '국산 대형 SUV':     { label: '국산 대형 SUV', mult: 0.90 },
+  '국산 MPV':          { label: '국산 MPV', mult: 0.95 },
+  // ── 수입 내연기관 ──
+  '수입 중형 세단':     { label: '수입 중형 세단', mult: 1.15 },
+  '수입 대형 세단':     { label: '수입 대형 세단', mult: 1.25 },
+  '수입 중형 SUV':     { label: '수입 중형 SUV', mult: 1.0 },
+  '수입 프리미엄':      { label: '수입 프리미엄', mult: 1.20 },
+  // ── 국산 전기차 (label에 "전기" 포함) ──
+  '국산 소형 세단 전기':  { label: '국산 소형 전기', mult: 1.0 },
+  '국산 준중형 세단 전기': { label: '국산 준중형 전기', mult: 1.0 },
+  '국산 중형 세단 전기':  { label: '국산 중형 전기', mult: 1.0 },
+  '국산 대형 세단 전기':  { label: '국산 대형 전기', mult: 1.05 },
+  '국산 소형 SUV 전기':  { label: '국산 소형SUV 전기', mult: 1.0 },
+  '국산 중형 SUV 전기':  { label: '국산 중형SUV 전기', mult: 1.0 },
+  '국산 대형 SUV 전기':  { label: '국산 대형SUV 전기', mult: 1.05 },
+  // ── 수입 전기차 ──
+  '수입 중형 세단 전기':  { label: '수입 중형 전기', mult: 1.10 },
+  '수입 대형 세단 전기':  { label: '수입 대형 전기', mult: 1.15 },
+  '수입 중형 SUV 전기':  { label: '수입 중형SUV 전기', mult: 1.10 },
+  '수입 프리미엄 전기':   { label: '수입 프리미엄 전기', mult: 1.20 },
+  // ── 하이브리드 ──
+  '국산 소형 세단 하이브리드':  { label: '국산 소형 HEV', mult: 0.90 },
+  '국산 준중형 세단 하이브리드': { label: '국산 준중형 HEV', mult: 0.85 },
+  '국산 중형 세단 하이브리드':  { label: '국산 중형 HEV', mult: 0.85 },
+  '국산 대형 세단 하이브리드':  { label: '국산 대형 HEV', mult: 0.90 },
+  '국산 소형 SUV 하이브리드':  { label: '국산 소형SUV HEV', mult: 0.85 },
+  '국산 중형 SUV 하이브리드':  { label: '국산 중형SUV HEV', mult: 0.85 },
+  '국산 대형 SUV 하이브리드':  { label: '국산 대형SUV HEV', mult: 0.85 },
+  '국산 MPV 하이브리드':      { label: '국산 MPV HEV', mult: 0.85 },
+  '수입 중형 세단 하이브리드':  { label: '수입 중형 HEV', mult: 1.0 },
+  '수입 중형 SUV 하이브리드':  { label: '수입 중형SUV HEV', mult: 1.0 },
+  '수입 프리미엄 하이브리드':   { label: '수입 프리미엄 HEV', mult: 1.10 },
 }
 
 // 감가 곡선에서 특정 연차의 누적 감가율 보간 (소수 연차 지원)
@@ -1974,22 +2010,20 @@ export default function RentPricingBuilder() {
         ? (dbCurve || DEP_CURVE_PRESETS.standard.curve)
         : DEP_CURVE_PRESETS[depCurvePreset as keyof typeof DEP_CURVE_PRESETS]?.curve || DEP_CURVE_PRESETS.standard.curve
 
-    // ── DB 기반이면 클래스 보정 불필요 (rate가 이미 차급별), 아니면 기존 multiplier 사용
+    // ── 클래스 보정 승수 결정
+    // DB 기반(db_based): rate가 이미 3축(origin×vehicle_class×fuel_type)별로 분리되어 있으므로
+    //   추가 보정 불필요 → 1.0 (전기차/하이브리드 포함)
+    // 프리셋 기반: DEP_CLASS_MULTIPLIER에서 키 매칭, 없으면 1.0 fallback
     const classMult = depCurvePreset === 'db_based'
       ? 1.0
       : (DEP_CLASS_MULTIPLIER[depClass]?.mult ?? 1.0)
 
     // ── 보정계수 (depreciation_adjustments) 적용
     // 주행거리 약정 factor
-    const mileageFactor = (() => {
-      const mileageAdjs = depAdjustments.filter(a => a.adjustment_type === 'mileage' && a.is_active)
-      if (mileageAdjs.length === 0) return 1.0
-      // annualMileage(만km/년) 기준으로 가장 가까운 약정 매칭
-      if (annualMileage <= 1.5) return Number(mileageAdjs.find(a => a.label?.includes('1.5만'))?.factor || 1.02)
-      if (annualMileage <= 2.0) return Number(mileageAdjs.find(a => a.label?.includes('2만'))?.factor || 1.0)
-      if (annualMileage <= 3.0) return Number(mileageAdjs.find(a => a.label?.includes('3만'))?.factor || 0.96)
-      return Number(mileageAdjs.find(a => a.label?.includes('4만'))?.factor || 0.92)
-    })()
+    // ※ calcMileageDep에서 초과주행 감가를 직접 계산하므로,
+    //   여기서 주행거리 factor까지 적용하면 이중 차감됨 → 1.0으로 비활성화
+    //   (주행거리 영향은 calcMileageDep 한 곳에서만 처리)
+    const mileageFactor = 1.0
     // 시장상황 factor (활성화된 것만)
     const marketFactor = (() => {
       const marketAdjs = depAdjustments.filter(a =>
