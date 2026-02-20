@@ -57,15 +57,30 @@ export async function GET(
       })
       .eq('id', shareToken.id)
 
-    // 4. 견적 데이터 조회
+    // 4. 견적 데이터 조회 (조인 대신 개별 조회 — FK 미설정 시에도 안전)
     const { data: quote, error: quoteErr } = await supabase
       .from('quotes')
-      .select('*, car:cars(*), customer:customers(*)')
+      .select('*')
       .eq('id', shareToken.quote_id)
       .single()
 
     if (quoteErr || !quote) {
+      console.error('[public/quote] 견적 조회 실패:', quoteErr?.message, 'quote_id:', shareToken.quote_id)
       return NextResponse.json({ error: '견적서를 찾을 수 없습니다.' }, { status: 404 })
+    }
+
+    // 4-1. 차량 정보 개별 조회
+    let carData: any = null
+    if (quote.car_id) {
+      const { data } = await supabase.from('cars').select('*').eq('id', quote.car_id).single()
+      carData = data
+    }
+
+    // 4-2. 고객 정보 개별 조회
+    let customerData: any = null
+    if (quote.customer_id) {
+      const { data } = await supabase.from('customers').select('id, name, phone, email').eq('id', quote.customer_id).single()
+      customerData = data
     }
 
     // 5. 회사 정보 조회
@@ -78,7 +93,7 @@ export async function GET(
     // 6. 고객용 데이터 가공 (원가/마진 제외)
     const detail = quote.quote_detail || {}
     const carInfo = detail.car_info || {}
-    const car = quote.car || {}
+    const car = carData || {}
 
     const publicData = {
       // 견적 기본
@@ -118,7 +133,7 @@ export async function GET(
       residual_rate: detail.residual_rate || 0,
 
       // 고객 정보
-      customer_name: quote.customer?.name || quote.customer_name || detail.manual_customer?.name || '',
+      customer_name: customerData?.name || quote.customer_name || detail.manual_customer?.name || '',
 
       // 보험 관련
       ins_estimate: detail.ins_estimate || null,

@@ -1,6 +1,7 @@
 'use client'
 import { supabase } from '../../utils/supabase'
 import { useApp } from '../../context/AppContext'
+import { useRouter } from 'next/navigation'
 import React, { useEffect, useState, useMemo, useCallback } from 'react'
 
 // ─── 타입 ───
@@ -32,19 +33,6 @@ interface RateRow {
   calc_method: string
   sort_order: number
   is_active: boolean
-}
-
-interface QuoteRow {
-  id: string
-  quote_number: string
-  customer_name: string
-  customer_phone: string
-  quote_detail: any
-  contract_period: string
-  discount_percent: number
-  status: string
-  expires_at: string
-  created_at: string
 }
 
 // ─── 롯데렌터카 공식 요금 (2025.02.10 기준, 내륙 · 전체 차종) ───
@@ -143,7 +131,6 @@ const DAY_PRESETS = [5, 10, 15, 20]
 const SUB_TABS = [
   { key: 'settings', label: '요금 조회', icon: '🔍' },
   { key: 'quote', label: '견적 작성', icon: '📝' },
-  { key: 'manage', label: '견적 관리', icon: '📋' },
 ] as const
 type SubTab = typeof SUB_TABS[number]['key']
 
@@ -156,6 +143,7 @@ const calcRate = (base: number, pct: number) => Math.round(base * pct / 100)
 // ═══════════════════════════════════════════════════
 export default function ShortTermReplacementBuilder() {
   const { company, role, adminSelectedCompanyId } = useApp()
+  const router = useRouter()
   const cid = role === 'god_admin' ? adminSelectedCompanyId : company?.id
 
   const [subTab, setSubTab] = useState<SubTab>('settings')
@@ -201,11 +189,6 @@ export default function ShortTermReplacementBuilder() {
   const [simAvgRepairDays, setSimAvgRepairDays] = useState(7)  // 평균 수리일수
   const [simAvgBreakdownDays, setSimAvgBreakdownDays] = useState(4) // 평균 고장수리일수
 
-  // 견적 관리
-  const [quotes, setQuotes] = useState<QuoteRow[]>([])
-  const [quotesLoading, setQuotesLoading] = useState(false)
-  const [quoteFilter, setQuoteFilter] = useState('all')
-
   // ─── 데이터 로드 ───
   useEffect(() => { if (cid) loadAll() }, [cid])
 
@@ -245,19 +228,7 @@ export default function ShortTermReplacementBuilder() {
     setRates(mapped)
   }
 
-  const loadQuotes = useCallback(async () => {
-    if (!cid) return
-    setQuotesLoading(true)
-    try {
-      let q = supabase.from('short_term_quotes').select('*').eq('company_id', cid).order('created_at', { ascending: false })
-      if (quoteFilter !== 'all') q = q.eq('status', quoteFilter)
-      const { data } = await q
-      setQuotes(data || [])
-    } catch { setQuotes([]) }
-    setQuotesLoading(false)
-  }, [cid, quoteFilter])
-
-  useEffect(() => { if (subTab === 'manage') loadQuotes() }, [subTab, loadQuotes])
+  // 견적 관리는 /quotes 통합 페이지로 이동됨
 
   // ─── 롯데 요율 저장 ───
   const saveLotteRates = async () => {
@@ -466,7 +437,7 @@ export default function ShortTermReplacementBuilder() {
       if (error) throw error
       alert(`견적서 ${num} 이 생성되었습니다!`)
       setCustomerName(''); setCustomerCompany(''); setCustomerPhone(''); setContractMemo('')
-      setSubTab('manage')
+      router.push('/quotes?tab=short_term')
     } catch (e: any) { alert('견적 저장 실패: ' + e.message) }
     setQuoteSaving(false)
   }
@@ -475,11 +446,7 @@ export default function ShortTermReplacementBuilder() {
   const addDay = () => { const v = parseInt(newDayVal); if (v > 0 && !customDays.includes(v)) { setCustomDays(prev => [...prev, v].sort((a, b) => a - b)); setNewDayVal(''); setShowDayInput(false) } }
   const rmDay = (d: number) => { if (customDays.length > 1) setCustomDays(prev => prev.filter(x => x !== d)) }
 
-  // ─── 견적 상태 변경 ───
-  const updateQuoteStatus = async (id: string, status: string) => {
-    await supabase.from('short_term_quotes').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
-    loadQuotes()
-  }
+  // 견적 상태 변경은 /quotes 통합 페이지에서 처리
 
   // ─── 빠른 견적 계산기 상태 ───
   const [qcCategory, setQcCategory] = useState<string>('')
@@ -1439,103 +1406,7 @@ export default function ShortTermReplacementBuilder() {
         )
       })()}
 
-      {/* ═════════════════════════════════════════════ */}
-      {/* 탭 4: 견적 관리 */}
-      {/* ═════════════════════════════════════════════ */}
-      {subTab === 'manage' && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="bg-gray-50/50 border-b border-gray-100 px-4 py-2.5 flex justify-between items-center">
-            <span className="font-bold text-gray-800 text-xs">견적서 관리 <span className="text-xs text-gray-400 font-medium ml-1">단기대차 견적 목록</span></span>
-            <button onClick={() => setSubTab('quote')} className="py-0.5 px-2.5 text-xs rounded-lg bg-steel-600 text-white font-bold hover:bg-steel-700 transition-colors">+ 새 견적</button>
-          </div>
-
-          {/* 상태 필터 */}
-          <div className="px-4 py-2 border-b border-gray-100 flex gap-1.5 flex-wrap">
-            {[
-              { key: 'all', label: '전체' },
-              { key: 'draft', label: '작성중' },
-              { key: 'sent', label: '발송됨' },
-              { key: 'accepted', label: '수락됨' },
-              { key: 'contracted', label: '계약완료' },
-              { key: 'cancelled', label: '취소' },
-            ].map(st => (
-              <button key={st.key} onClick={() => setQuoteFilter(st.key)}
-                className={`py-0.5 px-2.5 rounded-lg text-xs font-bold transition-colors ${
-                  quoteFilter === st.key ? 'bg-steel-600 text-white' : 'border border-gray-200 text-gray-500 hover:bg-gray-50'
-                }`}>{st.label}</button>
-            ))}
-          </div>
-
-          {quotesLoading ? (
-            <div className="p-8 text-center text-gray-400 text-xs font-bold">로딩 중...</div>
-          ) : quotes.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">
-              <p className="text-xs font-bold">아직 생성된 견적서가 없습니다</p>
-              <p className="text-xs mt-1">[견적 작성] 탭에서 새 견적을 만들어보세요</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead><tr className="text-gray-400">
-                  <th className="py-1.5 px-3 pl-4 text-left text-xs font-bold">견적번호</th>
-                  <th className="py-1.5 px-3 text-left text-xs font-bold">고객명</th>
-                  <th className="py-1.5 pr-3 text-right text-xs font-bold">합계</th>
-                  <th className="py-1.5 px-3 text-center text-xs font-bold">기간</th>
-                  <th className="py-1.5 px-3 text-center text-xs font-bold">상태</th>
-                  <th className="py-1.5 px-3 text-center text-xs font-bold">유효기간</th>
-                  <th className="py-1.5 px-3 text-center text-xs font-bold w-28">액션</th>
-                </tr></thead>
-                <tbody>
-                  {quotes.map(q => {
-                    const detail = q.quote_detail || {}
-                    const total = detail.totalWithVat || detail.total || 0
-                    const expired = new Date(q.expires_at) < new Date()
-                    const statusMap: Record<string, { label: string; color: string }> = {
-                      draft: { label: '작성중', color: 'bg-gray-100 text-gray-600' },
-                      sent: { label: '발송됨', color: 'bg-blue-100 text-blue-700' },
-                      accepted: { label: '수락됨', color: 'bg-green-100 text-green-700' },
-                      contracted: { label: '계약완료', color: 'bg-purple-100 text-purple-700' },
-                      cancelled: { label: '취소', color: 'bg-red-100 text-red-600' },
-                    }
-                    const st = statusMap[q.status] || statusMap.draft
-                    return (
-                      <tr key={q.id} className="border-t border-gray-100 hover:bg-gray-50/50">
-                        <td className="py-1.5 px-3 pl-4 text-xs font-bold text-steel-700">{q.quote_number || '-'}</td>
-                        <td className="py-1.5 px-3 text-xs font-bold text-gray-800">{q.customer_name}</td>
-                        <td className="py-1.5 pr-3 text-right text-xs font-bold text-gray-900">{f(total)}원</td>
-                        <td className="py-1.5 px-3 text-center text-xs text-gray-500">{q.contract_period}</td>
-                        <td className="py-1.5 px-3 text-center">
-                          <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${st.color}`}>{st.label}</span>
-                          {expired && q.status === 'draft' && <span className="ml-1 text-red-500 text-xs font-bold">만료</span>}
-                        </td>
-                        <td className="py-1.5 px-3 text-center text-xs text-gray-400">
-                          {q.expires_at ? new Date(q.expires_at).toLocaleDateString('ko-KR') : '-'}
-                        </td>
-                        <td className="py-1.5 px-3 text-center">
-                          <div className="flex gap-1 justify-center">
-                            {q.status === 'draft' && (
-                              <button onClick={() => updateQuoteStatus(q.id, 'sent')} className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-bold hover:bg-blue-100">발송</button>
-                            )}
-                            {q.status === 'sent' && (
-                              <button onClick={() => updateQuoteStatus(q.id, 'accepted')} className="text-xs bg-green-50 text-green-600 px-1.5 py-0.5 rounded font-bold hover:bg-green-100">수락</button>
-                            )}
-                            {q.status === 'accepted' && (
-                              <button onClick={() => updateQuoteStatus(q.id, 'contracted')} className="text-xs bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-bold hover:bg-purple-100">계약</button>
-                            )}
-                            {q.status !== 'cancelled' && q.status !== 'contracted' && (
-                              <button onClick={() => updateQuoteStatus(q.id, 'cancelled')} className="text-xs bg-gray-50 text-gray-400 px-1.5 py-0.5 rounded font-bold hover:bg-gray-100">취소</button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+      {/* 견적 관리는 /quotes 통합 페이지에서 관리 */}
     </div>
   )
 }

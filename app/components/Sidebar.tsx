@@ -53,7 +53,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
 
   const renderMenuItem = (name: string, path: string, icon: JSX.Element) => {
     // 정확 매칭 + 하위경로 매칭 (단, 별도 메뉴 항목이 있는 상위 경로는 제외)
-    const exactParents = ['/finance', '/quotes'] // 하위 경로가 별도 메뉴인 경우
+    const exactParents = ['/finance'] // 하위 경로가 별도 메뉴인 경우
     const active = pathname === path || (pathname.startsWith(path + '/') && !exactParents.includes(path))
     return (
       <Link
@@ -111,9 +111,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         {renderGroupHeader('sales', '대고객 영업')}
         <div className={`space-y-1 transition-all duration-300 ${openGroups.sales || isCollapsed ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
            {renderMenuItem('고객 관리 (CRM)', '/customers', <Icons.UserGroup />)}
-           {renderMenuItem('장기렌터카 견적', '/quotes/pricing', <Icons.Calculator />)}
-           {renderMenuItem('단기렌터카 견적', '/quotes/short-term', <Icons.Wrench />)}
-           {renderMenuItem('렌트 견적/계약', '/quotes', <Icons.DocumentCheck />)}
+           {renderMenuItem('견적/계약 관리', '/quotes', <Icons.DocumentCheck />)}
         </div>
 
         {/* 2️⃣ 그룹: 파트너 (자금/정산) */}

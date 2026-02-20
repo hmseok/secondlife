@@ -331,8 +331,8 @@ export default function PublicQuotePage() {
         </label>
 
         {/* 서명 패드 */}
-        <div>
-          <p className="text-xs font-bold text-gray-600 mb-2">서명 <span className="text-red-500">*</span></p>
+        <div className="flex flex-col items-center">
+          <p className="text-xs font-bold text-gray-600 mb-2 self-start">서명 <span className="text-red-500">*</span></p>
           <SignaturePad
             onSignatureChange={setSignatureData}
             width={340}

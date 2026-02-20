@@ -154,11 +154,45 @@ export default function QuoteDetailPage() {
     setShareLoading(false)
   }, [quoteId])
 
-  const handleCopyShareUrl = useCallback(() => {
-    navigator.clipboard.writeText(shareUrl)
+  const handleCopyShareUrl = useCallback((mode: 'link' | 'message' = 'link') => {
+    if (mode === 'message') {
+      const car = quote?.car || {}
+      const detail = quote?.quote_detail || {}
+      const carInfo = detail.car_info || {}
+      const brand = car.brand || carInfo.brand || ''
+      const model = car.model || carInfo.model || ''
+      const trim = car.trim || carInfo.trim || ''
+      const year = car.year || carInfo.year || ''
+      const fee = quote?.rent_fee || 0
+      const dep = quote?.deposit || 0
+      const term = detail.term_months || 36
+      const type = detail.contract_type === 'buyout' ? '인수형' : '반납형'
+      const mileage = detail.annualMileage || detail.baselineKm || 2
+      const feeF = Math.round(fee).toLocaleString()
+      const vatF = Math.round(fee * 1.1).toLocaleString()
+      const depF = Math.round(dep).toLocaleString()
+
+      const msg = [
+        `📋 장기렌트 견적서`,
+        ``,
+        `🚗 ${brand} ${model}${trim ? ` ${trim}` : ''}`,
+        `${year}년식 · ${type} · ${term}개월`,
+        `연 ${(mileage * 10000).toLocaleString()}km`,
+        ``,
+        `💰 월 렌탈료: ${feeF}원 (VAT포함 ${vatF}원)`,
+        dep > 0 ? `보증금: ${depF}원` : null,
+        ``,
+        `아래 링크에서 견적 확인 및 계약 서명이 가능합니다.`,
+        shareUrl
+      ].filter(Boolean).join('\n')
+
+      navigator.clipboard.writeText(msg)
+    } else {
+      navigator.clipboard.writeText(shareUrl)
+    }
     setShareCopied(true)
     setTimeout(() => setShareCopied(false), 2000)
-  }, [shareUrl])
+  }, [shareUrl, quote])
 
   const handleRevokeShare = useCallback(async () => {
     if (!confirm('공유 링크를 비활성화하시겠습니까?')) return
@@ -984,33 +1018,43 @@ export default function QuoteDetailPage() {
               </div>
             ) : shareUrl ? (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1">공유 링크</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={shareUrl}
-                      className="flex-1 px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-gray-50 font-mono text-gray-600 truncate"
-                    />
-                    <button
-                      onClick={handleCopyShareUrl}
-                      className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap ${
-                        shareCopied
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-900 text-white hover:bg-gray-700'
-                      }`}
-                    >
-                      {shareCopied ? '복사됨!' : '복사'}
-                    </button>
+                {/* 메시지 미리보기 */}
+                <div className="bg-gray-50 rounded-xl p-3 border border-gray-200">
+                  <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-2">발송 메시지 미리보기</p>
+                  <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-line">
+                    <p className="font-bold">📋 장기렌트 견적서</p>
+                    <p className="mt-1">🚗 {(quote?.car?.brand || quote?.quote_detail?.car_info?.brand || '')} {(quote?.car?.model || quote?.quote_detail?.car_info?.model || '')}{(quote?.car?.trim || quote?.quote_detail?.car_info?.trim) ? ` ${quote?.car?.trim || quote?.quote_detail?.car_info?.trim}` : ''}</p>
+                    <p className="text-gray-500">{(quote?.car?.year || quote?.quote_detail?.car_info?.year || '')}년식 · {(quote?.quote_detail?.contract_type === 'buyout' ? '인수형' : '반납형')} · {(quote?.quote_detail?.term_months || 36)}개월</p>
+                    <p className="mt-1 font-black text-gray-900">💰 월 {Math.round(quote?.rent_fee || 0).toLocaleString()}원 <span className="font-normal text-gray-400">(VAT포함 {Math.round((quote?.rent_fee || 0) * 1.1).toLocaleString()}원)</span></p>
+                    <p className="mt-1 text-gray-400 text-[10px] truncate">{shareUrl}</p>
                   </div>
+                </div>
+
+                {/* 복사 버튼들 */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleCopyShareUrl('message')}
+                    className={`py-3 rounded-xl text-sm font-bold transition-all ${
+                      shareCopied
+                        ? 'bg-green-500 text-white'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {shareCopied ? '복사됨!' : '💬 메시지 복사'}
+                  </button>
+                  <button
+                    onClick={() => handleCopyShareUrl('link')}
+                    className="py-3 rounded-xl text-sm font-bold transition-all bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  >
+                    🔗 링크만 복사
+                  </button>
                 </div>
 
                 <div className="bg-blue-50 rounded-xl p-3">
                   <p className="text-xs text-blue-700 font-bold mb-1">사용 방법</p>
                   <ul className="text-xs text-blue-600 space-y-0.5">
-                    <li>1. 위 링크를 복사합니다</li>
-                    <li>2. 카카오톡/문자로 고객에게 전송합니다</li>
+                    <li>1. 메시지 복사를 클릭합니다 (차량정보+링크 포함)</li>
+                    <li>2. 카카오톡/문자에 붙여넣기하여 고객에게 전송합니다</li>
                     <li>3. 고객이 견적을 확인하고 서명하면 계약이 자동 생성됩니다</li>
                   </ul>
                 </div>
