@@ -26,6 +26,7 @@ export default function PublicQuotePage() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [showTerms, setShowTerms] = useState(false)
+  const [pdfLoading, setPdfLoading] = useState(false)
 
   // 견적 데이터 로드
   useEffect(() => {
@@ -84,21 +85,7 @@ export default function PublicQuotePage() {
     setSubmitting(false)
   }, [token, customerName, customerPhone, customerEmail, signatureData, agreedTerms])
 
-  // ── 로딩 ──
-  if (state === 'loading') {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm font-bold">견적서 불러오는 중...</p>
-        </div>
-      </div>
-    )
-  }
-
   // ── PDF 다운로드 ──
-  const [pdfLoading, setPdfLoading] = useState(false)
-
   const handleDownloadPdf = useCallback(async () => {
     setPdfLoading(true)
     try {
@@ -146,6 +133,18 @@ export default function PublicQuotePage() {
     }
     setPdfLoading(false)
   }, [token])
+
+  // ── 로딩 ──
+  if (state === 'loading') {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-gray-500 text-sm font-bold">견적서 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
 
   // ── 이미 서명됨 ──
   if (state === 'signed' || submitted) {
