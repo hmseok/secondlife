@@ -20,6 +20,7 @@ type Car = {
   purchase_mileage?: number // 구입 시 주행거리 (km)
   mileage?: number        // 현재 주행거리
   is_commercial?: boolean  // 영업용 여부
+  ownership_type?: string  // 소유구분: company/consignment/leased_in
   created_at: string
 }
 
@@ -61,8 +62,10 @@ const { company, role, adminSelectedCompanyId } = useApp()
 
   // 🔥 필터링 + 검색 로직
   const filteredCars = cars.filter(car => {
-    // 1. 상태 필터
+    // 1. 상태 필터 (+ 소유구분 필터)
     const statusMatch = filter === 'all' || car.status === filter
+      || (filter === 'consignment' && car.ownership_type === 'consignment')
+      || (filter === 'leased_in' && car.ownership_type === 'leased_in')
 
     // 2. 검색어 필터
     const searchLower = searchTerm.toLowerCase()
@@ -83,6 +86,7 @@ const { company, role, adminSelectedCompanyId } = useApp()
     available: cars.filter(c => c.status === 'available').length,
     rented: cars.filter(c => c.status === 'rented').length,
     maintenance: cars.filter(c => c.status === 'maintenance').length,
+    consignment: cars.filter(c => c.ownership_type === 'consignment').length,
     totalValue: cars.reduce((s, c) => s + (c.purchase_price || 0), 0),
     avgValue: cars.length > 0 ? Math.round(cars.reduce((s, c) => s + (c.purchase_price || 0), 0) / cars.length) : 0,
   }
@@ -180,6 +184,12 @@ const { company, role, adminSelectedCompanyId } = useApp()
               <p className="text-xs text-red-500 font-bold">정비/사고</p>
               <p className="text-xl font-black text-red-600 mt-1">{stats.maintenance}<span className="text-sm text-red-400 ml-0.5">대</span></p>
             </div>
+            {stats.consignment > 0 && (
+              <div className={`bg-amber-50 p-3 rounded-xl border cursor-pointer hover:shadow-md transition-shadow ${filter === 'consignment' ? 'border-amber-400 ring-1 ring-amber-200' : 'border-amber-100'}`} onClick={() => setFilter('consignment')}>
+                <p className="text-xs text-amber-600 font-bold">지입차량</p>
+                <p className="text-xl font-black text-amber-700 mt-1">{stats.consignment}<span className="text-sm text-amber-500 ml-0.5">대</span></p>
+              </div>
+            )}
           </div>
 
           {/* ⚠️ 정비/사고 차량 경고 배너 */}
@@ -321,6 +331,13 @@ const { company, role, adminSelectedCompanyId } = useApp()
                                   }`}>
                                       {car.is_commercial === false ? '비영업' : '영업'}
                                   </span>
+                                  {car.ownership_type && car.ownership_type !== 'company' && (
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] md:text-xs font-bold ${
+                                      car.ownership_type === 'consignment' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'
+                                    }`}>
+                                      {car.ownership_type === 'consignment' ? '지입' : '임차'}
+                                    </span>
+                                  )}
                                 </div>
                                 {car.is_used && car.purchase_mileage > 0 && (
                                     <span className="text-[10px] text-gray-400 block mt-0.5">

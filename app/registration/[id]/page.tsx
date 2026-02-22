@@ -625,6 +625,105 @@ export default function RegistrationDetailPage() {
                     )}
                 </div>
 
+                {/* 🤝 소유 구분 및 지입 관리 */}
+                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                    <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2"><span className="w-1 h-5 bg-amber-500 rounded-full"></span> 소유 구분</h2>
+
+                    {/* 소유구분 3버튼 */}
+                    <div className="flex gap-3 mb-4">
+                      {[
+                        { value: 'company', label: '🏢 자사 보유', desc: '사업자 명의 차량', color: 'blue' },
+                        { value: 'consignment', label: '🤝 지입 차량', desc: '타인 명의, 우리가 운영', color: 'amber' },
+                        { value: 'leased_in', label: '📋 임차 차량', desc: '외부에서 빌려온 차량', color: 'purple' },
+                      ].map(opt => (
+                        <button key={opt.value} type="button"
+                          onClick={() => setCar((prev: any) => ({ ...prev, ownership_type: opt.value }))}
+                          className={`flex-1 p-3 rounded-xl border-2 text-left transition-all ${
+                            (car.ownership_type || 'company') === opt.value
+                              ? opt.color === 'blue' ? 'border-blue-500 bg-blue-50'
+                                : opt.color === 'amber' ? 'border-amber-500 bg-amber-50'
+                                : 'border-purple-500 bg-purple-50'
+                              : 'border-gray-200 hover:border-gray-300'
+                          }`}>
+                          <div className="font-bold text-sm">{opt.label}</div>
+                          <div className="text-[10px] text-gray-500 mt-0.5">{opt.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* 지입/임차인 경우 상세 정보 */}
+                    {(car.ownership_type === 'consignment' || car.ownership_type === 'leased_in') && (
+                      <div className="space-y-4 mt-4 pt-4 border-t border-gray-100">
+                        {/* 지입주 정보 + 정산 계좌 */}
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-700 mb-3">👤 {car.ownership_type === 'consignment' ? '지입주' : '임대인'} 정보</h3>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div><label className="label">이름</label><input className="input" placeholder="홍길동" value={car.owner_name || ''} onChange={e=>handleChange('owner_name', e.target.value)} /></div>
+                            <div><label className="label">연락처</label><input className="input" placeholder="010-0000-0000" value={car.owner_phone || ''} onChange={e=>handleChange('owner_phone', e.target.value)} /></div>
+                          </div>
+                        </div>
+
+                        {/* 정산 계좌 */}
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-700 mb-3">🏦 정산 계좌</h3>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div><label className="label">은행</label><input className="input" placeholder="신한은행" value={car.owner_bank || ''} onChange={e=>handleChange('owner_bank', e.target.value)} /></div>
+                            <div><label className="label">계좌번호</label><input className="input" placeholder="110-123-456789" value={car.owner_account || ''} onChange={e=>handleChange('owner_account', e.target.value)} /></div>
+                            <div><label className="label">예금주</label><input className="input" placeholder="홍길동" value={car.owner_account_holder || ''} onChange={e=>handleChange('owner_account_holder', e.target.value)} /></div>
+                          </div>
+                        </div>
+
+                        {/* 계약 조건 */}
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-700 mb-3">📝 계약 조건</h3>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="label">월 {car.ownership_type === 'consignment' ? '지입료' : '임차료'}</label>
+                              <input type="text" className="input text-right font-bold" placeholder="0"
+                                value={car.consignment_fee ? Number(car.consignment_fee).toLocaleString() : ''}
+                                onChange={e => handleChange('consignment_fee', Number(e.target.value.replace(/,/g, '')))} />
+                            </div>
+                            <div>
+                              <label className="label">보험 주체</label>
+                              <select className="input" value={car.insurance_by || 'company'} onChange={e=>handleChange('insurance_by', e.target.value)}>
+                                <option value="company">우리 회사</option>
+                                <option value="owner">{car.ownership_type === 'consignment' ? '지입주' : '임대인'} 본인</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="label">계약 시작일</label>
+                              <input type="date" className="input" value={car.consignment_start || ''} onChange={e=>handleChange('consignment_start', e.target.value)} />
+                            </div>
+                            <div>
+                              <label className="label">계약 종료일</label>
+                              <input type="date" className="input" value={car.consignment_end || ''} onChange={e=>handleChange('consignment_end', e.target.value)} />
+                              {car.consignment_end && new Date(car.consignment_end) < new Date() && (
+                                <p className="text-[10px] text-red-500 mt-1 font-bold">⚠️ 계약 만료됨</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 계약서 + 메모 */}
+                        <div className="grid grid-cols-1 gap-3">
+                          <div>
+                            <label className="label">계약서 URL</label>
+                            <div className="flex gap-2">
+                              <input className="input flex-1" placeholder="PDF URL 또는 외부 링크" value={car.consignment_contract_url || ''} onChange={e=>handleChange('consignment_contract_url', e.target.value)} />
+                              {car.consignment_contract_url && (
+                                <a href={car.consignment_contract_url} target="_blank" rel="noopener noreferrer" className="px-3 py-2 bg-steel-600 text-white rounded-lg text-xs font-bold hover:bg-steel-700 whitespace-nowrap">열기</a>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="label">메모 / 특약</label>
+                            <textarea className="input" rows={2} placeholder="정산 조건, 특약사항 등" value={car.owner_memo || ''} onChange={e=>handleChange('owner_memo', e.target.value)} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                </div>
+
                 {/* 제원 */}
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
                     <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2 border-b pb-2"><span className="w-1 h-5 bg-steel-600 rounded-full"></span> 제원 및 유효기간</h2>

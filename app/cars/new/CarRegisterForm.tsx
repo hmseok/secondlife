@@ -27,6 +27,7 @@ export default function CarRegisterForm() {
     purchase_price: 0,
     is_used: false,           // 중고차 여부
     purchase_mileage: 0,      // 구입 시 주행거리 (km) — 중고차만 해당
+    ownership_type: 'company' as string, // 소유구분: company/consignment/leased_in
   })
 
   // 3. 페이지 열리자마자 코드값(연료, 색상 등) 불러오기
@@ -191,6 +192,33 @@ export default function CarRegisterForm() {
               🔄 중고차
             </button>
           </div>
+        </div>
+
+        {/* 소유 구분 */}
+        <div>
+          <label className="block text-sm font-bold text-gray-700 mb-2">소유 구분</label>
+          <div className="flex gap-3">
+            {[
+              { value: 'company', label: '🏢 자사 보유', color: 'blue' },
+              { value: 'consignment', label: '🤝 지입 차량', color: 'amber' },
+              { value: 'leased_in', label: '📋 임차 차량', color: 'purple' },
+            ].map(opt => (
+              <button key={opt.value} type="button"
+                onClick={() => setCar({...car, ownership_type: opt.value})}
+                className={`flex-1 py-3 rounded-lg font-bold text-sm border-2 transition-all ${
+                  car.ownership_type === opt.value
+                    ? opt.color === 'blue' ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : opt.color === 'amber' ? 'border-amber-500 bg-amber-50 text-amber-700'
+                      : 'border-purple-500 bg-purple-50 text-purple-700'
+                    : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+                }`}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {car.ownership_type !== 'company' && (
+            <p className="text-xs text-amber-600 mt-2">💡 지입주 상세 정보는 차량 등록 후 [차량 상세 → 지입 관리] 탭에서 입력할 수 있습니다.</p>
+          )}
         </div>
 
         {/* 주행거리 & 매입가 */}

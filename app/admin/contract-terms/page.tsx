@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../utils/supabase'
 import { useApp } from '../../context/AppContext'
 
@@ -105,6 +105,10 @@ export default function ContractTermsPage() {
 
   // ── 이력 ──
   const [history, setHistory] = useState<HistoryEntry[]>([])
+
+  // ── 폼 스크롤 ref ──
+  const articleFormRef = useRef<HTMLDivElement>(null)
+  const specialFormRef = useRef<HTMLDivElement>(null)
 
   // ── 버전 생성 폼 ──
   const [showNewForm, setShowNewForm] = useState(false)
@@ -382,6 +386,10 @@ export default function ContractTermsPage() {
       category: article.category,
       is_required: article.is_required,
     })
+    // 편집 폼이 보이도록 살짝 스크롤
+    setTimeout(() => {
+      articleFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }, 100)
   }
 
   /* ────────── 특약 CRUD ────────── */
@@ -585,40 +593,122 @@ export default function ContractTermsPage() {
                 <span className="text-sm text-gray-400">{articles.length}개 조항</span>
               </div>
 
-              {/* 조항 목록 */}
+              {/* 조항 목록 + 인라인 편집 */}
               <div className="space-y-2">
                 {articles.map(article => (
-                  <div key={article.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-300 transition">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                            제{article.article_number}조
-                          </span>
-                          <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
-                            {CATEGORIES[article.category] || article.category}
-                          </span>
-                          {!article.is_required && (
-                            <span className="text-xs text-orange-500 bg-orange-50 px-2 py-0.5 rounded">선택</span>
+                  <div key={article.id}>
+                    {/* 조항 카드 */}
+                    <div className={`bg-white border rounded-xl p-4 transition ${
+                      editingArticle?.id === article.id
+                        ? 'border-blue-400 ring-2 ring-blue-200'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xs font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                              제{article.article_number}조
+                            </span>
+                            <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">
+                              {CATEGORIES[article.category] || article.category}
+                            </span>
+                            {!article.is_required && (
+                              <span className="text-xs text-orange-500 bg-orange-50 px-2 py-0.5 rounded">선택</span>
+                            )}
+                          </div>
+                          <h4 className="font-bold text-gray-800">{article.title}</h4>
+                          {editingArticle?.id !== article.id && (
+                            <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap line-clamp-3">{article.content}</p>
                           )}
                         </div>
-                        <h4 className="font-bold text-gray-800">{article.title}</h4>
-                        <p className="text-sm text-gray-600 mt-1 whitespace-pre-wrap">{article.content}</p>
+                        {selectedTerms.status !== 'archived' && (
+                          <div className="flex gap-1 ml-3 flex-shrink-0">
+                            {editingArticle?.id === article.id ? (
+                              <button
+                                onClick={() => { setEditingArticle(null); setArticleForm({ title: '', content: '', category: 'general', is_required: true }) }}
+                                className="text-xs text-gray-500 hover:bg-gray-100 px-2 py-1 rounded"
+                              >
+                                접기
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => startEditArticle(article)}
+                                  className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded"
+                                >
+                                  수정
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteArticle(article)}
+                                  className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded"
+                                >
+                                  삭제
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      {selectedTerms.status !== 'archived' && (
-                        <div className="flex gap-1 ml-3 flex-shrink-0">
-                          <button
-                            onClick={() => startEditArticle(article)}
-                            className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded"
-                          >
-                            수정
-                          </button>
-                          <button
-                            onClick={() => handleDeleteArticle(article)}
-                            className="text-xs text-red-500 hover:bg-red-50 px-2 py-1 rounded"
-                          >
-                            삭제
-                          </button>
+
+                      {/* 인라인 편집 폼 - 해당 조항 바로 아래 */}
+                      {editingArticle?.id === article.id && (
+                        <div ref={articleFormRef} className="mt-3 pt-3 border-t border-blue-200 space-y-3">
+                          <div className="grid grid-cols-3 gap-3">
+                            <div className="col-span-2">
+                              <label className="text-xs font-medium text-gray-600">조항 제목 *</label>
+                              <input
+                                type="text"
+                                className="w-full border rounded-lg px-3 py-2 text-sm mt-1"
+                                value={articleForm.title}
+                                onChange={e => setArticleForm(f => ({ ...f, title: e.target.value }))}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-gray-600">분류</label>
+                              <select
+                                className="w-full border rounded-lg px-3 py-2 text-sm mt-1"
+                                value={articleForm.category}
+                                onChange={e => setArticleForm(f => ({ ...f, category: e.target.value }))}
+                              >
+                                {Object.entries(CATEGORIES).map(([k, v]) => (
+                                  <option key={k} value={k}>{v}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-xs font-medium text-gray-600">조항 내용 *</label>
+                            <textarea
+                              rows={8}
+                              className="w-full border rounded-lg px-3 py-2 text-sm mt-1 font-mono"
+                              value={articleForm.content}
+                              onChange={e => setArticleForm(f => ({ ...f, content: e.target.value }))}
+                            />
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <label className="flex items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                checked={articleForm.is_required}
+                                onChange={e => setArticleForm(f => ({ ...f, is_required: e.target.checked }))}
+                                className="rounded"
+                              />
+                              필수 조항
+                            </label>
+                            <div className="flex-1" />
+                            <button
+                              onClick={() => { setEditingArticle(null); setArticleForm({ title: '', content: '', category: 'general', is_required: true }) }}
+                              className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2"
+                            >
+                              취소
+                            </button>
+                            <button
+                              onClick={handleSaveArticle}
+                              className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
+                            >
+                              수정 저장
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -626,12 +716,10 @@ export default function ContractTermsPage() {
                 ))}
               </div>
 
-              {/* 조항 추가/수정 폼 */}
-              {selectedTerms.status !== 'archived' && (
+              {/* 새 조항 추가 폼 (하단) */}
+              {selectedTerms.status !== 'archived' && !editingArticle && (
                 <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
-                  <h3 className="font-bold text-gray-800">
-                    {editingArticle ? `제${editingArticle.article_number}조 수정` : '새 조항 추가'}
-                  </h3>
+                  <h3 className="font-bold text-gray-800">새 조항 추가</h3>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="col-span-2">
                       <label className="text-xs font-medium text-gray-600">조항 제목 *</label>
@@ -678,19 +766,11 @@ export default function ContractTermsPage() {
                       필수 조항
                     </label>
                     <div className="flex-1" />
-                    {editingArticle && (
-                      <button
-                        onClick={() => { setEditingArticle(null); setArticleForm({ title: '', content: '', category: 'general', is_required: true }) }}
-                        className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2"
-                      >
-                        취소
-                      </button>
-                    )}
                     <button
                       onClick={handleSaveArticle}
                       className="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition"
                     >
-                      {editingArticle ? '수정 저장' : '조항 추가'}
+                      조항 추가
                     </button>
                   </div>
                 </div>
@@ -735,6 +815,9 @@ export default function ContractTermsPage() {
                             contract_type: item.contract_type,
                             is_default: item.is_default,
                           })
+                          setTimeout(() => {
+                            specialFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                          }, 100)
                         }}
                         className="text-xs text-blue-600 hover:bg-blue-50 px-2 py-1 rounded"
                       >
@@ -754,9 +837,9 @@ export default function ContractTermsPage() {
           )}
 
           {/* 특약 추가/수정 폼 */}
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-5 space-y-3">
+          <div ref={specialFormRef} className={`border rounded-xl p-5 space-y-3 ${editingSpecial ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200' : 'bg-gray-50 border-gray-200'}`}>
             <h3 className="font-bold text-gray-800">
-              {editingSpecial ? '특약 수정' : '새 특약 템플릿 추가'}
+              {editingSpecial ? '✏️ 특약 수정' : '새 특약 템플릿 추가'}
             </h3>
             <div className="grid grid-cols-3 gap-3">
               <div className="col-span-2">

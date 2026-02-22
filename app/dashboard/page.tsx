@@ -26,6 +26,17 @@ type DashboardStats = {
   netProfit: number
 }
 
+type OpsStats = {
+  todayDeliveries: any[]
+  todayReturns: any[]
+  maintenanceWaiting: number
+  maintenanceInShop: number
+  inspectionsDueSoon: number
+  inspectionsOverdue: number
+  activeAccidents: number
+  accidentsThisMonth: any[]
+}
+
 type PlatformStats = {
   totalCompanies: number
   activeCompanies: number
@@ -50,6 +61,12 @@ export default function DashboardPage() {
     pendingList: [], companyList: [],
   })
   const [activeModules, setActiveModules] = useState<Set<string>>(new Set())
+  const [opsStats, setOpsStats] = useState<OpsStats>({
+    todayDeliveries: [], todayReturns: [],
+    maintenanceWaiting: 0, maintenanceInShop: 0,
+    inspectionsDueSoon: 0, inspectionsOverdue: 0,
+    activeAccidents: 0, accidentsThisMonth: [],
+  })
   const [loading, setLoading] = useState(true)
   const [currentTime, setCurrentTime] = useState(new Date())
 
@@ -207,6 +224,37 @@ export default function DashboardPage() {
           monthlyExpense: totalFinance + totalInsurance,
           netProfit: monthlyRevenue - (totalFinance + totalInsurance),
         })
+
+        // ── 차량운영 통계 ──
+        if (companyId) {
+          const today = new Date().toISOString().split('T')[0]
+          const weekAgo = new Date()
+          weekAgo.setDate(weekAgo.getDate() + 7)
+          const weekLater = weekAgo.toISOString().split('T')[0]
+          const monthStart = today.substring(0, 7) + '-01'
+
+          const [delivRes, retRes, maintRes, maintShopRes, inspDueRes, inspOverRes, accActiveRes, accMonthRes] = await Promise.all([
+            supabase.from('vehicle_operations').select('id, scheduled_date, scheduled_time, status, operation_type, car:cars(number,brand,model), customer:customers(name)').eq('company_id', companyId).eq('operation_type', 'delivery').eq('scheduled_date', today).order('scheduled_time'),
+            supabase.from('vehicle_operations').select('id, scheduled_date, scheduled_time, status, operation_type, car:cars(number,brand,model), customer:customers(name)').eq('company_id', companyId).eq('operation_type', 'return').eq('scheduled_date', today).order('scheduled_time'),
+            supabase.from('maintenance_records').select('id', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['requested', 'approved']),
+            supabase.from('maintenance_records').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'in_shop'),
+            supabase.from('inspection_records').select('id', { count: 'exact', head: true }).eq('company_id', companyId).lte('due_date', weekLater).gte('due_date', today).in('status', ['scheduled', 'in_progress']),
+            supabase.from('inspection_records').select('id', { count: 'exact', head: true }).eq('company_id', companyId).lt('due_date', today).in('status', ['scheduled', 'in_progress', 'overdue']),
+            supabase.from('accident_records').select('id', { count: 'exact', head: true }).eq('company_id', companyId).in('status', ['reported', 'insurance_filed', 'repairing']),
+            supabase.from('accident_records').select('id, accident_date, accident_type, status, car:cars(number,brand,model)').eq('company_id', companyId).gte('accident_date', monthStart).order('accident_date', { ascending: false }).limit(3),
+          ])
+
+          setOpsStats({
+            todayDeliveries: delivRes.data || [],
+            todayReturns: retRes.data || [],
+            maintenanceWaiting: maintRes.count || 0,
+            maintenanceInShop: maintShopRes.count || 0,
+            inspectionsDueSoon: inspDueRes.count || 0,
+            inspectionsOverdue: inspOverRes.count || 0,
+            activeAccidents: accActiveRes.count || 0,
+            accidentsThisMonth: accMonthRes.data || [],
+          })
+        }
       }
 
     } catch (err) {
@@ -685,6 +733,103 @@ export default function DashboardPage() {
             </p>
             <p className="mt-1 md:mt-2 text-[10px] md:text-[11px] text-gray-500">매출 - 고정지출</p>
           </div>
+        </div>
+      )}
+
+      {/* ── 차량운영 현황 ── */}
+      {!loading && (opsStats.todayDeliveries.length > 0 || opsStats.todayReturns.length > 0 || opsStats.maintenanceWaiting > 0 || opsStats.inspectionsOverdue > 0 || opsStats.activeAccidents > 0) && (
+        <div className="mb-8 space-y-4">
+          <h2 className="text-sm font-bold text-steel-500 uppercase tracking-wider">차량운영 현황</h2>
+
+          {/* 운영 KPI 미니카드 */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <Link href="/operations" className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:border-steel-300 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">금일 출고</span>
+                <span className="text-base">🚚</span>
+              </div>
+              <p className="text-xl font-black text-gray-900">{opsStats.todayDeliveries.length}<span className="text-xs font-bold text-gray-400 ml-1">건</span></p>
+            </Link>
+            <Link href="/operations" className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:border-steel-300 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">금일 반납</span>
+                <span className="text-base">📥</span>
+              </div>
+              <p className="text-xl font-black text-gray-900">{opsStats.todayReturns.length}<span className="text-xs font-bold text-gray-400 ml-1">건</span></p>
+            </Link>
+            <Link href="/maintenance" className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:border-amber-300 transition-colors">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">정비 대기</span>
+                <span className="text-base">🔧</span>
+              </div>
+              <p className="text-xl font-black text-gray-900">{opsStats.maintenanceWaiting}<span className="text-xs font-bold text-gray-400 ml-1">건</span></p>
+              {opsStats.maintenanceInShop > 0 && <p className="text-[10px] text-amber-600 font-bold mt-0.5">정비중 {opsStats.maintenanceInShop}건</p>}
+            </Link>
+            <div className="bg-white rounded-xl p-4 border shadow-sm flex flex-col" style={{ borderColor: opsStats.inspectionsOverdue > 0 ? '#fca5a5' : opsStats.activeAccidents > 0 ? '#fcd34d' : '#f3f4f6' }}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px] font-bold text-gray-400 uppercase">주의 항목</span>
+                <span className="text-base">⚠️</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {opsStats.inspectionsOverdue > 0 && (
+                  <Link href="/maintenance" className="text-[11px] font-bold text-red-600 hover:underline">검사 만기초과 {opsStats.inspectionsOverdue}건</Link>
+                )}
+                {opsStats.inspectionsDueSoon > 0 && (
+                  <Link href="/maintenance" className="text-[11px] font-bold text-orange-600 hover:underline">검사 7일내 {opsStats.inspectionsDueSoon}건</Link>
+                )}
+                {opsStats.activeAccidents > 0 && (
+                  <Link href="/accidents" className="text-[11px] font-bold text-purple-600 hover:underline">사고 처리중 {opsStats.activeAccidents}건</Link>
+                )}
+                {opsStats.inspectionsOverdue === 0 && opsStats.inspectionsDueSoon === 0 && opsStats.activeAccidents === 0 && (
+                  <p className="text-[11px] text-green-600 font-bold">이상 없음 ✓</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 오늘의 출고/반납 상세 리스트 */}
+          {(opsStats.todayDeliveries.length > 0 || opsStats.todayReturns.length > 0) && (
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-steel-500" />
+                <span className="text-sm font-black text-gray-800">오늘의 출고/반납</span>
+                <span className="text-[10px] bg-steel-100 text-steel-600 px-1.5 py-0.5 rounded-full font-bold">{opsStats.todayDeliveries.length + opsStats.todayReturns.length}건</span>
+              </div>
+              <div className="divide-y divide-gray-50">
+                {[...opsStats.todayDeliveries, ...opsStats.todayReturns].map((op: any) => {
+                  const isDelivery = op.operation_type === 'delivery'
+                  const statusColors: Record<string, string> = {
+                    scheduled: 'bg-gray-100 text-gray-700', preparing: 'bg-blue-100 text-blue-700',
+                    inspecting: 'bg-purple-100 text-purple-700', in_transit: 'bg-amber-100 text-amber-700',
+                    completed: 'bg-green-100 text-green-700',
+                  }
+                  const statusLabels: Record<string, string> = {
+                    scheduled: '예정', preparing: '준비중', inspecting: '점검중', in_transit: '이동중', completed: '완료',
+                  }
+                  return (
+                    <Link key={op.id} href="/operations" className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${isDelivery ? 'bg-blue-50' : 'bg-amber-50'}`}>
+                        {isDelivery ? '🚚' : '📥'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-gray-800 text-sm">{op.car?.brand} {op.car?.model}</span>
+                          {op.car?.number && <span className="text-[10px] text-steel-600 font-bold">[{op.car.number}]</span>}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-gray-400">{op.scheduled_time?.substring(0, 5) || ''}</span>
+                          <span className="text-[10px] text-gray-400">{op.customer?.name || ''}</span>
+                        </div>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${statusColors[op.status] || 'bg-gray-100 text-gray-600'}`}>
+                        {statusLabels[op.status] || op.status}
+                      </span>
+                    </Link>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

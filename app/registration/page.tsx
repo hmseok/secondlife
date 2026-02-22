@@ -318,6 +318,8 @@ const { company, role, adminSelectedCompanyId } = useApp()
     avgValue: cars.length > 0 ? Math.round(cars.reduce((s, c) => s + (c.purchase_price || 0), 0) / cars.length) : 0,
     electric: cars.filter(c => c.fuel_type === '전기').length,
     hybrid: cars.filter(c => (c.fuel_type || '').includes('하이브리드')).length,
+    consignment: cars.filter(c => c.ownership_type === 'consignment').length,
+    leasedIn: cars.filter(c => c.ownership_type === 'leased_in').length,
   }
 
   // 최근 7일 등록 차량
@@ -380,6 +382,13 @@ const { company, role, adminSelectedCompanyId } = useApp()
              <p className="text-xl md:text-2xl font-black text-green-700 mt-1">{stats.electric + stats.hybrid}<span className="text-sm text-green-500 ml-0.5">대</span></p>
              <p className="text-[10px] text-green-500 mt-0.5">전기 {stats.electric} · 하이브리드 {stats.hybrid}</p>
            </div>
+           {(stats.consignment + stats.leasedIn) > 0 && (
+             <div className="bg-amber-50 p-3 md:p-4 rounded-xl border border-amber-100">
+               <p className="text-xs text-amber-600 font-bold">지입/임차</p>
+               <p className="text-xl md:text-2xl font-black text-amber-700 mt-1">{stats.consignment + stats.leasedIn}<span className="text-sm text-amber-500 ml-0.5">대</span></p>
+               <p className="text-[10px] text-amber-500 mt-0.5">지입 {stats.consignment} · 임차 {stats.leasedIn}</p>
+             </div>
+           )}
            <div className={`p-3 md:p-4 rounded-xl border ${recentCars.length > 0 ? 'bg-amber-50 border-amber-200 animate-pulse' : 'bg-amber-50 border-amber-100'}`}>
              <p className="text-xs text-amber-600 font-bold">최근 7일 등록</p>
              <p className="text-xl md:text-2xl font-black text-amber-700 mt-1">{recentCars.length}<span className="text-sm text-amber-500 ml-0.5">대</span></p>
@@ -533,6 +542,9 @@ const { company, role, adminSelectedCompanyId } = useApp()
                                      <div className="flex flex-wrap gap-1">
                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.is_used ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{car.is_used ? '중고' : '신차'}</span>
                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.is_commercial === false ? 'bg-teal-100 text-teal-700' : 'bg-steel-100 text-steel-600'}`}>{car.is_commercial === false ? '비영업' : '영업'}</span>
+                                         {car.ownership_type && car.ownership_type !== 'company' && (
+                                           <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.ownership_type === 'consignment' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>{car.ownership_type === 'consignment' ? '지입' : '임차'}</span>
+                                         )}
                                          <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs font-bold">{car.year}년식</span>
                                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${car.fuel_type === '전기' ? 'bg-steel-100 text-steel-600' : 'bg-green-100 text-green-600'}`}>{car.fuel_type || '기타'}</span>
                                      </div>
@@ -577,6 +589,9 @@ const { company, role, adminSelectedCompanyId } = useApp()
                      <div className="flex gap-1 mt-1">
                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.is_used ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>{car.is_used ? '중고' : '신차'}</span>
                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.is_commercial === false ? 'bg-teal-100 text-teal-700' : 'bg-steel-100 text-steel-600'}`}>{car.is_commercial === false ? '비영업' : '영업'}</span>
+                       {car.ownership_type && car.ownership_type !== 'company' && (
+                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.ownership_type === 'consignment' ? 'bg-amber-100 text-amber-700' : 'bg-purple-100 text-purple-700'}`}>{car.ownership_type === 'consignment' ? '지입' : '임차'}</span>
+                       )}
                        {car.year && <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-bold">{car.year}년</span>}
                        {car.fuel_type && <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${car.fuel_type === '전기' ? 'bg-steel-100 text-steel-600' : 'bg-green-100 text-green-600'}`}>{car.fuel_type}</span>}
                      </div>

@@ -79,7 +79,13 @@ export default function CarDetailPage() {
         number: car.number, brand: car.brand, model: car.model, trim: car.trim,
         year: car.year, fuel: car.fuel, status: car.status, location: car.location,
         mileage: car.mileage, purchase_price: car.purchase_price, acq_date: car.acq_date,
-        is_used: car.is_used, purchase_mileage: car.purchase_mileage
+        is_used: car.is_used, purchase_mileage: car.purchase_mileage,
+        // 지입 관련
+        ownership_type: car.ownership_type, owner_name: car.owner_name, owner_phone: car.owner_phone,
+        owner_bank: car.owner_bank, owner_account: car.owner_account, owner_account_holder: car.owner_account_holder,
+        consignment_fee: car.consignment_fee, consignment_start: car.consignment_start || null,
+        consignment_end: car.consignment_end || null, insurance_by: car.insurance_by,
+        consignment_contract_url: car.consignment_contract_url, owner_memo: car.owner_memo
       }).eq('id', carId)
     setSaving(false)
     if (error) alert('저장 실패: ' + error.message)
@@ -205,6 +211,150 @@ export default function CarDetailPage() {
                 <div className="bg-white p-6 rounded-full mb-4 shadow-sm"><span className="text-4xl">🛡️</span></div>
                 <h3 className="text-xl font-bold text-gray-800 mb-2">보험 이력 관리</h3>
                 <button onClick={() => router.push(`/insurance/${carId}`)} className="bg-green-600 text-white px-8 py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-green-700 transition-transform hover:-translate-y-1 mt-4">보험 상세 페이지로 이동 →</button>
+              </div>
+            )}
+
+            {/* 🤝 지입 관리 탭 */}
+            {activeTab === 'jiip' && (
+              <div className="animate-fade-in space-y-6">
+                {/* 소유 구분 선택 */}
+                <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                  <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">📌 소유 구분</h3>
+                  <div className="flex gap-3">
+                    {[
+                      { value: 'company', label: '자사 보유', desc: '사업자 명의 차량', color: 'blue' },
+                      { value: 'consignment', label: '지입 차량', desc: '타인 명의, 우리가 운영', color: 'amber' },
+                      { value: 'leased_in', label: '임차 차량', desc: '외부에서 빌려온 차량', color: 'purple' },
+                    ].map(opt => (
+                      <button key={opt.value} onClick={() => handleChange('ownership_type', opt.value)}
+                        className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${
+                          car.ownership_type === opt.value
+                            ? opt.color === 'blue' ? 'border-blue-500 bg-blue-50'
+                              : opt.color === 'amber' ? 'border-amber-500 bg-amber-50'
+                              : 'border-purple-500 bg-purple-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}>
+                        <div className="font-bold text-sm">{opt.label}</div>
+                        <div className="text-xs text-gray-500 mt-1">{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 지입/임차인 경우 상세 정보 */}
+                {(car.ownership_type === 'consignment' || car.ownership_type === 'leased_in') && (
+                  <>
+                    {/* 지입주 정보 */}
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                      <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">👤 {car.ownership_type === 'consignment' ? '지입주' : '임대인'} 정보</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">이름</label>
+                          <input className="w-full border rounded-lg p-2.5 text-sm" placeholder="홍길동"
+                            value={car.owner_name || ''} onChange={e => handleChange('owner_name', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">연락처</label>
+                          <input className="w-full border rounded-lg p-2.5 text-sm" placeholder="010-0000-0000"
+                            value={car.owner_phone || ''} onChange={e => handleChange('owner_phone', e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 정산 계좌 */}
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                      <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">🏦 정산 계좌</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">은행명</label>
+                          <input className="w-full border rounded-lg p-2.5 text-sm" placeholder="신한은행"
+                            value={car.owner_bank || ''} onChange={e => handleChange('owner_bank', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">계좌번호</label>
+                          <input className="w-full border rounded-lg p-2.5 text-sm" placeholder="110-123-456789"
+                            value={car.owner_account || ''} onChange={e => handleChange('owner_account', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">예금주</label>
+                          <input className="w-full border rounded-lg p-2.5 text-sm" placeholder="홍길동"
+                            value={car.owner_account_holder || ''} onChange={e => handleChange('owner_account_holder', e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 계약 조건 */}
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                      <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">📝 계약 조건</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">월 {car.ownership_type === 'consignment' ? '지입료' : '임차료'}</label>
+                          <input type="number" className="w-full border rounded-lg p-2.5 text-sm" placeholder="0"
+                            value={car.consignment_fee || ''} onChange={e => handleChange('consignment_fee', Number(e.target.value))} />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">보험 주체</label>
+                          <select className="w-full border rounded-lg p-2.5 text-sm"
+                            value={car.insurance_by || 'company'} onChange={e => handleChange('insurance_by', e.target.value)}>
+                            <option value="company">우리 회사</option>
+                            <option value="owner">{car.ownership_type === 'consignment' ? '지입주' : '임대인'} 본인</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">계약 시작일</label>
+                          <input type="date" className="w-full border rounded-lg p-2.5 text-sm"
+                            value={car.consignment_start || ''} onChange={e => handleChange('consignment_start', e.target.value)} />
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">계약 종료일</label>
+                          <input type="date" className="w-full border rounded-lg p-2.5 text-sm"
+                            value={car.consignment_end || ''} onChange={e => handleChange('consignment_end', e.target.value)} />
+                          {car.consignment_end && new Date(car.consignment_end) < new Date() && (
+                            <p className="text-xs text-red-500 mt-1 font-bold">⚠️ 계약이 만료되었습니다</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 계약서 첨부 + 메모 */}
+                    <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm">
+                      <h3 className="font-bold text-gray-800 mb-4 flex items-center gap-2">📎 계약서 및 메모</h3>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">계약서 파일 URL</label>
+                          <div className="flex gap-2">
+                            <input className="flex-1 border rounded-lg p-2.5 text-sm" placeholder="Supabase Storage URL 또는 외부 링크"
+                              value={car.consignment_contract_url || ''} onChange={e => handleChange('consignment_contract_url', e.target.value)} />
+                            {car.consignment_contract_url && (
+                              <a href={car.consignment_contract_url} target="_blank" rel="noopener noreferrer"
+                                className="bg-steel-600 text-white px-4 py-2 rounded-lg font-bold text-sm hover:bg-steel-700 whitespace-nowrap">열기</a>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs font-bold text-gray-500 block mb-1">메모 / 특약사항</label>
+                          <textarea className="w-full border rounded-lg p-2.5 text-sm" rows={3}
+                            placeholder="특약사항, 정산 조건 등 참고 내용"
+                            value={car.owner_memo || ''} onChange={e => handleChange('owner_memo', e.target.value)} />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 저장 버튼 */}
+                    <button onClick={handleUpdate} disabled={saving}
+                      className="w-full bg-steel-600 text-white py-4 rounded-xl font-bold text-lg hover:bg-steel-700 transition-colors disabled:opacity-50">
+                      {saving ? '저장 중...' : '💾 지입 정보 저장'}
+                    </button>
+                  </>
+                )}
+
+                {car.ownership_type === 'company' && (
+                  <div className="text-center py-16 text-gray-400">
+                    <div className="text-5xl mb-4">🏢</div>
+                    <p className="font-bold text-lg text-gray-500">자사 보유 차량</p>
+                    <p className="text-sm mt-2">자사 명의로 등록된 차량은 별도 지입 정보가 필요하지 않습니다.</p>
+                  </div>
+                )}
               </div>
             )}
 

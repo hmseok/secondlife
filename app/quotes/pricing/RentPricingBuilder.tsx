@@ -862,6 +862,7 @@ export default function RentPricingBuilder() {
   const [parseStartTime, setParseStartTime] = useState<number>(0)
   const [parseElapsed, setParseElapsed] = useState<number>(0)
   const [savedCarPrices, setSavedCarPrices] = useState<any[]>([])
+  const [savedWorksheets, setSavedWorksheets] = useState<any[]>([])
   const [isSavingPrice, setIsSavingPrice] = useState(false)
   const [carSearchQuery, setCarSearchQuery] = useState('')
   const [isDragging, setIsDragging] = useState(false)
@@ -1372,11 +1373,23 @@ export default function RentPricingBuilder() {
     setSavedCarPrices(unique)
   }, [effectiveCompanyId])
 
+  // 🆕 저장된 산출 워크시트 조회
+  const fetchSavedWorksheets = useCallback(async () => {
+    if (!effectiveCompanyId) return
+    const { data } = await supabase
+      .from('pricing_worksheets')
+      .select('*, cars(id, number, brand, model, trim, year, fuel, is_used, is_commercial)')
+      .eq('company_id', effectiveCompanyId)
+      .order('updated_at', { ascending: false })
+    setSavedWorksheets(data || [])
+  }, [effectiveCompanyId])
+
   useEffect(() => {
     if (effectiveCompanyId) {
       fetchSavedPrices()
+      fetchSavedWorksheets()
     }
-  }, [effectiveCompanyId, fetchSavedPrices])
+  }, [effectiveCompanyId, fetchSavedPrices, fetchSavedWorksheets])
 
   // --- 고객 데이터 로드 (Step 2용) ---
   useEffect(() => {
@@ -3344,8 +3357,8 @@ export default function RentPricingBuilder() {
         )}
       </div>
 
-      {/* ===== 저장 가격표 (Collapsible) ===== */}
-      {savedCarPrices.length > 0 && (
+      {/* ===== 저장 목록 (워크시트 + 가격표 통합, Collapsible) ===== */}
+      {(savedWorksheets.length > 0 || savedCarPrices.length > 0) && (
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm mb-6 overflow-hidden">
         {/* Header */}
         <button
@@ -3354,8 +3367,10 @@ export default function RentPricingBuilder() {
         >
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-            <span className="font-black text-gray-800 text-sm shrink-0">📋 저장 가격표</span>
-            <span className="bg-indigo-100 text-indigo-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">{savedCarPrices.length}</span>
+            <span className="font-black text-gray-800 text-sm shrink-0">📋 저장 목록</span>
+            <span className="bg-indigo-100 text-indigo-700 text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">
+              {savedWorksheets.length + savedCarPrices.length}
+            </span>
           </div>
           <span className={`text-gray-400 transition-transform shrink-0 ${savedPricesOpen ? 'rotate-180' : ''}`}>▼</span>
         </button>
@@ -3365,6 +3380,12 @@ export default function RentPricingBuilder() {
           <div className="px-6 py-3 bg-gray-50/50">
             {(() => {
               const grouped: Record<string, string[]> = {}
+              savedWorksheets.forEach((ws: any) => {
+                const brand = ws.cars?.brand || ws.newcar_info?.brand || '기타'
+                const model = ws.cars?.model || ws.newcar_info?.model || ''
+                if (!grouped[brand]) grouped[brand] = []
+                if (model && !grouped[brand].includes(model)) grouped[brand].push(model)
+              })
               savedCarPrices.forEach((sp: any) => {
                 const brand = sp.brand || '기타'
                 if (!grouped[brand]) grouped[brand] = []
@@ -3390,167 +3411,155 @@ export default function RentPricingBuilder() {
 
         {/* Body */}
         {savedPricesOpen && (
-        <div className="p-6">
-          {/* ─── 신차 선택 모드 (숨김) ─── */}
-          {lookupMode === 'newcar' && (
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-4">
-              <div className="flex gap-3 mb-4 items-end flex-wrap">
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-400 mb-1">브랜드</label>
-                  <select
-                    value={[...DOMESTIC_BRANDS, ...IMPORT_BRAND_PRESETS].includes(newCarBrand) ? newCarBrand : (newCarBrand ? '__custom__' : '')}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      if (val === '__custom__') {
-                        setNewCarBrand('')
-                      } else {
-                        setNewCarBrand(val)
-                      }
-                      setNewCarModel(''); setNewCarResult(null); setNewCarSelectedTax(''); setNewCarSelectedFuel(''); setNewCarSelectedVariant(null); setNewCarSelectedTrim(null); setNewCarSelectedOptions([]); setLookupError('')
-                    }}
-                    className="w-40 p-3 border border-gray-200 rounded-xl font-bold text-base bg-white focus:border-steel-400 outline-none"
-                  >
-                    <option value="">선택</option>
-                    <optgroup label="국내">
-                      {DOMESTIC_BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </optgroup>
-                    <optgroup label="수입">
-                      {IMPORT_BRAND_PRESETS.map(b => <option key={b} value={b}>{b}</option>)}
-                    </optgroup>
-                    <option value="__custom__">직접 입력</option>
-                  </select>
-                </div>
-                {(() => {
-                  const isCustom = newCarBrand !== '' && ![...DOMESTIC_BRANDS, ...IMPORT_BRAND_PRESETS].includes(newCarBrand)
-                  if (!isCustom) return null
-                  return (
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-400 mb-1">브랜드명</label>
-                      <input
-                        type="text"
-                        placeholder="브랜드 입력"
-                        value={newCarBrand}
-                        onChange={(e) => setNewCarBrand(e.target.value)}
-                        className="w-32 p-3 border border-gray-200 rounded-xl font-bold text-base focus:border-steel-400 outline-none"
-                      />
-                    </div>
-                  )
-                })()}
-                <div className="flex-1 min-w-[200px]">
-                  <label className="block text-[11px] font-bold text-gray-400 mb-1">모델명</label>
-                  <input
-                    type="text"
-                    placeholder="모델명 입력 (예: K5, 아반떼, 싼타페)"
-                    value={newCarModel}
-                    onChange={(e) => {
-                      setNewCarModel(e.target.value)
-                      setNewCarResult(null); setNewCarSelectedTax(''); setNewCarSelectedFuel(''); setNewCarSelectedVariant(null); setNewCarSelectedTrim(null); setNewCarSelectedOptions([]); setLookupError('')
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleNewCarLookup()}
-                    className="w-full p-3 border border-gray-200 rounded-xl font-bold text-base focus:border-steel-400 outline-none"
-                  />
-                </div>
-                <button
-                  onClick={handleNewCarLookup}
-                  disabled={isLookingUp || isParsingQuote || !newCarBrand.trim() || !newCarModel.trim()}
-                  className="px-6 py-3 bg-steel-600 text-white rounded-xl font-bold text-sm hover:bg-steel-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
-                >
-                  {isLookingUp ? (
-                    <span className="flex items-center gap-2">
-                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      조회 중...
-                      {lookupElapsed > 0 && <span className="font-normal opacity-80">{lookupElapsed}초</span>}
-                    </span>
-                  ) : '🔍 AI 조회'}
-                </button>
-              </div>
+        <div className="p-6 space-y-6">
 
-              {/* AI 조회 진행 상태 */}
-              {isLookingUp && lookupStage && (
-                <div className="p-4 bg-steel-50 border border-steel-200 rounded-xl mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="inline-block w-5 h-5 border-2 border-steel-500 border-t-transparent rounded-full animate-spin" />
-                    <div>
-                      <p className="text-sm font-bold text-steel-700">{lookupStage}</p>
-                      {lookupElapsed > 0 && (
-                        <p className="text-xs text-steel-500 mt-0.5">경과 시간: {lookupElapsed}초 {lookupElapsed >= 15 && '· 웹 검색 중이라 시간이 걸릴 수 있습니다'}</p>
-                      )}
-                    </div>
+          {/* ── 산출 워크시트 (브랜드별 그룹) ── */}
+          {savedWorksheets.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-black text-steel-600">🧮 산출 워크시트</span>
+              <span className="bg-steel-100 text-steel-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{savedWorksheets.length}</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+            {(() => {
+              const grouped: Record<string, any[]> = {}
+              savedWorksheets.forEach((ws: any) => {
+                const brand = ws.cars?.brand || ws.newcar_info?.brand || '기타'
+                if (!grouped[brand]) grouped[brand] = []
+                grouped[brand].push(ws)
+              })
+              return Object.entries(grouped).map(([brand, items]) => (
+                <div key={`ws-${brand}`} className="mb-3 last:mb-0">
+                  <div className="flex items-center gap-2 mb-1.5 px-1">
+                    <span className="text-[11px] font-black text-gray-500">{brand}</span>
+                    <div className="flex-1 h-px bg-gray-100" />
+                    <span className="text-[10px] text-gray-400">{items.length}건</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {items.map((ws: any) => {
+                      const car = ws.cars
+                      const ncInfo = ws.newcar_info
+                      const model = car?.model || ncInfo?.model || '미지정'
+                      const number = car?.number || ''
+                      const year = car?.year || ncInfo?.year || ''
+                      const trim = car?.trim || ncInfo?.trim || ''
+                      const rent = ws.suggested_rent ? Math.round(ws.suggested_rent).toLocaleString() : null
+                      const isUsed = car?.is_used
+                      return (
+                        <div
+                          key={`ws-${ws.id}`}
+                          onClick={() => {
+                            // 워크시트 로드: car_id가 있으면 등록차량 선택, 아니면 신차정보 표시
+                            if (car?.id) {
+                              handleCarSelect(String(car.id))
+                            }
+                            // 워크시트 ID 기억하고 페이지 이동
+                            router.push(`/quotes/pricing?worksheet_id=${ws.id}&car_id=${car?.id || ''}`)
+                          }}
+                          className="flex items-center gap-3 px-4 py-3 border border-gray-150 rounded-xl group cursor-pointer hover:border-steel-400 hover:shadow-sm transition-all bg-white"
+                        >
+                          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-steel-50 border border-steel-200">
+                            <span className="text-steel-600 text-sm">🧮</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-gray-800 text-sm truncate">{model}</span>
+                              {trim && <span className="text-[10px] text-gray-400 truncate max-w-[120px]">{trim}</span>}
+                              {number && <span className="text-[10px] font-bold text-steel-600">[{number}]</span>}
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {year && <span className="text-[10px] text-gray-400">{year}년</span>}
+                              {isUsed !== undefined && (
+                                <span className={`text-[9px] px-1 py-0.5 rounded font-bold ${isUsed ? 'bg-orange-50 text-orange-600' : 'bg-blue-50 text-blue-600'}`}>
+                                  {isUsed ? '중고' : '신차'}
+                                </span>
+                              )}
+                              {rent && <span className="text-[10px] font-bold text-emerald-600">렌트가 {rent}원</span>}
+                              <span className="text-[10px] text-gray-300">
+                                {new Date(ws.updated_at || ws.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-gray-300 text-sm shrink-0">→</span>
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
-              )}
-
-              {/* 에러 메시지 */}
-              {lookupError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-medium mb-4">
-                  {lookupError}
-                </div>
-              )}
-            </div>
+              ))
+            })()}
+          </div>
           )}
 
-          {/* === 브랜드별 가격표 그리드 === */}
-          {(() => {
-            const grouped: Record<string, any[]> = {}
-            savedCarPrices.forEach((sp: any) => {
-              const brand = sp.brand || '기타'
-              if (!grouped[brand]) grouped[brand] = []
-              grouped[brand].push(sp)
-            })
-
-            return Object.entries(grouped).map(([brand, items]) => (
-              <div key={brand} className="mb-4 last:mb-0">
-                {/* 브랜드 헤더 */}
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <span className="text-xs font-black text-gray-500 tracking-wide">{brand}</span>
-                  <div className="flex-1 h-px bg-gray-200" />
-                  <span className="text-[10px] text-gray-400">{items.length}개 모델</span>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {items.map((sp: any) => {
-                    const isSelected = newCarResult && newCarResult.brand === sp.brand && newCarResult.model === sp.model
-                    return (
-                      <div key={`sp-${sp.id}`}
-                        className={`flex items-center gap-3 px-4 py-3 border rounded-xl group cursor-pointer transition-all ${
-                          isSelected
-                            ? 'bg-indigo-50 border-indigo-400 shadow-sm'
-                            : 'bg-white border-gray-150 hover:border-indigo-400 hover:shadow-sm'
-                        }`}
-                        onClick={() => handleLoadSavedPrice(sp)}
-                      >
-                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                          isSelected ? 'bg-indigo-100 border border-indigo-300' : 'bg-indigo-50 border border-indigo-200'
-                        }`}>
-                          <span className="text-indigo-600 text-sm">🚘</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-gray-800 text-sm truncate">{sp.model}</span>
-                            <span className="text-[10px] text-gray-400">{sp.year}년</span>
-                            <span className="text-[9px] bg-steel-50 text-steel-600 px-1 py-0.5 rounded font-bold shrink-0">{sp.price_data?.variants?.length || 0}차종</span>
-                            {sp.source?.includes('견적서') ? (
-                              <span className="text-[9px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-bold shrink-0">견적서</span>
-                            ) : (
-                              <span className="text-[9px] bg-violet-50 text-violet-600 px-1 py-0.5 rounded font-bold shrink-0">AI</span>
-                            )}
+          {/* ── 신차 가격표 (브랜드별 그룹) ── */}
+          {savedCarPrices.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-xs font-black text-indigo-600">🚘 신차 가격표</span>
+              <span className="bg-indigo-100 text-indigo-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{savedCarPrices.length}</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+            {(() => {
+              const grouped: Record<string, any[]> = {}
+              savedCarPrices.forEach((sp: any) => {
+                const brand = sp.brand || '기타'
+                if (!grouped[brand]) grouped[brand] = []
+                grouped[brand].push(sp)
+              })
+              return Object.entries(grouped).map(([brand, items]) => (
+                <div key={`sp-${brand}`} className="mb-3 last:mb-0">
+                  <div className="flex items-center gap-2 mb-1.5 px-1">
+                    <span className="text-[11px] font-black text-gray-500">{brand}</span>
+                    <div className="flex-1 h-px bg-gray-100" />
+                    <span className="text-[10px] text-gray-400">{items.length}개 모델</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {items.map((sp: any) => {
+                      const isSelected = newCarResult && newCarResult.brand === sp.brand && newCarResult.model === sp.model
+                      return (
+                        <div key={`sp-${sp.id}`}
+                          className={`flex items-center gap-3 px-4 py-3 border rounded-xl group cursor-pointer transition-all ${
+                            isSelected
+                              ? 'bg-indigo-50 border-indigo-400 shadow-sm'
+                              : 'bg-white border-gray-150 hover:border-indigo-400 hover:shadow-sm'
+                          }`}
+                          onClick={() => handleLoadSavedPrice(sp)}
+                        >
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
+                            isSelected ? 'bg-indigo-100 border border-indigo-300' : 'bg-indigo-50 border border-indigo-200'
+                          }`}>
+                            <span className="text-indigo-600 text-sm">🚘</span>
                           </div>
-                          <span className="text-[10px] text-gray-400 mt-0.5 block">
-                            {new Date(sp.updated_at || sp.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} 저장
-                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-gray-800 text-sm truncate">{sp.model}</span>
+                              <span className="text-[10px] text-gray-400">{sp.year}년</span>
+                              <span className="text-[9px] bg-steel-50 text-steel-600 px-1 py-0.5 rounded font-bold shrink-0">{sp.price_data?.variants?.length || 0}차종</span>
+                              {sp.source?.includes('견적서') ? (
+                                <span className="text-[9px] bg-emerald-50 text-emerald-600 px-1 py-0.5 rounded font-bold shrink-0">견적서</span>
+                              ) : (
+                                <span className="text-[9px] bg-violet-50 text-violet-600 px-1 py-0.5 rounded font-bold shrink-0">AI</span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-gray-400 mt-0.5 block">
+                              {new Date(sp.updated_at || sp.created_at).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })} 저장
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            {isSelected && <span className="text-[10px] text-indigo-600 font-bold">선택됨</span>}
+                            <button onClick={(e) => { e.stopPropagation(); handleDeleteSavedPrice(sp.id) }}
+                              className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1 text-xs">✕</button>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {isSelected && <span className="text-[10px] text-indigo-600 font-bold">선택됨</span>}
-                          <button onClick={(e) => { e.stopPropagation(); handleDeleteSavedPrice(sp.id) }}
-                            className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all p-1 text-xs">✕</button>
-                        </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))
-          })()}
+              ))
+            })()}
+          </div>
+          )}
+
         </div>
         )}
       </div>

@@ -1,4 +1,5 @@
 'use client'
+import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
@@ -26,6 +27,10 @@ const Icons = {
   Clipboard: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>,
   // 👇 [추가됨] 누락되었던 Chart 아이콘
   Chart: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>,
+  // 차량운영 아이콘
+  Truck: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" /></svg>,
+  WrenchScrewdriver: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085" /></svg>,
+  ExclamationTriangle: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>,
 
   // 4. 경영 지원
   Calculator: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>,
@@ -51,7 +56,7 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
     setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }))
   }
 
-  const renderMenuItem = (name: string, path: string, icon: JSX.Element) => {
+  const renderMenuItem = (name: string, path: string, icon: React.ReactNode) => {
     // 정확 매칭 + 하위경로 매칭 (단, 별도 메뉴 항목이 있는 상위 경로는 제외)
     const exactParents = ['/finance'] // 하위 경로가 별도 메뉴인 경우
     const active = pathname === path || (pathname.startsWith(path + '/') && !exactParents.includes(path))
@@ -126,6 +131,9 @@ export default function Sidebar({ isCollapsed, toggleSidebar }: SidebarProps) {
         {renderGroupHeader('assets', '차량 자산 관리')}
         <div className={`space-y-1 transition-all duration-300 ${openGroups.assets || isCollapsed ? 'max-h-screen opacity-100' : 'max-h-0 opacity-0 overflow-hidden'}`}>
           {renderMenuItem('전체 차량 대장', '/cars', <Icons.Car />)}
+          {renderMenuItem('출고/반납 관리', '/operations', <Icons.Truck />)}
+          {renderMenuItem('정비/검사 관리', '/maintenance', <Icons.WrenchScrewdriver />)}
+          {renderMenuItem('사고 관리', '/accidents', <Icons.ExclamationTriangle />)}
           {renderMenuItem('등록/제원 상세', '/registration', <Icons.Clipboard />)}
           {renderMenuItem('보험/사고/정비', '/insurance', <Icons.Shield />)}
           <div className="pt-1 pb-1 border-t border-gray-800 mx-2 my-1" /> {/* 구분선 */}
